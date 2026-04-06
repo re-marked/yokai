@@ -1,0 +1,20 @@
+{
+  "name": "yokai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React terminal renderer — pure TypeScript Yoga layout, diff-based rendering, ScrollBox",
+  "license": "MIT",
+  "author": "Mark <psyhik17@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/re-marked/yokai.git"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "type-check": "pnpm -r type-check"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
