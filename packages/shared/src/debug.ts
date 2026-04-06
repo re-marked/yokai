@@ -1,6 +1,5 @@
 /**
- * Lightweight debug logging for @cck packages.
- * Replaces Claude Code's full debug.ts — no session IDs, no file rotation.
+ * Lightweight debug logging for @yokai packages.
  */
 
 export type DebugLogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error'

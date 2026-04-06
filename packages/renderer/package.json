@@ -1,7 +1,7 @@
 {
   "name": "@yokai/renderer",
   "version": "0.3.0",
-  "description": "Terminal rendering engine extracted from Claude Code — React reconciler + Yoga layout + TTY output",
+  "description": "React terminal renderer — reconciler + Yoga layout + TTY output",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -55,19 +55,18 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Minnzen/claude-code-kit.git",
-    "directory": "packages/ink-renderer"
+    "url": "https://github.com/re-marked/yokai.git",
+    "directory": "packages/renderer"
   },
-  "homepage": "https://github.com/Minnzen/claude-code-kit",
-  "bugs": "https://github.com/Minnzen/claude-code-kit/issues",
+  "homepage": "https://github.com/re-marked/yokai",
+  "bugs": "https://github.com/re-marked/yokai/issues",
   "keywords": [
     "terminal",
     "cli",
     "tui",
     "react",
-    "ink",
     "renderer",
-    "claude-code"
+    "yoga"
   ],
   "engines": {
     "node": ">=18"

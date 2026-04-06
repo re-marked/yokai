@@ -1,5 +1,5 @@
 /**
- * Error logging for @cck packages.
+ * Error logging for @yokai packages.
  * Simplified version — logs to stderr, no sinks or queues.
  */
 

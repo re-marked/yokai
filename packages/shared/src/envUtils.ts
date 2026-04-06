@@ -1,5 +1,5 @@
 /**
- * Environment variable utilities for @cck packages.
+ * Environment variable utilities for @yokai packages.
  */
 
 export function isEnvTruthy(envVar: string | boolean | undefined): boolean {

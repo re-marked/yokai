@@ -1,6 +1,5 @@
 /**
- * Environment info for @cck packages.
- * Simplified version of Claude Code's env.ts.
+ * Environment info for @yokai packages.
  */
 
 import { isEnvTruthy } from './envUtils'

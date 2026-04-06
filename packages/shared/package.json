@@ -1,7 +1,7 @@
 {
   "name": "@yokai/shared",
   "version": "0.3.0",
-  "description": "Shared utilities for claude-code-kit — Yoga layout TS port, logger, env helpers",
+  "description": "Shared utilities — Yoga layout TS port, logger, env helpers",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -42,18 +42,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Minnzen/claude-code-kit.git",
+    "url": "https://github.com/re-marked/yokai.git",
     "directory": "packages/shared"
   },
-  "homepage": "https://github.com/Minnzen/claude-code-kit",
-  "bugs": "https://github.com/Minnzen/claude-code-kit/issues",
+  "homepage": "https://github.com/re-marked/yokai",
+  "bugs": "https://github.com/re-marked/yokai/issues",
   "keywords": [
     "terminal",
     "cli",
     "tui",
     "yoga",
-    "layout",
-    "claude-code"
+    "layout"
   ],
   "engines": {
     "node": ">=18"
