@@ -235,11 +235,10 @@ export default class App extends PureComponent<Props, State> {
         throw new Error(
           'Raw mode is not supported on the current process.stdin, which Ink uses as input stream by default.\nRead about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported',
         )
-      } else {
-        throw new Error(
-          'Raw mode is not supported on the stdin provided to Ink.\nRead about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported',
-        )
       }
+      throw new Error(
+        'Raw mode is not supported on the stdin provided to Ink.\nRead about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported',
+      )
     }
     stdin.setEncoding('utf8')
     if (isEnabled) {

@@ -82,7 +82,7 @@ export class FocusManager {
   }
 
   handleClickFocus(node: DOMElement): void {
-    const tabIndex = node.attributes['tabIndex']
+    const tabIndex = node.attributes.tabIndex
     if (typeof tabIndex !== 'number') return
     this.focus(node)
   }
@@ -132,7 +132,7 @@ function collectTabbable(root: DOMElement): DOMElement[] {
 }
 
 function walkTree(node: DOMElement, result: DOMElement[]): void {
-  const tabIndex = node.attributes['tabIndex']
+  const tabIndex = node.attributes.tabIndex
   if (typeof tabIndex === 'number' && tabIndex >= 0) {
     result.push(node)
   }

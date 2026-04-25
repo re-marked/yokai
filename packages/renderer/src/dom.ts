@@ -353,8 +353,8 @@ const measureRawAnsiNode = (
   width: number
   height: number
 } => ({
-  width: node.attributes['rawWidth'] as number,
-  height: node.attributes['rawHeight'] as number,
+  width: node.attributes.rawWidth as number,
+  height: node.attributes.rawHeight as number,
 })
 
 /**
