@@ -1,5 +1,5 @@
-import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'fs'
-import { format } from 'util'
+import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'node:fs'
+import { format } from 'node:util'
 import { logForDebugging } from '@yokai/shared'
 import { logError } from '@yokai/shared'
 import { getYogaCounters } from '@yokai/shared/yoga-layout'
@@ -353,6 +353,7 @@ export default class Ink {
       noop, // onDefaultTransitionIndicator
     )
     // @ts-ignore dead code from production build
+    // biome-ignore lint/correctness/noConstantCondition: intentional dead-code branch — bundlers (tsup/esbuild) statically tree-shake this entire if-block out of production builds
     if ('production' === 'development') {
       reconciler.injectIntoDevTools({
         bundleType: 0,
@@ -1560,13 +1561,13 @@ export default class Ink {
         ).isRaw ?? false
       }`,
     )
-    readableListeners.forEach((listener) => {
+    for (const listener of readableListeners) {
       this.stdinListeners.push({
         event: 'readable',
         listener: listener as (...args: unknown[]) => void,
       })
       stdin.removeListener('readable', listener as (...args: unknown[]) => void)
-    })
+    }
 
     // If raw mode is enabled, disable it temporarily
     const stdinWithRaw = stdin as NodeJS.ReadStream & {
@@ -1596,9 +1597,9 @@ export default class Ink {
     logForDebugging(
       `[stdin] resumeStdin: re-attaching ${this.stdinListeners.length} listener(s), wasRawMode=${this.wasRawMode}`,
     )
-    this.stdinListeners.forEach(({ event, listener }) => {
+    for (const { event, listener } of this.stdinListeners) {
       stdin.addListener(event, listener)
-    })
+    }
     this.stdinListeners = []
 
     // Re-enable raw mode if it was enabled before
@@ -1788,7 +1789,6 @@ export default class Ink {
     this.backFrame.screen.hyperlinkPool = this.hyperlinkPool
   }
   patchConsole(): () => void {
-    // biome-ignore lint/suspicious/noConsole: intentionally patching global console
     const con = console
     const originals: Partial<Record<keyof Console, Console[keyof Console]>> = {}
     const toDebug = (...args: unknown[]) => logForDebugging(`console.log: ${format(...args)}`)

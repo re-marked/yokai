@@ -444,8 +444,7 @@ export function createScreen(
   // negatives in degenerate layouts; passing those into typed-array
   // allocation crashes. Locals instead of param reassign for clarity.
   const w = Number.isInteger(width) && width >= 0 ? width : Math.max(0, Math.floor(width) || 0)
-  const h =
-    Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
+  const h = Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
 
   const size = w * h
 
@@ -485,8 +484,7 @@ export function resetScreen(screen: Screen, width: number, height: number): void
 
   // Sanitize: clamp to non-negative integers (see createScreen for rationale).
   const w = Number.isInteger(width) && width >= 0 ? width : Math.max(0, Math.floor(width) || 0)
-  const h =
-    Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
+  const h = Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
 
   const size = w * h
 

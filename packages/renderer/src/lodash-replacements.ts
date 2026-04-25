@@ -4,7 +4,6 @@
  * (CVE code injection via _.template, prototype pollution via _.unset/_.omit).
  */
 
-// biome-ignore lint/suspicious/noEmptyBlockStatements: intentional no-op
 export function noop(): void {}
 
 export interface ThrottledFunction<T extends (...args: unknown[]) => unknown> {
