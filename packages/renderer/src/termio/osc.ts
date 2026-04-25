@@ -2,7 +2,7 @@
  * OSC (Operating System Command) Types and Parser
  */
 
-import { Buffer } from 'buffer'
+import { Buffer } from 'node:buffer'
 import { env, execFileNoThrow } from '@yokai/shared'
 import { BEL, ESC, ESC_TYPE, SEP } from './ansi'
 import type { Action, Color, TabStatusAction } from './types'
@@ -10,7 +10,7 @@ import type { Action, Color, TabStatusAction } from './types'
 export const OSC_PREFIX = ESC + String.fromCharCode(ESC_TYPE.OSC)
 
 /** String Terminator (ESC \) - alternative to BEL for terminating OSC */
-export const ST = ESC + '\\'
+export const ST = `${ESC}\\`
 
 /** Generate an OSC sequence: ESC ] p1;p2;...;pN <terminator>
  * Uses ST terminator for Kitty (avoids beeps), BEL for others */
@@ -32,11 +32,11 @@ export function osc(...parts: (string | number)[]): string {
  * wrapped \x07 is opaque DCS payload and tmux never sees the bell.
  */
 export function wrapForMultiplexer(sequence: string): string {
-  if (process.env['TMUX']) {
+  if (process.env.TMUX) {
     const escaped = sequence.split('\x1b').join('\x1b\x1b')
     return `\x1bPtmux;${escaped}\x1b\\`
   }
-  if (process.env['STY']) {
+  if (process.env.STY) {
     return `\x1bP${sequence}\x1b\\`
   }
   return sequence
@@ -61,10 +61,9 @@ export function wrapForMultiplexer(sequence: string): string {
 export type ClipboardPath = 'native' | 'tmux-buffer' | 'osc52'
 
 export function getClipboardPath(): ClipboardPath {
-  const nativeAvailable =
-    process.platform === 'darwin' && !process.env['SSH_CONNECTION']
+  const nativeAvailable = process.platform === 'darwin' && !process.env.SSH_CONNECTION
   if (nativeAvailable) return 'native'
-  if (process.env['TMUX']) return 'tmux-buffer'
+  if (process.env.TMUX) return 'tmux-buffer'
   return 'osc52'
 }
 
@@ -87,11 +86,9 @@ function tmuxPassthrough(payload: string): string {
  * Returns true if the buffer was loaded successfully.
  */
 export async function tmuxLoadBuffer(text: string): Promise<boolean> {
-  if (!process.env['TMUX']) return false
+  if (!process.env.TMUX) return false
   const args =
-    process.env['LC_TERMINAL'] === 'iTerm2'
-      ? ['load-buffer', '-']
-      : ['load-buffer', '-w', '-']
+    process.env.LC_TERMINAL === 'iTerm2' ? ['load-buffer', '-'] : ['load-buffer', '-w', '-']
   const { code } = await execFileNoThrow('tmux', args, {
     input: text,
     useCwd: false,
@@ -144,7 +141,7 @@ export async function setClipboard(text: string): Promise<string> {
   // Gated on SSH_CONNECTION (not SSH_TTY) since tmux panes inherit SSH_TTY
   // forever but SSH_CONNECTION is in tmux's default update-environment and
   // clears on local attach. Fire-and-forget.
-  if (!process.env['SSH_CONNECTION']) copyNative(text)
+  if (!process.env.SSH_CONNECTION) copyNative(text)
 
   const tmuxBufferLoaded = await tmuxLoadBuffer(text)
 
@@ -186,24 +183,20 @@ function copyNative(text: string): void {
         return
       }
       // First call: probe wl-copy (Wayland) then xclip/xsel (X11), cache winner.
-      void execFileNoThrow('wl-copy', [], opts).then(r => {
+      void execFileNoThrow('wl-copy', [], opts).then((r) => {
         if (r.code === 0) {
           linuxCopy = 'wl-copy'
           return
         }
-        void execFileNoThrow('xclip', ['-selection', 'clipboard'], opts).then(
-          r2 => {
-            if (r2.code === 0) {
-              linuxCopy = 'xclip'
-              return
-            }
-            void execFileNoThrow('xsel', ['--clipboard', '--input'], opts).then(
-              r3 => {
-                linuxCopy = r3.code === 0 ? 'xsel' : null
-              },
-            )
-          },
-        )
+        void execFileNoThrow('xclip', ['-selection', 'clipboard'], opts).then((r2) => {
+          if (r2.code === 0) {
+            linuxCopy = 'xclip'
+            return
+          }
+          void execFileNoThrow('xsel', ['--clipboard', '--input'], opts).then((r3) => {
+            linuxCopy = r3.code === 0 ? 'xsel' : null
+          })
+        })
       })
       return
     }
@@ -255,7 +248,7 @@ export function parseOSC(content: string): Action | null {
   const command = semicolonIdx >= 0 ? content.slice(0, semicolonIdx) : content
   const data = semicolonIdx >= 0 ? content.slice(semicolonIdx + 1) : ''
 
-  const commandNum = parseInt(command, 10)
+  const commandNum = Number.parseInt(command, 10)
 
   // Window/icon title
   if (commandNum === OSC.SET_TITLE_AND_ICON) {
@@ -316,18 +309,15 @@ export function parseOscColor(spec: string): Color | null {
   if (hex) {
     return {
       type: 'rgb',
-      r: parseInt(hex[1]!, 16),
-      g: parseInt(hex[2]!, 16),
-      b: parseInt(hex[3]!, 16),
+      r: Number.parseInt(hex[1]!, 16),
+      g: Number.parseInt(hex[2]!, 16),
+      b: Number.parseInt(hex[3]!, 16),
     }
   }
-  const rgb = spec.match(
-    /^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i,
-  )
+  const rgb = spec.match(/^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i)
   if (rgb) {
     // XParseColor: N hex digits → value / (16^N - 1), scale to 0-255
-    const scale = (s: string) =>
-      Math.round((parseInt(s, 16) / (16 ** s.length - 1)) * 255)
+    const scale = (s: string) => Math.round((Number.parseInt(s, 16) / (16 ** s.length - 1)) * 255)
     return {
       type: 'rgb',
       r: scale(rgb[1]!),
@@ -408,8 +398,7 @@ export function link(url: string, params?: Record<string, string>): string {
 
 function osc8Id(url: string): string {
   let h = 0
-  for (let i = 0; i < url.length; i++)
-    h = ((h << 5) - h + url.charCodeAt(i)) | 0
+  for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0
   return (h >>> 0).toString(36)
 }
 
@@ -447,10 +436,7 @@ export const CLEAR_ITERM2_PROGRESS = `${OSC_PREFIX}${OSC.ITERM2};${ITERM2.PROGRE
 export const CLEAR_TERMINAL_TITLE = `${OSC_PREFIX}${OSC.SET_TITLE_AND_ICON};${BEL}`
 
 /** Clear all three OSC 21337 tab-status fields. Used on exit. */
-export const CLEAR_TAB_STATUS = osc(
-  OSC.TAB_STATUS,
-  'indicator=;status=;status-color=',
-)
+export const CLEAR_TAB_STATUS = osc(OSC.TAB_STATUS, 'indicator=;status=;status-color=')
 
 /**
  * Gate for emitting OSC 21337 (tab-status indicator). Ant-only while the
@@ -474,19 +460,15 @@ export function tabStatus(fields: TabStatusAction): string {
   const parts: string[] = []
   const rgb = (c: Color) =>
     c.type === 'rgb'
-      ? `#${[c.r, c.g, c.b].map(n => n.toString(16).padStart(2, '0')).join('')}`
+      ? `#${[c.r, c.g, c.b].map((n) => n.toString(16).padStart(2, '0')).join('')}`
       : ''
   const escapeStatusValue = (value: string): string =>
     value.split('\\').join('\\\\').split(';').join('\\;')
   if ('indicator' in fields)
     parts.push(`indicator=${fields.indicator ? rgb(fields.indicator) : ''}`)
   if ('status' in fields)
-    parts.push(
-      `status=${fields.status ? escapeStatusValue(fields.status) : ''}`,
-    )
+    parts.push(`status=${fields.status ? escapeStatusValue(fields.status) : ''}`)
   if ('statusColor' in fields)
-    parts.push(
-      `status-color=${fields.statusColor ? rgb(fields.statusColor) : ''}`,
-    )
+    parts.push(`status-color=${fields.statusColor ? rgb(fields.statusColor) : ''}`)
   return osc(OSC.TAB_STATUS, parts.join(';'))
 }

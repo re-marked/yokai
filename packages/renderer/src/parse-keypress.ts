@@ -4,9 +4,9 @@
  * Uses the termio tokenizer for escape sequence boundary detection,
  * then interprets sequences as keypresses.
  */
-import { Buffer } from 'buffer'
+import { Buffer } from 'node:buffer'
 import { PASTE_END, PASTE_START } from './termio/csi'
-import { createTokenizer, type Tokenizer } from './termio/tokenize'
+import { type Tokenizer, createTokenizer } from './termio/tokenize'
 
 // eslint-disable-next-line no-control-regex
 const META_KEY_CODE_RE = /^(?:\x1b)([a-zA-Z0-9])$/
@@ -127,8 +127,8 @@ function parseTerminalResponse(s: string): TerminalResponse | null {
     if ((m = DECRPM_RE.exec(s))) {
       return {
         type: 'decrpm',
-        mode: parseInt(m[1]!, 10),
-        status: parseInt(m[2]!, 10),
+        mode: Number.parseInt(m[1]!, 10),
+        status: Number.parseInt(m[2]!, 10),
       }
     }
 
@@ -141,14 +141,14 @@ function parseTerminalResponse(s: string): TerminalResponse | null {
     }
 
     if ((m = KITTY_FLAGS_RE.exec(s))) {
-      return { type: 'kittyKeyboard', flags: parseInt(m[1]!, 10) }
+      return { type: 'kittyKeyboard', flags: Number.parseInt(m[1]!, 10) }
     }
 
     if ((m = CURSOR_POSITION_RE.exec(s))) {
       return {
         type: 'cursorPosition',
-        row: parseInt(m[1]!, 10),
-        col: parseInt(m[2]!, 10),
+        row: Number.parseInt(m[1]!, 10),
+        col: Number.parseInt(m[2]!, 10),
       }
     }
 
@@ -159,7 +159,7 @@ function parseTerminalResponse(s: string): TerminalResponse | null {
   if (s.startsWith('\x1b]')) {
     const m = OSC_RESPONSE_RE.exec(s)
     if (m) {
-      return { type: 'osc', code: parseInt(m[1]!, 10), data: m[2]! }
+      return { type: 'osc', code: Number.parseInt(m[1]!, 10), data: m[2]! }
     }
   }
 
@@ -176,7 +176,7 @@ function parseTerminalResponse(s: string): TerminalResponse | null {
 
 function splitNumericParams(params: string): number[] {
   if (!params) return []
-  return params.split(';').map(p => parseInt(p, 10))
+  return params.split(';').map((p) => Number.parseInt(p, 10))
 }
 
 export type KeyParseState = {
@@ -197,17 +197,17 @@ function inputToString(input: Buffer | string): string {
   if (Buffer.isBuffer(input)) {
     if (input[0]! > 127 && input[1] === undefined) {
       ;(input[0] as unknown as number) -= 128
-      return '\x1b' + String(input)
-    } else {
-      return String(input)
+      return `\x1b${String(input)}`
     }
-  } else if (input !== undefined && typeof input !== 'string') {
     return String(input)
-  } else if (!input) {
-    return ''
-  } else {
-    return input
   }
+  if (input !== undefined && typeof input !== 'string') {
+    return String(input)
+  }
+  if (!input) {
+    return ''
+  }
+  return input
 }
 
 export function parseMultipleKeypresses(
@@ -274,7 +274,7 @@ export function parseMultipleKeypresses(
         // range would match typed input like `[MAX]` batched into one read
         // and silently drop it as a phantom click. Click/drag orphans leak
         // as visible garbage instead; deletable garbage beats silent loss.
-        const resynthesized = '\x1b' + token.value
+        const resynthesized = `\x1b${token.value}`
         const mouse = parseMouseEvent(resynthesized)
         keys.push(mouse ?? parseKeypress(resynthesized))
       } else {
@@ -408,7 +408,7 @@ const keyName: Record<string, string> = {
 export const nonAlphanumericKeys = [
   // Filter out single-character values (digits, operators from numpad) since
   // those are printable characters that should produce input
-  ...Object.values(keyName).filter(v => v.length > 1),
+  ...Object.values(keyName).filter((v) => v.length > 1),
   // escape and backspace are assigned directly in parseKeypress (not via the
   // keyName map), so the spread above misses them. Without these, ctrl+escape
   // via Kitty/modifyOtherKeys leaks the literal word "escape" as input text
@@ -421,36 +421,13 @@ export const nonAlphanumericKeys = [
 ]
 
 const isShiftKey = (code: string): boolean => {
-  return [
-    '[a',
-    '[b',
-    '[c',
-    '[d',
-    '[e',
-    '[2$',
-    '[3$',
-    '[5$',
-    '[6$',
-    '[7$',
-    '[8$',
-    '[Z',
-  ].includes(code)
+  return ['[a', '[b', '[c', '[d', '[e', '[2$', '[3$', '[5$', '[6$', '[7$', '[8$', '[Z'].includes(
+    code,
+  )
 }
 
 const isCtrlKey = (code: string): boolean => {
-  return [
-    'Oa',
-    'Ob',
-    'Oc',
-    'Od',
-    'Oe',
-    '[2^',
-    '[3^',
-    '[5^',
-    '[6^',
-    '[7^',
-    '[8^',
-  ].includes(code)
+  return ['Oa', 'Ob', 'Oc', 'Od', 'Oe', '[2^', '[3^', '[5^', '[6^', '[7^', '[8^'].includes(code)
 }
 
 /**
@@ -594,7 +571,7 @@ export type ParsedInput = ParsedKey | ParsedMouse | ParsedResponse
 function parseMouseEvent(s: string): ParsedMouse | null {
   const match = SGR_MOUSE_RE.exec(s)
   if (!match) return null
-  const button = parseInt(match[1]!, 10)
+  const button = Number.parseInt(match[1]!, 10)
   // Wheel events (bit 6 set, low bits 0/1 for up/down) stay as ParsedKey
   // so the keybinding system can route them to scroll handlers.
   if ((button & 0x40) !== 0) return null
@@ -602,14 +579,14 @@ function parseMouseEvent(s: string): ParsedMouse | null {
     kind: 'mouse',
     button,
     action: match[4] === 'M' ? 'press' : 'release',
-    col: parseInt(match[2]!, 10),
-    row: parseInt(match[3]!, 10),
+    col: Number.parseInt(match[2]!, 10),
+    row: Number.parseInt(match[3]!, 10),
     sequence: s,
   }
 }
 
-function parseKeypress(s: string = ''): ParsedKey {
-  let parts
+function parseKeypress(s = ''): ParsedKey {
+  let parts: RegExpExecArray | null
 
   const key: ParsedKey = {
     kind: 'key',
@@ -631,9 +608,9 @@ function parseKeypress(s: string = ''): ParsedKey {
   // Example: ESC[13;2u = Shift+Enter, ESC[27u = Escape (no modifiers)
   let match: RegExpExecArray | null
   if ((match = CSI_U_RE.exec(s))) {
-    const codepoint = parseInt(match[1]!, 10)
+    const codepoint = Number.parseInt(match[1]!, 10)
     // Modifier defaults to 1 (no modifiers) when not present
-    const modifier = match[2] ? parseInt(match[2], 10) : 1
+    const modifier = match[2] ? Number.parseInt(match[2], 10) : 1
     const mods = decodeModifier(modifier)
     const name = keycodeToName(codepoint)
     return {
@@ -655,8 +632,8 @@ function parseKeypress(s: string = ''): ParsedKey {
   // Must run before FN_KEY_RE — FN_KEY_RE only allows 2 params before ~ and
   // would leave the tail as garbage if it partially matched.
   if ((match = MODIFY_OTHER_KEYS_RE.exec(s))) {
-    const mods = decodeModifier(parseInt(match[1]!, 10))
-    const name = keycodeToName(parseInt(match[2]!, 10))
+    const mods = decodeModifier(Number.parseInt(match[1]!, 10))
+    const name = keycodeToName(Number.parseInt(match[2]!, 10))
     return {
       kind: 'key',
       name,
@@ -679,7 +656,7 @@ function parseKeypress(s: string = ''): ParsedKey {
   // Ctrl=0x10) — modified wheel events (e.g. Ctrl+scroll, button=80)
   // should still be recognized as wheelup/wheeldown.
   if ((match = SGR_MOUSE_RE.exec(s))) {
-    const button = parseInt(match[1]!, 10)
+    const button = Number.parseInt(match[1]!, 10)
     if ((button & 0x43) === 0x40) return createNavKey(s, 'wheelup', false)
     if ((button & 0x43) === 0x41) return createNavKey(s, 'wheeldown', false)
     // Shouldn't reach here (parseMouseEvent catches non-wheel) but be safe
@@ -740,9 +717,7 @@ function parseKeypress(s: string = ''): ParsedKey {
       key.option = true
     }
 
-    const code = [parts[1], parts[2], parts[4], parts[6]]
-      .filter(Boolean)
-      .join('')
+    const code = [parts[1], parts[2], parts[4], parts[6]].filter(Boolean).join('')
 
     const modifier = ((parts[3] || parts[5] || 1) as number) - 1
 
@@ -799,4 +774,3 @@ function createNavKey(s: string, name: string, ctrl: boolean): ParsedKey {
     isPasted: false,
   }
 }
-

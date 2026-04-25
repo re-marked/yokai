@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
-import { isProgressReportingAvailable, type Progress } from './terminal'
+import { type Progress, isProgressReportingAvailable } from './terminal'
 import { BEL } from './termio/ansi'
-import { ITERM2, OSC, osc, PROGRESS, wrapForMultiplexer } from './termio/osc'
+import { ITERM2, OSC, PROGRESS, osc, wrapForMultiplexer } from './termio/osc'
 
 type WriteRaw = (data: string) => void
 
@@ -25,9 +25,7 @@ export type TerminalNotification = {
 export function useTerminalNotification(): TerminalNotification {
   const writeRaw = useContext(TerminalWriteContext)
   if (!writeRaw) {
-    throw new Error(
-      'useTerminalNotification must be used within TerminalWriteProvider',
-    )
+    throw new Error('useTerminalNotification must be used within TerminalWriteProvider')
   }
 
   const notifyITerm2 = useCallback(
@@ -74,42 +72,22 @@ export function useTerminalNotification(): TerminalNotification {
         return
       }
       if (!state) {
-        writeRaw(
-          wrapForMultiplexer(
-            osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.CLEAR, ''),
-          ),
-        )
+        writeRaw(wrapForMultiplexer(osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.CLEAR, '')))
         return
       }
       const pct = Math.max(0, Math.min(100, Math.round(percentage ?? 0)))
       switch (state) {
         case 'completed':
-          writeRaw(
-            wrapForMultiplexer(
-              osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.CLEAR, ''),
-            ),
-          )
+          writeRaw(wrapForMultiplexer(osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.CLEAR, '')))
           break
         case 'error':
-          writeRaw(
-            wrapForMultiplexer(
-              osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.ERROR, pct),
-            ),
-          )
+          writeRaw(wrapForMultiplexer(osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.ERROR, pct)))
           break
         case 'indeterminate':
-          writeRaw(
-            wrapForMultiplexer(
-              osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.INDETERMINATE, ''),
-            ),
-          )
+          writeRaw(wrapForMultiplexer(osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.INDETERMINATE, '')))
           break
         case 'running':
-          writeRaw(
-            wrapForMultiplexer(
-              osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.SET, pct),
-            ),
-          )
+          writeRaw(wrapForMultiplexer(osc(OSC.ITERM2, ITERM2.PROGRESS, PROGRESS.SET, pct)))
           break
         case null:
           // Handled by the if guard above
@@ -124,4 +102,3 @@ export function useTerminalNotification(): TerminalNotification {
     [notifyITerm2, notifyKitty, notifyGhostty, notifyBell, progress],
   )
 }
-

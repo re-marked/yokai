@@ -66,11 +66,7 @@ export type ColorType = 'foreground' | 'background'
 const RGB_REGEX = /^rgb\(\s?(\d+),\s?(\d+),\s?(\d+)\s?\)$/
 const ANSI_REGEX = /^ansi256\(\s?(\d+)\s?\)$/
 
-export const colorize = (
-  str: string,
-  color: string | undefined,
-  type: ColorType,
-): string => {
+export const colorize = (str: string, color: string | undefined, type: ColorType): string => {
   if (!color) {
     return str
   }
@@ -95,44 +91,26 @@ export const colorize = (
       case 'white':
         return type === 'foreground' ? chalk.white(str) : chalk.bgWhite(str)
       case 'blackBright':
-        return type === 'foreground'
-          ? chalk.blackBright(str)
-          : chalk.bgBlackBright(str)
+        return type === 'foreground' ? chalk.blackBright(str) : chalk.bgBlackBright(str)
       case 'redBright':
-        return type === 'foreground'
-          ? chalk.redBright(str)
-          : chalk.bgRedBright(str)
+        return type === 'foreground' ? chalk.redBright(str) : chalk.bgRedBright(str)
       case 'greenBright':
-        return type === 'foreground'
-          ? chalk.greenBright(str)
-          : chalk.bgGreenBright(str)
+        return type === 'foreground' ? chalk.greenBright(str) : chalk.bgGreenBright(str)
       case 'yellowBright':
-        return type === 'foreground'
-          ? chalk.yellowBright(str)
-          : chalk.bgYellowBright(str)
+        return type === 'foreground' ? chalk.yellowBright(str) : chalk.bgYellowBright(str)
       case 'blueBright':
-        return type === 'foreground'
-          ? chalk.blueBright(str)
-          : chalk.bgBlueBright(str)
+        return type === 'foreground' ? chalk.blueBright(str) : chalk.bgBlueBright(str)
       case 'magentaBright':
-        return type === 'foreground'
-          ? chalk.magentaBright(str)
-          : chalk.bgMagentaBright(str)
+        return type === 'foreground' ? chalk.magentaBright(str) : chalk.bgMagentaBright(str)
       case 'cyanBright':
-        return type === 'foreground'
-          ? chalk.cyanBright(str)
-          : chalk.bgCyanBright(str)
+        return type === 'foreground' ? chalk.cyanBright(str) : chalk.bgCyanBright(str)
       case 'whiteBright':
-        return type === 'foreground'
-          ? chalk.whiteBright(str)
-          : chalk.bgWhiteBright(str)
+        return type === 'foreground' ? chalk.whiteBright(str) : chalk.bgWhiteBright(str)
     }
   }
 
   if (color.startsWith('#')) {
-    return type === 'foreground'
-      ? chalk.hex(color)(str)
-      : chalk.bgHex(color)(str)
+    return type === 'foreground' ? chalk.hex(color)(str) : chalk.bgHex(color)(str)
   }
 
   if (color.startsWith('ansi256')) {
@@ -144,9 +122,7 @@ export const colorize = (
 
     const value = Number(matches[1])
 
-    return type === 'foreground'
-      ? chalk.ansi256(value)(str)
-      : chalk.bgAnsi256(value)(str)
+    return type === 'foreground' ? chalk.ansi256(value)(str) : chalk.bgAnsi256(value)(str)
   }
 
   if (color.startsWith('rgb')) {
@@ -248,4 +224,3 @@ export function applyColor(text: string, color: Color | undefined): string {
   }
   return colorize(text, color, 'foreground')
 }
-

@@ -84,8 +84,8 @@ export type Value = {
   value: number
 }
 
-const UNDEFINED_VALUE: Value = { unit: Unit.Undefined, value: NaN }
-const AUTO_VALUE: Value = { unit: Unit.Auto, value: NaN }
+const UNDEFINED_VALUE: Value = { unit: Unit.Undefined, value: Number.NaN }
+const AUTO_VALUE: Value = { unit: Unit.Auto, value: Number.NaN }
 
 function pointValue(v: number): Value {
   return { unit: Unit.Point, value: v }
@@ -99,19 +99,21 @@ function resolveValue(v: Value, ownerSize: number): number {
     case Unit.Point:
       return v.value
     case Unit.Percent:
-      return isNaN(ownerSize) ? NaN : (v.value * ownerSize) / 100
+      return Number.isNaN(ownerSize) ? Number.NaN : (v.value * ownerSize) / 100
     default:
-      return NaN
+      return Number.NaN
   }
 }
 
 function isDefined(n: number): boolean {
-  return !isNaN(n)
+  return !Number.isNaN(n)
 }
 
-// NaN-safe equality for layout-cache input comparison
+// NaN-safe equality for layout-cache input comparison.
+// `a === b` short-circuits the common case; the explicit isNaN check on
+// both sides handles NaN === NaN being false in JS.
 function sameFloat(a: number, b: number): boolean {
-  return a === b || (a !== a && b !== b)
+  return a === b || (Number.isNaN(a) && Number.isNaN(b))
 }
 
 // --
@@ -226,7 +228,7 @@ function resolveEdge(
     if (physicalEdge === EDGE_RIGHT) v = edges[Edge.End]!
   }
   if (v.unit === Unit.Undefined) return 0
-  if (v.unit === Unit.Auto) return allowAuto ? NaN : 0
+  if (v.unit === Unit.Auto) return allowAuto ? Number.NaN : 0
   return resolveValue(v, ownerSize)
 }
 
@@ -277,7 +279,7 @@ function resolveEdges4Into(
   const eA = edges[8]! // Edge.All
   const eS = edges[4]! // Edge.Start
   const eE = edges[5]! // Edge.End
-  const pctDenom = isNaN(ownerSize) ? NaN : ownerSize / 100
+  const pctDenom = Number.isNaN(ownerSize) ? Number.NaN : ownerSize / 100
 
   // Left: edges[0] → Horizontal → All → Start
   let v = edges[0]!
@@ -439,12 +441,12 @@ export class Node {
   // different inputs per parent pass — a single slot thrashes. Re-layout
   // bench (dirty one leaf, recompute root) went 2.7x→1.1x with this:
   // clean siblings skip straight through, only the dirty chain recomputes.
-  _lW = NaN
-  _lH = NaN
+  _lW = Number.NaN
+  _lH = Number.NaN
   _lWM: MeasureMode = 0
   _lHM: MeasureMode = 0
-  _lOW = NaN
-  _lOH = NaN
+  _lOW = Number.NaN
+  _lOH = Number.NaN
   _lFW = false
   _lFH = false
   // _hasL stores INPUTS early (before compute) but layout.width/height are
@@ -452,17 +454,17 @@ export class Node {
   // different inputs. Without storing OUTPUTS, a _hasL hit returns whatever
   // layout.width/height happened to be left by the last call — the scrollbox
   // vpH=33→2624 bug. Store + restore outputs like the multi-entry cache does.
-  _lOutW = NaN
-  _lOutH = NaN
+  _lOutW = Number.NaN
+  _lOutH = Number.NaN
   _hasL = false
-  _mW = NaN
-  _mH = NaN
+  _mW = Number.NaN
+  _mH = Number.NaN
   _mWM: MeasureMode = 0
   _mHM: MeasureMode = 0
-  _mOW = NaN
-  _mOH = NaN
-  _mOutW = NaN
-  _mOutH = NaN
+  _mOW = Number.NaN
+  _mOH = Number.NaN
+  _mOutW = Number.NaN
+  _mOutH = Number.NaN
   _hasM = false
   // Cached computeFlexBasis result. For clean children, basis only depends
   // on the container's inner dimensions — if those haven't changed, skip the
@@ -470,11 +472,11 @@ export class Node {
   // for scroll: 500-message content container is dirty, its 499 clean
   // children each get measured ~20× as the dirty chain's measure/layout
   // passes cascade. Basis cache short-circuits at the child boundary.
-  _fbBasis = NaN
-  _fbOwnerW = NaN
-  _fbOwnerH = NaN
-  _fbAvailMain = NaN
-  _fbAvailCross = NaN
+  _fbBasis = Number.NaN
+  _fbOwnerW = Number.NaN
+  _fbOwnerH = Number.NaN
+  _fbAvailMain = Number.NaN
+  _fbAvailCross = Number.NaN
   _fbCrossMode: MeasureMode = 0
   // Generation at which _fbBasis was written. Dirty nodes from a PREVIOUS
   // generation have stale cache (subtree changed), but within the SAME
@@ -569,7 +571,7 @@ export class Node {
     this._hasM = false
     this._cN = 0
     this._cWr = 0
-    this._fbBasis = NaN
+    this._fbBasis = Number.NaN
   }
 
   // -- Dirty tracking
@@ -720,7 +722,7 @@ export class Node {
     this.markDirty()
   }
   setFlex(v: number | undefined): void {
-    if (v === undefined || isNaN(v)) {
+    if (v === undefined || Number.isNaN(v)) {
       this.style.flexGrow = 0
       this.style.flexShrink = 0
     } else if (v > 0) {
@@ -819,8 +821,7 @@ export class Node {
     this.style.margin[edge] = val
     if (val.unit === Unit.Auto) this._hasAutoMargin = true
     else this._hasAutoMargin = hasAnyAutoEdge(this.style.margin)
-    this._hasMargin =
-      this._hasAutoMargin || hasAnyDefinedEdge(this.style.margin)
+    this._hasMargin = this._hasAutoMargin || hasAnyDefinedEdge(this.style.margin)
     this.markDirty()
   }
   setMarginPercent(edge: Edge, v: number): void {
@@ -918,7 +919,7 @@ export class Node {
   }
   setAspectRatio(_: number | undefined): void {}
   getAspectRatio(): number {
-    return NaN
+    return Number.NaN
   }
   setAlwaysFormsContainingBlock(_: boolean): void {}
 
@@ -933,8 +934,8 @@ export class Node {
     _yogaMeasureCalls = 0
     _yogaCacheHits = 0
     _generation++
-    const w = ownerWidth === undefined ? NaN : ownerWidth
-    const h = ownerHeight === undefined ? NaN : ownerHeight
+    const w = ownerWidth === undefined ? Number.NaN : ownerWidth
+    const h = ownerHeight === undefined ? Number.NaN : ownerHeight
     layoutNode(
       this,
       w,
@@ -949,14 +950,8 @@ export class Node {
     // to the root even without a parent container; this matters for rounding
     // since the root's abs top/left seeds the pixel-grid walk).
     const mar = this.layout.margin
-    const posL = resolveValue(
-      resolveEdgeRaw(this.style.position, EDGE_LEFT),
-      isDefined(w) ? w : 0,
-    )
-    const posT = resolveValue(
-      resolveEdgeRaw(this.style.position, EDGE_TOP),
-      isDefined(w) ? w : 0,
-    )
+    const posL = resolveValue(resolveEdgeRaw(this.style.position, EDGE_LEFT), isDefined(w) ? w : 0)
+    const posT = resolveValue(resolveEdgeRaw(this.style.position, EDGE_TOP), isDefined(w) ? w : 0)
     this.layout.left = mar[EDGE_LEFT] + (isDefined(posL) ? posL : 0)
     this.layout.top = mar[EDGE_TOP] + (isDefined(posT) ? posT : 0)
     roundLayout(this, this.config.pointScaleFactor, 0, 0)
@@ -1212,10 +1207,8 @@ function layoutNode(
   const paddingBorderHeight = pad[1] + pad[3] + bor[1] + bor[3]
 
   // Resolve style dimensions
-  const styleWidth = forceWidth ? NaN : resolveValue(style.width, ownerWidth)
-  const styleHeight = forceHeight
-    ? NaN
-    : resolveValue(style.height, ownerHeight)
+  const styleWidth = forceWidth ? Number.NaN : resolveValue(style.width, ownerWidth)
+  const styleHeight = forceHeight ? Number.NaN : resolveValue(style.height, ownerHeight)
 
   // If style dimension is defined, it overrides the available size
   let width = availableWidth
@@ -1238,13 +1231,9 @@ function layoutNode(
   // Measure-func leaf node
   if (node.measureFunc && node.children.length === 0) {
     const innerW =
-      wMode === MeasureMode.Undefined
-        ? NaN
-        : Math.max(0, width - paddingBorderWidth)
+      wMode === MeasureMode.Undefined ? Number.NaN : Math.max(0, width - paddingBorderWidth)
     const innerH =
-      hMode === MeasureMode.Undefined
-        ? NaN
-        : Math.max(0, height - paddingBorderHeight)
+      hMode === MeasureMode.Undefined ? Number.NaN : Math.max(0, height - paddingBorderHeight)
     _yogaMeasureCalls++
     const measured = node.measureFunc(innerW, wMode, innerH, hMode)
     node.layout.width =
@@ -1331,19 +1320,11 @@ function layoutNode(
   const mainPadBorder = isMainRow ? paddingBorderWidth : paddingBorderHeight
   const crossPadBorder = isMainRow ? paddingBorderHeight : paddingBorderWidth
 
-  const innerMainSize = isDefined(mainSize)
-    ? Math.max(0, mainSize - mainPadBorder)
-    : NaN
-  const innerCrossSize = isDefined(crossSize)
-    ? Math.max(0, crossSize - crossPadBorder)
-    : NaN
+  const innerMainSize = isDefined(mainSize) ? Math.max(0, mainSize - mainPadBorder) : Number.NaN
+  const innerCrossSize = isDefined(crossSize) ? Math.max(0, crossSize - crossPadBorder) : Number.NaN
 
   // Resolve gap
-  const gapMain = resolveGap(
-    style,
-    isMainRow ? Gutter.Column : Gutter.Row,
-    innerMainSize,
-  )
+  const gapMain = resolveGap(style, isMainRow ? Gutter.Column : Gutter.Row, innerMainSize)
 
   // Partition children into flow vs absolute. display:contents nodes are
   // transparent — their children are lifted into the grandparent's child list
@@ -1356,14 +1337,10 @@ function layoutNode(
   // values. Per CSS, a % width resolves against the parent's content-box
   // width. If this node's width is indefinite, children's % widths are also
   // indefinite — do NOT fall through to the grandparent's size.
-  const ownerW = isDefined(width) ? width : NaN
-  const ownerH = isDefined(height) ? height : NaN
+  const ownerW = isDefined(width) ? width : Number.NaN
+  const ownerH = isDefined(height) ? height : Number.NaN
   const isWrap = style.flexWrap !== Wrap.NoWrap
-  const gapCross = resolveGap(
-    style,
-    isMainRow ? Gutter.Row : Gutter.Column,
-    innerCrossSize,
-  )
+  const gapCross = resolveGap(style, isMainRow ? Gutter.Row : Gutter.Column, innerCrossSize)
 
   // STEP 1: Compute flex-basis for each flow child and break into lines.
   // Single-line (NoWrap) containers always get one line; multi-line containers
@@ -1428,37 +1405,23 @@ function layoutNode(
     let availMain = innerMainSize
     if (!isDefined(availMain)) {
       const mainOwner = isMainRow ? ownerWidth : ownerHeight
-      const minM = resolveValue(
-        isMainRow ? style.minWidth : style.minHeight,
-        mainOwner,
-      )
-      const maxM = resolveValue(
-        isMainRow ? style.maxWidth : style.maxHeight,
-        mainOwner,
-      )
+      const minM = resolveValue(isMainRow ? style.minWidth : style.minHeight, mainOwner)
+      const maxM = resolveValue(isMainRow ? style.maxWidth : style.maxHeight, mainOwner)
       if (isDefined(maxM) && lineBasis > maxM - mainPadBorder) {
         availMain = Math.max(0, maxM - mainPadBorder)
       } else if (isDefined(minM) && lineBasis < minM - mainPadBorder) {
         availMain = Math.max(0, minM - mainPadBorder)
       }
     }
-    resolveFlexibleLengths(
-      line,
-      availMain,
-      lineBasis,
-      isMainRow,
-      ownerW,
-      ownerH,
-    )
+    resolveFlexibleLengths(line, availMain, lineBasis, isMainRow, ownerW, ownerH)
 
     // Lay out each child in this line to measure cross
     let lineCross = 0
     for (const c of line) {
       const cStyle = c.style
-      const childAlign =
-        cStyle.alignSelf === Align.Auto ? style.alignItems : cStyle.alignSelf
+      const childAlign = cStyle.alignSelf === Align.Auto ? style.alignItems : cStyle.alignSelf
       const cMarginCross = childMarginForAxis(c, crossAx, ownerW)
-      let childCrossSize = NaN
+      let childCrossSize = Number.NaN
       let childCrossMode: MeasureMode = MeasureMode.Undefined
       const resolvedCrossStyle = resolveValue(
         isMainRow ? cStyle.height : cStyle.width,
@@ -1468,8 +1431,7 @@ function layoutNode(
       const crossTrailE = isMainRow ? EDGE_BOTTOM : EDGE_RIGHT
       const hasCrossAutoMargin =
         c._hasAutoMargin &&
-        (isMarginAuto(cStyle.margin, crossLeadE) ||
-          isMarginAuto(cStyle.margin, crossTrailE))
+        (isMarginAuto(cStyle.margin, crossLeadE) || isMarginAuto(cStyle.margin, crossTrailE))
       // Single-line stretch goes directly to the container cross size.
       // Multi-line wrap measures intrinsic cross (Undefined mode) so
       // flex-grow grandchildren don't expand to the container — the line
@@ -1600,10 +1562,8 @@ function layoutNode(
 
   // STEP 5: Position lines (align-content) and children (justify-content +
   // align-items + auto margins).
-  const actualInnerMain =
-    (isMainRow ? node.layout.width : node.layout.height) - mainPadBorder
-  const actualInnerCross =
-    (isMainRow ? node.layout.height : node.layout.width) - crossPadBorder
+  const actualInnerMain = (isMainRow ? node.layout.width : node.layout.height) - mainPadBorder
+  const actualInnerCross = (isMainRow ? node.layout.height : node.layout.width) - crossPadBorder
   const mainLeadEdgePhys = leadingEdge(mainAxis)
   const mainTrailEdgePhys = trailingEdge(mainAxis)
   const crossLeadEdgePhys = isMainRow ? EDGE_TOP : EDGE_LEFT
@@ -1676,23 +1636,15 @@ function layoutNode(
     if (isWrap || crossMode !== MeasureMode.Exactly) {
       for (const c of line) {
         const cStyle = c.style
-        const childAlign =
-          cStyle.alignSelf === Align.Auto ? style.alignItems : cStyle.alignSelf
+        const childAlign = cStyle.alignSelf === Align.Auto ? style.alignItems : cStyle.alignSelf
         const crossStyleDef = isDefined(
-          resolveValue(
-            isMainRow ? cStyle.height : cStyle.width,
-            isMainRow ? ownerH : ownerW,
-          ),
+          resolveValue(isMainRow ? cStyle.height : cStyle.width, isMainRow ? ownerH : ownerW),
         )
         const hasCrossAutoMargin =
           c._hasAutoMargin &&
           (isMarginAuto(cStyle.margin, crossLeadEdgePhys) ||
             isMarginAuto(cStyle.margin, crossTrailEdgePhys))
-        if (
-          childAlign === Align.Stretch &&
-          !crossStyleDef &&
-          !hasCrossAutoMargin
-        ) {
+        if (childAlign === Align.Stretch && !crossStyleDef && !hasCrossAutoMargin) {
           const cMarginCross = childMarginForAxis(c, crossAx, ownerW)
           const target = Math.max(0, lineCross - cMarginCross)
           if (c._crossSize !== target) {
@@ -1728,9 +1680,7 @@ function layoutNode(
     const freeMain = actualInnerMain - consumedMain
     const remainingMain = Math.max(0, freeMain)
     const autoMarginMainSize =
-      numAutoMarginsMain > 0 && remainingMain > 0
-        ? remainingMain / numAutoMarginsMain
-        : 0
+      numAutoMarginsMain > 0 && remainingMain > 0 ? remainingMain / numAutoMarginsMain : 0
     if (numAutoMarginsMain === 0) {
       switch (style.justifyContent) {
         case Justify.FlexStart:
@@ -1785,12 +1735,8 @@ function layoutNode(
         autoMainTrail = isMarginAuto(cMargin, mainTrailEdgePhys)
         autoCrossLead = isMarginAuto(cMargin, crossLeadEdgePhys)
         autoCrossTrail = isMarginAuto(cMargin, crossTrailEdgePhys)
-        mMainLead = autoMainLead
-          ? autoMarginMainSize
-          : cLayoutMargin[mainLeadEdgePhys]!
-        mMainTrail = autoMainTrail
-          ? autoMarginMainSize
-          : cLayoutMargin[mainTrailEdgePhys]!
+        mMainLead = autoMainLead ? autoMarginMainSize : cLayoutMargin[mainLeadEdgePhys]!
+        mMainTrail = autoMainTrail ? autoMarginMainSize : cLayoutMargin[mainTrailEdgePhys]!
         mCrossLead = autoCrossLead ? 0 : cLayoutMargin[crossLeadEdgePhys]!
         mCrossTrail = autoCrossTrail ? 0 : cLayoutMargin[crossTrailEdgePhys]!
       } else {
@@ -1805,8 +1751,7 @@ function layoutNode(
         ? mainContainerSize - (pos + mMainLead) - c._mainSize
         : pos + mMainLead
 
-      const childAlign =
-        c.style.alignSelf === Align.Auto ? style.alignItems : c.style.alignSelf
+      const childAlign = c.style.alignSelf === Align.Auto ? style.alignItems : c.style.alignSelf
       let crossPos = effectiveLineCrossPos + mCrossLead
       const crossFree = lineCross - c._crossSize - mCrossLead - mCrossTrail
       if (autoCrossLead && autoCrossTrail) {
@@ -1832,10 +1777,7 @@ function layoutNode(
             // the child's baseline aligns with the line's max ascent. Per
             // yoga: top = currentLead + maxAscent - childBaseline + leadingPosition.
             if (isBaseline) {
-              crossPos =
-                effectiveLineCrossPos +
-                lineMaxAscent[li]! -
-                calculateBaseline(c)
+              crossPos = effectiveLineCrossPos + lineMaxAscent[li]! - calculateBaseline(c)
             }
             break
           default:
@@ -1848,32 +1790,12 @@ function layoutNode(
       let relX = 0
       let relY = 0
       if (c._hasPosition) {
-        const relLeft = resolveValue(
-          resolveEdgeRaw(c.style.position, EDGE_LEFT),
-          ownerW,
-        )
-        const relRight = resolveValue(
-          resolveEdgeRaw(c.style.position, EDGE_RIGHT),
-          ownerW,
-        )
-        const relTop = resolveValue(
-          resolveEdgeRaw(c.style.position, EDGE_TOP),
-          ownerW,
-        )
-        const relBottom = resolveValue(
-          resolveEdgeRaw(c.style.position, EDGE_BOTTOM),
-          ownerW,
-        )
-        relX = isDefined(relLeft)
-          ? relLeft
-          : isDefined(relRight)
-            ? -relRight
-            : 0
-        relY = isDefined(relTop)
-          ? relTop
-          : isDefined(relBottom)
-            ? -relBottom
-            : 0
+        const relLeft = resolveValue(resolveEdgeRaw(c.style.position, EDGE_LEFT), ownerW)
+        const relRight = resolveValue(resolveEdgeRaw(c.style.position, EDGE_RIGHT), ownerW)
+        const relTop = resolveValue(resolveEdgeRaw(c.style.position, EDGE_TOP), ownerW)
+        const relBottom = resolveValue(resolveEdgeRaw(c.style.position, EDGE_BOTTOM), ownerW)
+        relX = isDefined(relLeft) ? relLeft : isDefined(relRight) ? -relRight : 0
+        relY = isDefined(relTop) ? relTop : isDefined(relBottom) ? -relBottom : 0
       }
 
       if (isMainRow) {
@@ -1890,14 +1812,7 @@ function layoutNode(
 
   // STEP 6: Absolute-positioned children
   for (const c of absChildren) {
-    layoutAbsoluteChild(
-      node,
-      c,
-      node.layout.width,
-      node.layout.height,
-      pad,
-      bor,
-    )
+    layoutAbsoluteChild(node, c, node.layout.width, node.layout.height, pad, bor)
   }
 }
 
@@ -1957,8 +1872,7 @@ function layoutAbsoluteChild(
   const mainRow = isRow(mainAxis)
   const wrapReverse = parent.style.flexWrap === Wrap.WrapReverse
   // alignSelf overrides alignItems for absolute children (same as flow items)
-  const alignment =
-    cs.alignSelf === Align.Auto ? parent.style.alignItems : cs.alignSelf
+  const alignment = cs.alignSelf === Align.Auto ? parent.style.alignItems : cs.alignSelf
 
   // Position
   let left: number
@@ -1972,12 +1886,7 @@ function layoutAbsoluteChild(
     const trail = parentWidth - pad[2] - bor[2]
     left = reversed
       ? trail - child.layout.width - mR
-      : justifyAbsolute(
-          parent.style.justifyContent,
-          lead,
-          trail,
-          child.layout.width,
-        ) + mL
+      : justifyAbsolute(parent.style.justifyContent, lead, trail, child.layout.width) + mL
   } else {
     left =
       alignAbsolute(
@@ -2008,12 +1917,7 @@ function layoutAbsoluteChild(
     const trail = parentHeight - pad[3] - bor[3]
     top = reversed
       ? trail - child.layout.height - mB
-      : justifyAbsolute(
-          parent.style.justifyContent,
-          lead,
-          trail,
-          child.layout.height,
-        ) + mT
+      : justifyAbsolute(parent.style.justifyContent, lead, trail, child.layout.height) + mT
   }
 
   child.layout.left = left
@@ -2147,7 +2051,7 @@ function computeFlexBasis(
   //     with flex-grow children would grow into the AtMost constraint,
   //     inflating the basis (breaks YGMinMaxDimensionTest flex_grow_in_at_most
   //     where a flexGrow:1 child should stay at basis 0, not grow to 100).
-  let mainConstraint = NaN
+  let mainConstraint = Number.NaN
   let mainConstraintMode: MeasureMode = MeasureMode.Undefined
   if (isMainRow && isDefined(availableMain) && hasMeasureFuncInSubtree(child)) {
     mainConstraint = availableMain
@@ -2192,9 +2096,7 @@ function resolveFlexibleLengths(
   // violators, redistribute among unfrozen children. Repeat until stable.
   const n = children.length
   const frozen: boolean[] = new Array(n).fill(false)
-  const initialFree = isDefined(availableInnerMain)
-    ? availableInnerMain - totalFlexBasis
-    : 0
+  const initialFree = isDefined(availableInnerMain) ? availableInnerMain - totalFlexBasis : 0
   // Freeze inflexible items at their clamped basis
   for (let i = 0; i < n; i++) {
     const c = children[i]!
@@ -2254,14 +2156,10 @@ function resolveFlexibleLengths(
       if (remaining > 0 && totalGrow > 0) {
         t += (remaining * c.style.flexGrow) / totalGrow
       } else if (remaining < 0 && totalShrinkScaled > 0) {
-        t +=
-          (remaining * (c.style.flexShrink * c._flexBasis)) / totalShrinkScaled
+        t += (remaining * (c.style.flexShrink * c._flexBasis)) / totalShrinkScaled
       }
       unclamped[i] = t
-      const clamped = Math.max(
-        0,
-        boundAxis(c.style, isMainRow, t, ownerW, ownerH),
-      )
+      const clamped = Math.max(0, boundAxis(c.style, isMainRow, t, ownerW, ownerH))
       c._mainSize = clamped
       totalViolation += clamped - t
     }
@@ -2284,17 +2182,12 @@ function resolveFlexibleLengths(
 function isStretchAlign(child: Node): boolean {
   const p = child.parent
   if (!p) return false
-  const align =
-    child.style.alignSelf === Align.Auto
-      ? p.style.alignItems
-      : child.style.alignSelf
+  const align = child.style.alignSelf === Align.Auto ? p.style.alignItems : child.style.alignSelf
   return align === Align.Stretch
 }
 
 function resolveChildAlign(parent: Node, child: Node): Align {
-  return child.style.alignSelf === Align.Auto
-    ? parent.style.alignItems
-    : child.style.alignSelf
+  return child.style.alignSelf === Align.Auto ? parent.style.alignItems : child.style.alignSelf
 }
 
 // Baseline of a node per CSS Flexbox §8.5 / yoga's YGBaseline. Leaf nodes
@@ -2307,10 +2200,7 @@ function calculateBaseline(node: Node): number {
     if (c._lineIndex > 0) break
     if (c.style.positionType === PositionType.Absolute) continue
     if (c.style.display === Display.None) continue
-    if (
-      resolveChildAlign(node, c) === Align.Baseline ||
-      c.isReferenceBaseline_
-    ) {
+    if (resolveChildAlign(node, c) === Align.Baseline || c.isReferenceBaseline_) {
       baselineChild = c
       break
     }
@@ -2331,11 +2221,7 @@ function isBaselineLayout(node: Node, flowChildren: Node[]): boolean {
   return false
 }
 
-function childMarginForAxis(
-  child: Node,
-  axis: FlexDirection,
-  ownerWidth: number,
-): number {
+function childMarginForAxis(child: Node, axis: FlexDirection, ownerWidth: number): number {
   if (!child._hasMargin) return 0
   const lead = resolveEdge(child.style.margin, leadingEdge(axis), ownerWidth)
   const trail = resolveEdge(child.style.margin, trailingEdge(axis), ownerWidth)
@@ -2368,16 +2254,21 @@ function boundAxis(
   const owner = isWidth ? ownerWidth : ownerHeight
   let v = value
   // Inlined resolveValue: Unit.Point=1, Unit.Percent=2. `m === m` is !isNaN.
+  // Self-compare instead of Number.isNaN to keep this branchy hot loop tight —
+  // the comment above explains the perf rationale (32k calls/layout). Biome's
+  // noSelfCompare flag is suppressed per-site to keep the override visible.
   if (maxU === 1) {
     if (v > maxV.value) v = maxV.value
   } else if (maxU === 2) {
     const m = (maxV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: NaN check, see comment above
     if (m === m && v > m) v = m
   }
   if (minU === 1) {
     if (v < minV.value) v = minV.value
   } else if (minU === 2) {
     const m = (minV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: NaN check, see comment above
     if (m === m && v < m) v = m
   }
   return v
@@ -2432,12 +2323,7 @@ function collectLayoutChildren(node: Node, flow: Node[], abs: Node[]): void {
   }
 }
 
-function roundLayout(
-  node: Node,
-  scale: number,
-  absLeft: number,
-  absTop: number,
-): void {
+function roundLayout(node: Node, scale: number, absLeft: number, absTop: number): void {
   if (scale === 0) return
   const l = node.layout
   const nodeLeft = l.left
@@ -2480,12 +2366,7 @@ function isWholeNumber(v: number): boolean {
   return frac < 0.0001 || frac > 0.9999
 }
 
-function roundValue(
-  v: number,
-  scale: number,
-  forceCeil: boolean,
-  forceFloor: boolean,
-): number {
+function roundValue(v: number, scale: number, forceCeil: boolean, forceFloor: boolean): number {
   let scaled = v * scale
   let frac = scaled - Math.floor(scaled)
   if (frac < 0) frac += 1
@@ -2519,10 +2400,10 @@ function parseDimension(v: number | string | undefined): Value {
     return Number.isFinite(v) ? pointValue(v) : UNDEFINED_VALUE
   }
   if (typeof v === 'string' && v.endsWith('%')) {
-    return percentValue(parseFloat(v))
+    return percentValue(Number.parseFloat(v))
   }
-  const n = parseFloat(v)
-  return isNaN(n) ? UNDEFINED_VALUE : pointValue(n)
+  const n = Number.parseFloat(v)
+  return Number.isNaN(n) ? UNDEFINED_VALUE : pointValue(n)
 }
 
 function physicalEdge(edge: Edge): number {
@@ -2576,4 +2457,3 @@ export function loadYoga(): Promise<Yoga> {
 }
 
 export default YOGA_INSTANCE
-

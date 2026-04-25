@@ -1,4 +1,4 @@
-import { nonAlphanumericKeys, type ParsedKey } from '../parse-keypress'
+import { type ParsedKey, nonAlphanumericKeys } from '../parse-keypress'
 import { Event } from './event'
 
 export type Key = {
@@ -119,12 +119,7 @@ function parseKey(keypress: ParsedKey): [Key, string] {
       // processedAsSpecialSequence bypasses the nonAlphanumericKeys
       // clear below, so we must handle it explicitly here);
       // otherwise use key name.
-      input =
-        keypress.name === 'space'
-          ? ' '
-          : keypress.name === 'escape'
-            ? ''
-            : keypress.name
+      input = keypress.name === 'space' ? ' ' : keypress.name === 'escape' ? '' : keypress.name
     }
     processedAsSpecialSequence = true
   }
@@ -141,12 +136,7 @@ function parseKey(keypress: ParsedKey): [Key, string] {
       // guards against future terminal behavior.
       input = ''
     } else {
-      input =
-        keypress.name === 'space'
-          ? ' '
-          : keypress.name === 'escape'
-            ? ''
-            : keypress.name
+      input = keypress.name === 'space' ? ' ' : keypress.name === 'escape' ? '' : keypress.name
     }
     processedAsSpecialSequence = true
   }
@@ -154,12 +144,7 @@ function parseKey(keypress: ParsedKey): [Key, string] {
   // Handle application keypad mode sequences: after stripping ESC,
   // we're left with "O<letter>" (e.g., "Op" for numpad 0, "Oy" for numpad 9).
   // Use the parsed key name (the digit character) for input handling.
-  if (
-    input.startsWith('O') &&
-    input.length === 2 &&
-    keypress.name &&
-    keypress.name.length === 1
-  ) {
+  if (input.startsWith('O') && input.length === 2 && keypress.name && keypress.name.length === 1) {
     input = keypress.name
     processedAsSpecialSequence = true
   }
@@ -167,22 +152,13 @@ function parseKey(keypress: ParsedKey): [Key, string] {
   // Clear input for non-alphanumeric keys (arrows, function keys, etc.)
   // Skip this for CSI u and application keypad mode sequences since
   // those were already converted to their proper input characters.
-  if (
-    !processedAsSpecialSequence &&
-    keypress.name &&
-    nonAlphanumericKeys.includes(keypress.name)
-  ) {
+  if (!processedAsSpecialSequence && keypress.name && nonAlphanumericKeys.includes(keypress.name)) {
     input = ''
   }
 
   // Set shift=true for uppercase letters (A-Z)
   // Must check it's actually a letter, not just any char unchanged by toUpperCase
-  if (
-    input.length === 1 &&
-    typeof input[0] === 'string' &&
-    input[0] >= 'A' &&
-    input[0] <= 'Z'
-  ) {
+  if (input.length === 1 && typeof input[0] === 'string' && input[0] >= 'A' && input[0] <= 'Z') {
     key.shift = true
   }
 
@@ -203,4 +179,3 @@ export class InputEvent extends Event {
     this.input = input
   }
 }
-

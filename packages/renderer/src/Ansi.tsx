@@ -2,12 +2,7 @@ import React from 'react'
 import Link from './components/Link.js'
 import Text from './components/Text.js'
 import type { Color } from './styles.js'
-import {
-  type NamedColor,
-  Parser,
-  type Color as TermioColor,
-  type TextStyle,
-} from './termio.js'
+import { type NamedColor, Parser, type Color as TermioColor, type TextStyle } from './termio.js'
 
 type Props = {
   children: string
@@ -35,16 +30,9 @@ type SpanProps = {
  *
  * Memoized to prevent re-renders when parent changes but children string is the same.
  */
-export const Ansi = React.memo(function Ansi({
-  children,
-  dimColor,
-}: Props): React.ReactNode {
+export const Ansi = React.memo(function Ansi({ children, dimColor }: Props): React.ReactNode {
   if (typeof children !== 'string') {
-    return dimColor ? (
-      <Text dim>{String(children)}</Text>
-    ) : (
-      <Text>{String(children)}</Text>
-    )
+    return dimColor ? <Text dim>{String(children)}</Text> : <Text>{String(children)}</Text>
   }
 
   if (children === '') {
@@ -58,11 +46,7 @@ export const Ansi = React.memo(function Ansi({
   }
 
   if (spans.length === 1 && !hasAnyProps(spans[0]!.props)) {
-    return dimColor ? (
-      <Text dim>{spans[0]!.text}</Text>
-    ) : (
-      <Text>{spans[0]!.text}</Text>
-    )
+    return dimColor ? <Text dim>{spans[0]!.text}</Text> : <Text>{spans[0]!.text}</Text>
   }
 
   const content = spans.map((span, i) => {
@@ -73,8 +57,13 @@ export const Ansi = React.memo(function Ansi({
     }
     const hasTextProps = hasAnyTextProps(span.props)
 
+    // Index keys are correct for ANSI-parsed spans: the array is derived
+    // freshly from `children` (the raw string) on every render, so when the
+    // input changes the whole array changes — there's no stable identity
+    // to track. biome's noArrayIndexKey is conservative; suppress per-site.
     if (hyperlink) {
       return hasTextProps ? (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         <Link key={i} url={hyperlink}>
           <StyledText
             color={span.props.color}
@@ -90,6 +79,7 @@ export const Ansi = React.memo(function Ansi({
           </StyledText>
         </Link>
       ) : (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         <Link key={i} url={hyperlink}>
           {span.text}
         </Link>
@@ -98,6 +88,7 @@ export const Ansi = React.memo(function Ansi({
 
     return hasTextProps ? (
       <StyledText
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         key={i}
         color={span.props.color}
         backgroundColor={span.props.backgroundColor}
@@ -144,7 +135,7 @@ function parseToSpans(input: string): Span[] {
     }
 
     if (action.type === 'text') {
-      const text = action.graphemes.map(g => g.value).join('')
+      const text = action.graphemes.map((g) => g.value).join('')
       if (!text) continue
 
       const props = textStyleToSpanProps(action.style)

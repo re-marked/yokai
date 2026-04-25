@@ -1,4 +1,4 @@
-import { EventEmitter as NodeEventEmitter } from 'events'
+import { EventEmitter as NodeEventEmitter } from 'node:events'
 import { Event } from './event'
 
 // Similar to node's builtin EventEmitter, but is also aware of our `Event`
@@ -37,4 +37,3 @@ export class EventEmitter extends NodeEventEmitter {
     return true
   }
 }
-

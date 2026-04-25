@@ -1,22 +1,20 @@
-import { noop } from './lodash-replacements'
+import { logForDebugging } from '@yokai/shared'
 import type { ReactElement } from 'react'
 import { LegacyRoot } from 'react-reconciler/constants.js'
-import { logForDebugging } from '@yokai/shared'
-import { createNode, type DOMElement } from './dom'
+import { type DOMElement, createNode } from './dom'
 import { FocusManager } from './focus'
+import { noop } from './lodash-replacements'
 import Output from './output'
 import reconciler from './reconciler'
-import renderNodeToOutput, {
-  resetLayoutShifted,
-} from './render-node-to-output'
+import renderNodeToOutput, { resetLayoutShifted } from './render-node-to-output'
 import {
   CellWidth,
   CharPool,
-  cellAtIndex,
-  createScreen,
   HyperlinkPool,
   type Screen,
   StylePool,
+  cellAtIndex,
+  createScreen,
   setCellStyleId,
 } from './screen'
 

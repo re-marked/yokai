@@ -9,19 +9,9 @@
 import { C0, ESC_TYPE, isEscFinal } from './ansi'
 import { isCSIFinal, isCSIIntermediate, isCSIParam } from './csi'
 
-export type Token =
-  | { type: 'text'; value: string }
-  | { type: 'sequence'; value: string }
+export type Token = { type: 'text'; value: string } | { type: 'sequence'; value: string }
 
-type State =
-  | 'ground'
-  | 'escape'
-  | 'escapeIntermediate'
-  | 'csi'
-  | 'ss3'
-  | 'osc'
-  | 'dcs'
-  | 'apc'
+type State = 'ground' | 'escape' | 'escapeIntermediate' | 'csi' | 'ss3' | 'osc' | 'dcs' | 'apc'
 
 export type Tokenizer = {
   /** Feed input and get resulting tokens */
@@ -61,13 +51,7 @@ export function createTokenizer(options?: TokenizerOptions): Tokenizer {
 
   return {
     feed(input: string): Token[] {
-      const result = tokenize(
-        input,
-        currentState,
-        currentBuffer,
-        false,
-        x10Mouse,
-      )
+      const result = tokenize(input, currentState, currentBuffer, false, x10Mouse)
       currentState = result.state.state
       currentBuffer = result.state.buffer
       return result.tokens
@@ -317,4 +301,3 @@ function tokenize(
 
   return { tokens, state: result }
 }
-

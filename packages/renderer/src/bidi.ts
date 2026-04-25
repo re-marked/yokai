@@ -30,8 +30,8 @@ function needsBidi(): boolean {
   if (needsSoftwareBidi === undefined) {
     needsSoftwareBidi =
       process.platform === 'win32' ||
-      typeof process.env['WT_SESSION'] === 'string' || // WSL in Windows Terminal
-      process.env['TERM_PROGRAM'] === 'vscode' // VS Code integrated terminal (xterm.js)
+      typeof process.env.WT_SESSION === 'string' || // WSL in Windows Terminal
+      process.env.TERM_PROGRAM === 'vscode' // VS Code integrated terminal (xterm.js)
   }
   return needsSoftwareBidi
 }
@@ -56,7 +56,7 @@ export function reorderBidi(characters: ClusteredChar[]): ClusteredChar[] {
   }
 
   // Build a plain string from the clustered chars to run through bidi
-  const plainText = characters.map(c => c.value).join('')
+  const plainText = characters.map((c) => c.value).join('')
 
   // Check if there are any RTL characters — skip bidi if pure LTR
   if (!hasRTLCharacters(plainText)) {
@@ -105,22 +105,26 @@ export function reorderBidi(characters: ClusteredChar[]): ClusteredChar[] {
 }
 
 function reverseRange<T>(arr: T[], start: number, end: number): void {
-  while (start < end) {
-    const temp = arr[start]!
-    arr[start] = arr[end]!
-    arr[end] = temp
-    start++
-    end--
+  let lo = start
+  let hi = end
+  while (lo < hi) {
+    const temp = arr[lo]!
+    arr[lo] = arr[hi]!
+    arr[hi] = temp
+    lo++
+    hi--
   }
 }
 
 function reverseRangeNumbers(arr: number[], start: number, end: number): void {
-  while (start < end) {
-    const temp = arr[start]!
-    arr[start] = arr[end]!
-    arr[end] = temp
-    start++
-    end--
+  let lo = start
+  let hi = end
+  while (lo < hi) {
+    const temp = arr[lo]!
+    arr[lo] = arr[hi]!
+    arr[hi] = temp
+    lo++
+    hi--
   }
 }
 
@@ -137,4 +141,3 @@ function hasRTLCharacters(text: string): boolean {
     text,
   )
 }
-

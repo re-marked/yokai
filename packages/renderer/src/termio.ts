@@ -40,4 +40,3 @@ export type {
   UnderlineStyle,
 } from './termio/types'
 export { colorsEqual, defaultStyle, stylesEqual } from './termio/types'
-

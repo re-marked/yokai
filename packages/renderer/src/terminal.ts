@@ -1,6 +1,6 @@
-import { coerce } from 'semver'
-import type { Writable } from 'stream'
+import type { Writable } from 'node:stream'
 import { env, gte } from '@yokai/shared'
+import { coerce } from 'semver'
 import { getClearTerminalSequence } from './clearTerminal'
 import type { Diff } from './frame'
 import { cursorMove, cursorTo, eraseLines } from './termio/csi'
@@ -34,11 +34,7 @@ export function isProgressReportingAvailable(): boolean {
   }
 
   // ConEmu supports OSC 9;4 for progress (all versions)
-  if (
-    process.env.ConEmuANSI ||
-    process.env.ConEmuPID ||
-    process.env.ConEmuTask
-  ) {
+  if (process.env.ConEmuANSI || process.env.ConEmuPID || process.env.ConEmuTask) {
     return true
   }
 
@@ -109,7 +105,7 @@ export function isSynchronizedOutputSupported(): boolean {
   // VTE-based terminals (GNOME Terminal, Tilix, etc.) since VTE 0.68
   const vteVersion = process.env.VTE_VERSION
   if (vteVersion) {
-    const version = parseInt(vteVersion, 10)
+    const version = Number.parseInt(vteVersion, 10)
     if (version >= 6800) return true
   }
 
@@ -186,11 +182,7 @@ export type Terminal = {
   stderr: Writable
 }
 
-export function writeDiffToTerminal(
-  terminal: Terminal,
-  diff: Diff,
-  skipSyncMarkers = false,
-): void {
+export function writeDiffToTerminal(terminal: Terminal, diff: Diff, skipSyncMarkers = false): void {
   // No output if there are no patches
   if (diff.length === 0) {
     return

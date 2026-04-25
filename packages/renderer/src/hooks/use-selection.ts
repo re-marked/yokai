@@ -1,11 +1,7 @@
 import { useContext, useMemo, useSyncExternalStore } from 'react'
 import StdinContext from '../components/StdinContext'
 import instances from '../instances'
-import {
-  type FocusMove,
-  type SelectionState,
-  shiftAnchor,
-} from '../selection'
+import { type FocusMove, type SelectionState, shiftAnchor } from '../selection'
 
 /**
  * Access to text selection operations on the Ink instance (fullscreen only).
@@ -33,11 +29,7 @@ export function useSelection(): {
   moveFocus: (move: FocusMove) => void
   /** Capture text from rows about to scroll out of the viewport (call
    *  BEFORE scrollBy so the screen buffer still has the outgoing rows). */
-  captureScrolledRows: (
-    firstRow: number,
-    lastRow: number,
-    side: 'above' | 'below',
-  ) => void
+  captureScrolledRows: (firstRow: number, lastRow: number, side: 'above' | 'below') => void
   /** Set the selection highlight bg color (theme-piping; solid bg
    *  replaces the old SGR-7 inverse so syntax highlighting stays readable
    *  under selection). Call once on mount + whenever theme changes. */
@@ -76,8 +68,7 @@ export function useSelection(): {
       subscribe: (cb: () => void) => ink.subscribeToSelectionChange(cb),
       shiftAnchor: (dRow: number, minRow: number, maxRow: number) =>
         shiftAnchor(ink.selection, dRow, minRow, maxRow),
-      shiftSelection: (dRow, minRow, maxRow) =>
-        ink.shiftSelectionForScroll(dRow, minRow, maxRow),
+      shiftSelection: (dRow, minRow, maxRow) => ink.shiftSelectionForScroll(dRow, minRow, maxRow),
       moveFocus: (move: FocusMove) => ink.moveSelectionFocus(move),
       captureScrolledRows: (firstRow, lastRow, side) =>
         ink.captureScrolledRows(firstRow, lastRow, side),
@@ -102,4 +93,3 @@ export function useHasSelection(): boolean {
     ink ? ink.hasTextSelection : ALWAYS_FALSE,
   )
 }
-

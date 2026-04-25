@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 
 type Props = {
   /**
@@ -29,11 +29,5 @@ export function RawAnsi({ lines, width }: Props): React.ReactNode {
   if (lines.length === 0) {
     return null
   }
-  return (
-    <ink-raw-ansi
-      rawText={lines.join('\n')}
-      rawWidth={width}
-      rawHeight={lines.length}
-    />
-  )
+  return <ink-raw-ansi rawText={lines.join('\n')} rawWidth={width} rawHeight={lines.length} />
 }

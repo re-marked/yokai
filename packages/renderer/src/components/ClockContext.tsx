@@ -1,4 +1,5 @@
-import React, { createContext, useEffect, useState } from 'react'
+import type React from 'react'
+import { createContext, useEffect, useState } from 'react'
 import { FRAME_INTERVAL_MS } from '../constants.js'
 import { useTerminalFocus } from '../hooks/use-terminal-focus.js'
 
@@ -90,9 +91,7 @@ export function ClockProvider({
   const focused = useTerminalFocus()
 
   useEffect(() => {
-    clock.setTickInterval(
-      focused ? FRAME_INTERVAL_MS : BLURRED_TICK_INTERVAL_MS,
-    )
+    clock.setTickInterval(focused ? FRAME_INTERVAL_MS : BLURRED_TICK_INTERVAL_MS)
   }, [clock, focused])
 
   return <ClockContext.Provider value={clock}>{children}</ClockContext.Provider>

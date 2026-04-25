@@ -1,10 +1,5 @@
 import { useContext, useEffect, useRef } from 'react'
-import {
-  CLEAR_TAB_STATUS,
-  supportsTabStatus,
-  tabStatus,
-  wrapForMultiplexer,
-} from '../termio/osc'
+import { CLEAR_TAB_STATUS, supportsTabStatus, tabStatus, wrapForMultiplexer } from '../termio/osc'
 import type { Color } from '../termio/types'
 import { TerminalWriteContext } from '../useTerminalNotification'
 
@@ -70,4 +65,3 @@ export function useTabStatus(kind: TabStatusKind | null): void {
     writeRaw(wrapForMultiplexer(tabStatus(TAB_STATUS_PRESETS[kind])))
   }, [kind, writeRaw])
 }
-

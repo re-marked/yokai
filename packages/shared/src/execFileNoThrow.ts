@@ -3,7 +3,7 @@
  * Simplified version using Node.js child_process directly.
  */
 
-import { execFile as cpExecFile, type ExecFileOptions } from 'child_process'
+import { type ExecFileOptions, execFile as cpExecFile } from 'node:child_process'
 
 type ExecResult = {
   stdout: string
@@ -22,7 +22,7 @@ export function execFileNoThrow(
     useCwd?: boolean
   } = {},
 ): Promise<ExecResult> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const opts: ExecFileOptions & { encoding: 'utf8' } = {
       timeout: options.timeout ?? 600000,
       env: options.env,

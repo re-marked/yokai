@@ -6,8 +6,7 @@ export function widestLine(string: string): number {
 
   while (start <= string.length) {
     const end = string.indexOf('\n', start)
-    const line =
-      end === -1 ? string.substring(start) : string.substring(start, end)
+    const line = end === -1 ? string.substring(start) : string.substring(start, end)
 
     maxWidth = Math.max(maxWidth, lineWidth(line))
 
@@ -17,4 +16,3 @@ export function widestLine(string: string): number {
 
   return maxWidth
 }
-

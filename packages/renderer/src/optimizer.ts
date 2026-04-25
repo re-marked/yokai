@@ -66,11 +66,7 @@ export function optimize(diff: Diff): Diff {
       }
 
       // Dedupe hyperlinks
-      if (
-        type === 'hyperlink' &&
-        lastType === 'hyperlink' &&
-        patch.uri === last.uri
-      ) {
+      if (type === 'hyperlink' && lastType === 'hyperlink' && patch.uri === last.uri) {
         continue
       }
 
@@ -91,4 +87,3 @@ export function optimize(diff: Diff): Diff {
 
   return result
 }
-

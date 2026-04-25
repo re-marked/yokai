@@ -27,9 +27,7 @@ export function isCSIParam(byte: number): boolean {
 
 /** Check if a byte is a CSI intermediate byte */
 export function isCSIIntermediate(byte: number): boolean {
-  return (
-    byte >= CSI_RANGE.INTERMEDIATE_START && byte <= CSI_RANGE.INTERMEDIATE_END
-  )
+  return byte >= CSI_RANGE.INTERMEDIATE_START && byte <= CSI_RANGE.INTERMEDIATE_END
 }
 
 /** Check if a byte is a CSI final byte (@ through ~) */
@@ -317,4 +315,3 @@ export const ENABLE_MODIFY_OTHER_KEYS = csi('>4;2m')
  * Disable xterm modifyOtherKeys (reset to default).
  */
 export const DISABLE_MODIFY_OTHER_KEYS = csi('>4m')
-

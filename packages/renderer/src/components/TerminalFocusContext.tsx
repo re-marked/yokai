@@ -1,9 +1,10 @@
-import React, { createContext, useMemo, useSyncExternalStore } from 'react'
+import type React from 'react'
+import { createContext, useMemo, useSyncExternalStore } from 'react'
 import {
-  getTerminalFocused,
-  getTerminalFocusState,
-  subscribeTerminalFocus,
   type TerminalFocusState,
+  getTerminalFocusState,
+  getTerminalFocused,
+  subscribeTerminalFocus,
 } from '../terminal-focus-state.js'
 
 export type { TerminalFocusState }
@@ -29,25 +30,15 @@ export function TerminalFocusProvider({
 }: {
   children: React.ReactNode
 }): React.ReactNode {
-  const isTerminalFocused = useSyncExternalStore(
-    subscribeTerminalFocus,
-    getTerminalFocused,
-  )
-  const terminalFocusState = useSyncExternalStore(
-    subscribeTerminalFocus,
-    getTerminalFocusState,
-  )
+  const isTerminalFocused = useSyncExternalStore(subscribeTerminalFocus, getTerminalFocused)
+  const terminalFocusState = useSyncExternalStore(subscribeTerminalFocus, getTerminalFocusState)
 
   const value = useMemo(
     () => ({ isTerminalFocused, terminalFocusState }),
     [isTerminalFocused, terminalFocusState],
   )
 
-  return (
-    <TerminalFocusContext.Provider value={value}>
-      {children}
-    </TerminalFocusContext.Provider>
-  )
+  return <TerminalFocusContext.Provider value={value}>{children}</TerminalFocusContext.Provider>
 }
 
 export default TerminalFocusContext
