@@ -113,6 +113,7 @@ function ScrollBox({
       scheduleRenderFrom(el)
     })
   }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: notify and scrollMutated are stable closures over refs + imports; rebuilding on every render would re-register the ref every commit (churn). See trailing comment for full rationale.
   useImperativeHandle(
     ref,
     (): ScrollBoxHandle => ({
