@@ -35,11 +35,9 @@ type Pos = { top: number; left: number }
 
 function Draggable({
   initialPos,
-  label,
   color,
 }: {
   initialPos: Pos
-  label: string
   color: string
 }): React.ReactNode {
   const [pos, setPos] = useState(initialPos)
@@ -75,23 +73,9 @@ function Draggable({
       width={20}
       height={3}
       zIndex={10}
-      borderStyle="single"
-      borderColor={fillColor}
       backgroundColor={fillColor}
       onMouseDown={handleMouseDown}
-    >
-      <Box
-        paddingX={1}
-        flexGrow={1}
-        justifyContent="center"
-        alignItems="center"
-        backgroundColor={fillColor}
-      >
-        <Text color="black" bold backgroundColor={fillColor}>
-          {isDragging ? `▶ ${label} ◀` : label}
-        </Text>
-      </Box>
-    </Box>
+    />
   )
 }
 
@@ -115,9 +99,9 @@ function App(): React.ReactNode {
         {/* Three boxes at staggered start positions, different zIndexes
             so we can see the z-index code in action. The box at z=12
             paints on top until the user drags it elsewhere. */}
-        <Draggable initialPos={{ top: 6, left: 4 }} label="box one" color="cyan" />
-        <Draggable initialPos={{ top: 7, left: 8 }} label="box two" color="green" />
-        <Draggable initialPos={{ top: 8, left: 12 }} label="box three" color="magenta" />
+        <Draggable initialPos={{ top: 6, left: 4 }} color="cyan" />
+        <Draggable initialPos={{ top: 7, left: 8 }} color="green" />
+        <Draggable initialPos={{ top: 8, left: 12 }} color="magenta" />
       </Box>
     </AlternateScreen>
   )
