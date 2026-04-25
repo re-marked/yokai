@@ -1293,10 +1293,16 @@ function renderChildren(
     // absolutely-positioned overlays). Dragging an overlay over the
     // text and back left chunks of the text empty until something
     // else triggered a repaint.
+    // Text-node guard reads childNode (DOMNode union) rather than
+    // childElem (asserted DOMElement). The cast is the existing
+    // pattern in this loop; text nodes flow through but only do
+    // anything in renderNodeToOutput's text-handling paths. The
+    // overlap-rerender shortcut is not meaningful for them.
+    const isTextNode = childNode.nodeName === '#text'
     let overlapsMovingAbsolute = false
     if (
       !childElem.dirty &&
-      childElem.nodeName !== '#text' &&
+      !isTextNode &&
       dirtyAbsoluteCachedRects !== undefined
     ) {
       const myCached = nodeCache.get(childElem)
