@@ -88,6 +88,78 @@ function rowText(screen: Screen, y: number): string {
   return out.replace(/ +$/, '')
 }
 
+/**
+ * Two-frame render: render once, mutate, re-layout, render again with
+ * the first frame's screen as prevScreen. Returns the final frame's
+ * screen so tests can verify what got painted across the transition.
+ *
+ * This exercises the same blit-and-clear path the real renderer uses
+ * — the bug being investigated only manifests when an absolute node
+ * MOVES between two frames, so a single render() can't reproduce it.
+ */
+function render2Frames(
+  root: DOMElement,
+  width: number,
+  height: number,
+  mutate: () => void,
+): Screen {
+  const stylePool = new StylePool()
+  const charPool = new CharPool()
+  const hyperlinkPool = new HyperlinkPool()
+  const screenA = createScreen(width, height, stylePool, charPool, hyperlinkPool)
+  const screenB = createScreen(width, height, stylePool, charPool, hyperlinkPool)
+  const output = new Output({ width, height, stylePool, screen: screenA })
+
+  // Frame 1
+  renderNodeToOutput(root, output, { prevScreen: undefined })
+  const frameA = output.get()
+
+  // Mutate (e.g. change an absolute node's position) and re-layout
+  mutate()
+  root.yogaNode!.calculateLayout(width, height)
+
+  // Frame 2 — fresh Output instance into screenB, with frameA as prev
+  output.reset(width, height, screenB)
+  renderNodeToOutput(root, output, { prevScreen: frameA })
+  return output.get()
+}
+
+/**
+ * Multi-frame render: simulate a drag-style sequence of mutations.
+ * Each step alternates back/front buffers like the real renderer
+ * (prev = whatever was just rendered last frame).
+ */
+function renderNFrames(
+  root: DOMElement,
+  width: number,
+  height: number,
+  mutations: Array<() => void>,
+): Screen {
+  const stylePool = new StylePool()
+  const charPool = new CharPool()
+  const hyperlinkPool = new HyperlinkPool()
+  const screens = [
+    createScreen(width, height, stylePool, charPool, hyperlinkPool),
+    createScreen(width, height, stylePool, charPool, hyperlinkPool),
+  ]
+  const output = new Output({ width, height, stylePool, screen: screens[0]! })
+
+  // Initial render
+  renderNodeToOutput(root, output, { prevScreen: undefined })
+  let prevScreen = output.get()
+
+  // Subsequent renders
+  for (let i = 0; i < mutations.length; i++) {
+    mutations[i]!()
+    root.yogaNode!.calculateLayout(width, height)
+    const targetScreen = screens[(i + 1) % 2]!
+    output.reset(width, height, targetScreen)
+    renderNodeToOutput(root, output, { prevScreen })
+    prevScreen = output.get()
+  }
+  return prevScreen
+}
+
 // ── baseline: paint order before any z-index logic ───────────────────
 
 describe('renderNodeToOutput — paint order baseline (no zIndex)', () => {
@@ -498,5 +570,230 @@ describe('renderNodeToOutput — zIndex stacking contexts', () => {
     const screen = render(root, 5, 1)
     // sibling comes after container in tree, both at z=0 → sibling wins
     expect(charAt(screen, 0, 0)).toBe('S')
+  })
+})
+
+// ── multi-frame: position changes on absolute nodes ──────────────────
+
+describe('renderNodeToOutput — absolute node moving between frames', () => {
+  it('clears the old position when an absolute node moves right', () => {
+    // Reproduces the drag-trail bug. Frame 1: 'XXXXX' at cols 0-4
+    // (absolute, on top of in-flow 'hi' at cols 0-1). Frame 2: same
+    // overlay moved to cols 10-14. After the move, cells 0-4 must
+    // reveal the in-flow 'hi' (cols 0-1) and be empty (cols 2-4).
+    // If old paint persists at cols 0-4, that's the trail bug.
+    const overlay = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 5,
+      height: 1,
+    })
+    appendChildNode(overlay, txt('XXXXX'))
+    const root = buildRow(20, 1, txt('hi'), overlay)
+
+    const frame2 = render2Frames(root, 20, 1, () => {
+      setStyle(overlay, { ...overlay.style, left: 10 })
+      applyStyles(overlay.yogaNode!, { ...overlay.style, left: 10 })
+    })
+
+    // Cols 2-4 must NOT have 'X' (overlay moved away). If they show
+    // 'X', the old absolute paint wasn't cleared — that's the trail bug.
+    expect(charAt(frame2, 2, 0)).not.toBe('X')
+    expect(charAt(frame2, 3, 0)).not.toBe('X')
+    expect(charAt(frame2, 4, 0)).not.toBe('X')
+    // New position (cols 10-14): the moved overlay
+    expect(charAt(frame2, 10, 0)).toBe('X')
+    expect(charAt(frame2, 14, 0)).toBe('X')
+  })
+
+  it('does NOT leak stale paint via partially-overlapping clean sibling blit', () => {
+    // Reproduces the drag-trail bug from the demo: when a moving
+    // absolute (A) and a stationary clean absolute sibling (B)
+    // PARTIALLY overlap, B's clean-blit fast path copies prev[B's rect]
+    // — which includes A's old paint at the overlap. The current
+    // absoluteClears suppression only fires on FULL containment, so
+    // partial overlaps leak A's stale border into the new frame.
+    //
+    // Setup: A at cols 0-9, B at cols 5-14 (overlap 5-9). A on top
+    // in prev (later in tree). Frame 2: A moves to cols 20-29.
+    // B stays put (clean), blits cols 5-14 from prev.
+    // At cells 5-9 (the overlap): prev had A's paint, B's blit
+    // copies it into current. Trail.
+    const a = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 10,
+      height: 1,
+    })
+    appendChildNode(a, txt('AAAAAAAAAA'))
+    const b = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 5,
+      width: 10,
+      height: 1,
+    })
+    appendChildNode(b, txt('BBBBBBBBBB'))
+    const root = el('ink-root', { width: 40, height: 1, flexDirection: 'row' })
+    appendChildNode(root, a)
+    appendChildNode(root, b)
+    root.yogaNode!.calculateLayout(40, 1)
+
+    const frame2 = render2Frames(root, 40, 1, () => {
+      setStyle(a, { ...a.style, left: 20 })
+      applyStyles(a.yogaNode!, { ...a.style, left: 20 })
+    })
+
+    // Cells 0-4: A used to be here, now empty. No clean sibling rect
+    // covers them, so no blit can leak old A paint.
+    expect(charAt(frame2, 0, 0)).not.toBe('A')
+    expect(charAt(frame2, 4, 0)).not.toBe('A')
+    // Cells 5-9: the OVERLAP. B's clean blit covers them. prev[5..9]
+    // had A's paint (A on top in prev). If B's blit copies A's old
+    // paint into the new frame, this assertion FAILS — that's the
+    // trail bug.
+    expect(charAt(frame2, 5, 0)).toBe('B')
+    expect(charAt(frame2, 9, 0)).toBe('B')
+    // Cells 10-14: only B's territory, fine
+    expect(charAt(frame2, 10, 0)).toBe('B')
+    // Cells 20-29: A's new position
+    expect(charAt(frame2, 20, 0)).toBe('A')
+    expect(charAt(frame2, 29, 0)).toBe('A')
+  })
+
+  it('clears old border cells when a bordered absolute box moves (drag-trail repro)', () => {
+    // Mirrors the drag demo's structure exactly. Three absolute boxes
+    // with borderStyle. Box A has cells that are ONLY covered by its
+    // own border in prev (the top border row, where no sibling reaches).
+    // After A moves, those cells should clear to empty.
+    function mkBox(label: string, top: number, left: number): DOMElement {
+      const b = el('ink-box', {
+        position: 'absolute',
+        top,
+        left,
+        width: 20,
+        height: 3,
+        zIndex: 10,
+        borderStyle: 'single',
+      })
+      const inner = el('ink-box', { paddingX: 1, flexGrow: 1 })
+      appendChildNode(inner, txt(label))
+      appendChildNode(b, inner)
+      return b
+    }
+
+    const a = mkBox('aaaaaaaaaaaaa', 6, 4)
+    const b = mkBox('bbbbbbbbbbbbb', 7, 8)
+    const c = mkBox('ccccccccccccc', 8, 12)
+
+    const root = el('ink-root', { width: 60, height: 12, flexDirection: 'column' })
+    appendChildNode(root, a)
+    appendChildNode(root, b)
+    appendChildNode(root, c)
+    root.yogaNode!.calculateLayout(60, 12)
+
+    const frame2 = render2Frames(root, 60, 12, () => {
+      // Move A right by 20 cells (out of overlap with b and c)
+      setStyle(a, { ...a.style, left: 30 })
+      applyStyles(a.yogaNode!, { ...a.style, left: 30 })
+    })
+
+    // A's old top border was at (cols 4..23, row 6). No sibling reaches
+    // row 6 (b is rows 7..9, c is rows 8..10). So in prev, row 6 had
+    // ONLY A's top border. After A moves, row 6 cells should be empty.
+    // If they're not, A's top border wasn't cleared — the trail bug.
+    for (let col = 4; col <= 23; col++) {
+      const ch = charAt(frame2, col, 6)
+      // Border characters are box-drawing glyphs (─, │, ┌, ┐, └, ┘).
+      // Empty cells are ' ' or empty string.
+      expect(
+        ch === '' || ch === ' ',
+        `expected empty cell at (${col}, 6) but got '${ch}' (A's old top border leaked)`,
+      ).toBe(true)
+    }
+  })
+
+  it('does not accumulate trail across many small drag motions (drag-trail repro N-frame)', () => {
+    // Same setup as the previous test, but simulate an actual DRAG:
+    // many small position deltas, one per frame, like onMove fires.
+    function mkBox(label: string, top: number, left: number): DOMElement {
+      const e = el('ink-box', {
+        position: 'absolute',
+        top,
+        left,
+        width: 20,
+        height: 3,
+        zIndex: 10,
+        borderStyle: 'single',
+      })
+      const inner = el('ink-box', { paddingX: 1, flexGrow: 1 })
+      appendChildNode(inner, txt(label))
+      appendChildNode(e, inner)
+      return e
+    }
+
+    const a = mkBox('aaa', 6, 4)
+    const b = mkBox('bbb', 7, 8)
+    const c = mkBox('ccc', 8, 12)
+    const root = el('ink-root', { width: 80, height: 12, flexDirection: 'column' })
+    appendChildNode(root, a)
+    appendChildNode(root, b)
+    appendChildNode(root, c)
+    root.yogaNode!.calculateLayout(80, 12)
+
+    // Simulate dragging A right by 1 cell per frame, 30 frames.
+    const mutations = Array.from({ length: 30 }, (_, i) => () => {
+      const newLeft = 5 + i // 5, 6, 7, ..., 34
+      setStyle(a, { ...a.style, left: newLeft })
+      applyStyles(a.yogaNode!, { ...a.style, left: newLeft })
+    })
+
+    const finalScreen = renderNFrames(root, 80, 12, mutations)
+
+    // After 30 frames of 1-cell drags, A is at left=34 (rect 34..53,
+    // rows 6..8). A's old positions (lefts 4-33) are TRAIL territory
+    // — the bug would show A's old paint left over.
+    //
+    // Specifically: A's TOP BORDER ROW (row 6) was only ever painted
+    // by A (no sibling reaches row 6). So row 6 cells outside A's
+    // current rect (cols 0..33 and cols 54..79) should be EMPTY.
+    for (let col = 0; col < 34; col++) {
+      const ch = charAt(finalScreen, col, 6)
+      expect(ch === '' || ch === ' ', `trail at (${col}, 6): got '${ch}', expected empty`).toBe(
+        true,
+      )
+    }
+  })
+
+  it('clears the old position when an absolute node moves down', () => {
+    // Same bug, vertical axis. Two-row viewport, overlay starts at
+    // row 0, moves to row 1.
+    const overlay = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 3,
+      height: 1,
+    })
+    appendChildNode(overlay, txt('YYY'))
+    const root = el('ink-root', { width: 5, height: 2, flexDirection: 'column' })
+    appendChildNode(root, overlay)
+    root.yogaNode!.calculateLayout(5, 2)
+
+    const frame2 = render2Frames(root, 5, 2, () => {
+      setStyle(overlay, { ...overlay.style, top: 1 })
+      applyStyles(overlay.yogaNode!, { ...overlay.style, top: 1 })
+    })
+
+    // Row 0 (old position) should be empty
+    expect(charAt(frame2, 0, 0)).not.toBe('Y')
+    expect(charAt(frame2, 1, 0)).not.toBe('Y')
+    expect(charAt(frame2, 2, 0)).not.toBe('Y')
+    // Row 1 (new position) should have the overlay
+    expect(charAt(frame2, 0, 1)).toBe('Y')
+    expect(charAt(frame2, 1, 1)).toBe('Y')
+    expect(charAt(frame2, 2, 1)).toBe('Y')
   })
 })
