@@ -3,10 +3,10 @@ import type { Size } from './layout/geometry'
 import type { ScrollHint } from './render-node-to-output'
 import {
   type CharPool,
-  createScreen,
   type HyperlinkPool,
   type Screen,
   type StylePool,
+  createScreen,
 } from './screen'
 
 export type Frame = {

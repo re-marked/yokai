@@ -10,7 +10,7 @@ import renderNodeToOutput, {
   resetScrollDrainNode,
   resetScrollHint,
 } from './render-node-to-output'
-import { createScreen, type StylePool } from './screen'
+import { type StylePool, createScreen } from './screen'
 
 export type RenderOptions = {
   frontFrame: Frame

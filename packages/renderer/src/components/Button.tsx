@@ -1,4 +1,5 @@
-import React, { type Ref, useCallback, useEffect, useRef, useState } from 'react'
+import type React from 'react'
+import { type Ref, useCallback, useEffect, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../dom.js'
 import type { ClickEvent } from '../events/click-event.js'

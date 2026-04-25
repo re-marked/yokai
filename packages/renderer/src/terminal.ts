@@ -1,6 +1,6 @@
-import { coerce } from 'semver'
 import type { Writable } from 'stream'
 import { env, gte } from '@yokai/shared'
+import { coerce } from 'semver'
 import { getClearTerminalSequence } from './clearTerminal'
 import type { Diff } from './frame'
 import { cursorMove, cursorTo, eraseLines } from './termio/csi'
@@ -105,7 +105,7 @@ export function isSynchronizedOutputSupported(): boolean {
   // VTE-based terminals (GNOME Terminal, Tilix, etc.) since VTE 0.68
   const vteVersion = process.env.VTE_VERSION
   if (vteVersion) {
-    const version = parseInt(vteVersion, 10)
+    const version = Number.parseInt(vteVersion, 10)
     if (version >= 6800) return true
   }
 

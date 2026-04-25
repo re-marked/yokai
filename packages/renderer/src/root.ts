@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
-import { logForDebugging } from '@yokai/shared'
 import { Stream } from 'stream'
+import { logForDebugging } from '@yokai/shared'
+import type { ReactNode } from 'react'
 import type { FrameEvent } from './frame'
 import Ink, { type Options as InkOptions } from './ink'
 import instances from './instances'

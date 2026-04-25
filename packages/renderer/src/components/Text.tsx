@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import React from 'react'
+import type React from 'react'
 import type { Color, Styles, TextStyles } from '../styles.js'
 
 type BaseProps = {

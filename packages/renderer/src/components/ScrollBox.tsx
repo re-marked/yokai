@@ -1,10 +1,5 @@
-import React, {
-  type PropsWithChildren,
-  type Ref,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react'
+import type React from 'react'
+import { type PropsWithChildren, type Ref, useImperativeHandle, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../dom'
 import { markDirty, scheduleRenderFrom } from '../dom'

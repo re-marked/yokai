@@ -1,4 +1,4 @@
-import { CellWidth, cellAtIndex, type Screen, type StylePool, setCellStyleId } from './screen'
+import { CellWidth, type Screen, type StylePool, cellAtIndex, setCellStyleId } from './screen'
 
 /**
  * Highlight all visible occurrences of `query` in the screen buffer by

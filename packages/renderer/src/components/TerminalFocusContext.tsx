@@ -1,9 +1,10 @@
-import React, { createContext, useMemo, useSyncExternalStore } from 'react'
+import type React from 'react'
+import { createContext, useMemo, useSyncExternalStore } from 'react'
 import {
-  getTerminalFocused,
-  getTerminalFocusState,
-  subscribeTerminalFocus,
   type TerminalFocusState,
+  getTerminalFocusState,
+  getTerminalFocused,
+  subscribeTerminalFocus,
 } from '../terminal-focus-state.js'
 
 export type { TerminalFocusState }

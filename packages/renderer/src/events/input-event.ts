@@ -1,4 +1,4 @@
-import { nonAlphanumericKeys, type ParsedKey } from '../parse-keypress'
+import { type ParsedKey, nonAlphanumericKeys } from '../parse-keypress'
 import { Event } from './event'
 
 export type Key = {
