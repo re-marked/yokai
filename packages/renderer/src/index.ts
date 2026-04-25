@@ -58,6 +58,12 @@ export type { InputEvent } from './events/input-event'
 export type { ClickEvent } from './events/click-event'
 export type { FocusEvent } from './events/focus-event'
 export type { KeyboardEvent } from './events/keyboard-event'
+export type {
+  GestureHandlers,
+  MouseDownEvent,
+  MouseMoveEvent,
+  MouseUpEvent,
+} from './events/mouse-event'
 
 // Layout utilities
 export { clamp } from './layout/geometry'
