@@ -822,6 +822,54 @@ describe('renderNodeToOutput — absolute node moving between frames', () => {
     expect(charAt(frame2, 29, 0)).toBe('A')
   })
 
+  it('clean IN-FLOW sibling stays fully painted when overlapping absolute moves away', () => {
+    // Same notch class of bug, but the underneath sibling is an in-flow
+    // text element instead of another absolute. The drag demo has the
+    // header text and the draggable boxes as siblings inside the same
+    // column container — dragging a box over the text and back left
+    // chunks of the text empty.
+    //
+    // The fix must apply to ANY clean child overlapping a moving
+    // absolute's old rect, not just clean absolute siblings.
+    const text = txt('hello world')
+    const overlay = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 3,
+      width: 5,
+      height: 1,
+    })
+    appendChildNode(overlay, txt('XXXXX'))
+    const root = el('ink-root', { width: 30, height: 1, flexDirection: 'row' })
+    appendChildNode(root, text)
+    appendChildNode(root, overlay)
+    root.yogaNode!.calculateLayout(30, 1)
+
+    const frame2 = render2Frames(root, 30, 1, () => {
+      // Move the overlay out of the text's row entirely
+      setStyle(overlay, { ...overlay.style, left: 20 })
+      applyStyles(overlay.yogaNode!, { ...overlay.style, left: 20 })
+    })
+
+    // 'hello world' = 11 chars at cols 0-10. Without the fix, cols 3-7
+    // (where the overlay used to sit on top in prev) get zeroed by the
+    // per-cell suppression and stay empty.
+    expect(charAt(frame2, 0, 0)).toBe('h')
+    expect(charAt(frame2, 1, 0)).toBe('e')
+    expect(charAt(frame2, 2, 0)).toBe('l')
+    expect(charAt(frame2, 3, 0)).toBe('l') // overlap cell, must NOT be empty
+    expect(charAt(frame2, 4, 0)).toBe('o')
+    expect(charAt(frame2, 5, 0)).toBe(' ')
+    expect(charAt(frame2, 6, 0)).toBe('w')
+    expect(charAt(frame2, 7, 0)).toBe('o') // last overlap cell
+    expect(charAt(frame2, 8, 0)).toBe('r')
+    expect(charAt(frame2, 9, 0)).toBe('l')
+    expect(charAt(frame2, 10, 0)).toBe('d')
+    // Overlay's new position
+    expect(charAt(frame2, 20, 0)).toBe('X')
+    expect(charAt(frame2, 24, 0)).toBe('X')
+  })
+
   it('clears the old position when an absolute node moves down', () => {
     // Same bug, vertical axis. Two-row viewport, overlay starts at
     // row 0, moves to row 1.
