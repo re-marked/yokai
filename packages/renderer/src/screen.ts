@@ -1066,7 +1066,7 @@ type DiffCallback = (
   y: number,
   removed: Cell | undefined,
   added: Cell | undefined,
-) => boolean | void
+) => boolean | undefined
 
 /**
  * Like diff(), but calls a callback for each change instead of building an array.

@@ -83,8 +83,7 @@ export default function createRenderer(node: DOMElement, stylePool: StylePool): 
     const height = options.altScreen ? terminalRows : yogaHeight
     if (options.altScreen && yogaHeight > terminalRows) {
       logForDebugging(
-        `alt-screen: yoga height ${yogaHeight} > terminalRows ${terminalRows} — ` +
-          `something is rendering outside <AlternateScreen>. Overflow clipped.`,
+        `alt-screen: yoga height ${yogaHeight} > terminalRows ${terminalRows} — something is rendering outside <AlternateScreen>. Overflow clipped.`,
         { level: 'warn' },
       )
     }
