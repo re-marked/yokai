@@ -33,8 +33,8 @@ function embedTextInBorder(
   borderLine: string,
   text: string,
   align: 'start' | 'end' | 'center',
-  offset = 0,
   borderChar: string,
+  offset = 0,
 ): [before: string, text: string, after: string] {
   const textLength = stringWidth(text)
   const borderLength = borderLine.length
@@ -115,8 +115,8 @@ const renderBorder = (x: number, y: number, node: DOMNode, output: Output): void
         topBorderLine,
         node.style.borderText.content,
         node.style.borderText.align,
-        node.style.borderText.offset,
         box.top,
+        node.style.borderText.offset,
       )
       topBorder =
         styleBorderLine(before, topBorderColor, dimTopBorderColor) +
@@ -138,13 +138,13 @@ const renderBorder = (x: number, y: number, node: DOMNode, output: Output): void
 
     verticalBorderHeight = Math.max(0, verticalBorderHeight)
 
-    let leftBorder = (applyColor(box.left, leftBorderColor) + '\n').repeat(verticalBorderHeight)
+    let leftBorder = `${applyColor(box.left, leftBorderColor)}\n`.repeat(verticalBorderHeight)
 
     if (dimLeftBorderColor) {
       leftBorder = chalk.dim(leftBorder)
     }
 
-    let rightBorder = (applyColor(box.right, rightBorderColor) + '\n').repeat(verticalBorderHeight)
+    let rightBorder = `${applyColor(box.right, rightBorderColor)}\n`.repeat(verticalBorderHeight)
 
     if (dimRightBorderColor) {
       rightBorder = chalk.dim(rightBorder)
@@ -163,8 +163,8 @@ const renderBorder = (x: number, y: number, node: DOMNode, output: Output): void
         bottomBorderLine,
         node.style.borderText.content,
         node.style.borderText.align,
-        node.style.borderText.offset,
         box.bottom,
+        node.style.borderText.offset,
       )
       bottomBorder =
         styleBorderLine(before, bottomBorderColor, dimBottomBorderColor) +

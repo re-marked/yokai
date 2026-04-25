@@ -586,7 +586,7 @@ function parseMouseEvent(s: string): ParsedMouse | null {
 }
 
 function parseKeypress(s = ''): ParsedKey {
-  let parts
+  let parts: RegExpExecArray | null
 
   const key: ParsedKey = {
     kind: 'key',
