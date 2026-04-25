@@ -51,7 +51,7 @@ export function dispatchClick(
   if (root.focusManager) {
     let focusTarget: DOMElement | undefined = target
     while (focusTarget) {
-      if (typeof focusTarget.attributes['tabIndex'] === 'number') {
+      if (typeof focusTarget.attributes.tabIndex === 'number') {
         root.focusManager.handleClickFocus(focusTarget)
         break
       }
