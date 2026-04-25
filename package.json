@@ -10,9 +10,10 @@
     "url": "https://github.com/re-marked/yokai.git"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "vitest run",
-    "type-check": "pnpm -r type-check"
+    "build": "pnpm --filter @yokai/shared build && pnpm --filter @yokai/renderer build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=22.0.0"

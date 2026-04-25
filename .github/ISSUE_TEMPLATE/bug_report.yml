@@ -1,0 +1,36 @@
+name: Bug report
+description: Something is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Include what you expected vs what you got.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Minimal code or steps to reproduce. A component tree + terminal output is ideal.
+      placeholder: |
+        ```tsx
+        // minimal repro
+        ```
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: yokai version
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal / OS
+      placeholder: e.g. iTerm2 3.5, macOS 14

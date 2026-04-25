@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.d.ts.map
+
+# Lock files (pnpm-lock.yaml is canonical — npm/yarn locks are noise)
+package-lock.json
+yarn.lock
+
+# Misc
+.DS_Store
+*.log
+.turbo/
+.env
+.env.*
