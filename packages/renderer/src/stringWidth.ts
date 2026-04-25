@@ -17,10 +17,14 @@ const EMOJI_REGEX = emojiRegex()
  * which correctly treats ambiguous-width characters as narrow (width 1) as
  * recommended by the Unicode standard for Western contexts.
  */
-function stringWidthJavaScript(str: string): number {
-  if (typeof str !== 'string' || str.length === 0) {
+function stringWidthJavaScript(input: string): number {
+  if (typeof input !== 'string' || input.length === 0) {
     return 0
   }
+  // Local mutable copy: the ANSI-strip branch below reassigns. Avoiding
+  // parameter reassignment keeps the signature's intent clear (input is
+  // never observably mutated for callers) and satisfies noParameterAssign.
+  let str = input
 
   // Fast path: pure ASCII string (no ANSI codes, no wide chars)
   let isPureAscii = true
