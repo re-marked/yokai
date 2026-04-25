@@ -42,7 +42,7 @@ function parseParams(str: string): Param[] {
   for (let i = 0; i <= str.length; i++) {
     const c = str[i]
     if (c === ';' || c === undefined) {
-      const n = num === '' ? null : parseInt(num, 10)
+      const n = num === '' ? null : Number.parseInt(num, 10)
       if (inSub) {
         if (n !== null) current.subparams.push(n)
       } else {
@@ -53,7 +53,7 @@ function parseParams(str: string): Param[] {
       num = ''
       inSub = false
     } else if (c === ':') {
-      const n = num === '' ? null : parseInt(num, 10)
+      const n = num === '' ? null : Number.parseInt(num, 10)
       if (!inSub) {
         current.value = n
         current.colon = true

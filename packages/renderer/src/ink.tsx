@@ -1,14 +1,13 @@
-import autoBind from 'auto-bind'
 import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'fs'
-import { noop, throttle } from './lodash-replacements'
-import React, { type ReactNode } from 'react'
+import { format } from 'util'
+import { logForDebugging } from '@yokai/shared'
+import { logError } from '@yokai/shared'
+import { getYogaCounters } from '@yokai/shared/yoga-layout'
+import autoBind from 'auto-bind'
+import type { ReactNode } from 'react'
 import type { FiberRoot } from 'react-reconciler'
 import { ConcurrentRoot } from 'react-reconciler/constants.js'
 import { onExit } from 'signal-exit'
-import { getYogaCounters } from '@yokai/shared/yoga-layout'
-import { logForDebugging } from '@yokai/shared'
-import { logError } from '@yokai/shared'
-import { format } from 'util'
 import { colorize } from './colorize'
 import App from './components/App'
 import type {
@@ -19,9 +18,10 @@ import { FRAME_INTERVAL_MS } from './constants'
 import * as dom from './dom'
 import { KeyboardEvent } from './events/keyboard-event'
 import { FocusManager } from './focus'
-import { emptyFrame, type Frame, type FrameEvent } from './frame'
+import { type Frame, type FrameEvent, emptyFrame } from './frame'
 import { dispatchClick, dispatchHover } from './hit-test'
 import instances from './instances'
+import { noop, throttle } from './lodash-replacements'
 import { LogUpdate } from './log-update'
 import { nodeCache } from './node-cache'
 import { optimize } from './optimizer'
@@ -36,31 +36,31 @@ import reconciler, {
   resetProfileCounters,
 } from './reconciler'
 import renderNodeToOutput, { consumeFollowScroll, didLayoutShift } from './render-node-to-output'
-import { applyPositionedHighlight, type MatchPosition, scanPositions } from './render-to-screen'
+import { type MatchPosition, applyPositionedHighlight, scanPositions } from './render-to-screen'
 import createRenderer, { type Renderer } from './renderer'
 import {
   CellWidth,
   CharPool,
+  HyperlinkPool,
+  StylePool,
   cellAt,
   createScreen,
-  HyperlinkPool,
   isEmptyCellAt,
   migrateScreenPools,
-  StylePool,
 } from './screen'
 import { applySearchHighlight } from './searchHighlight'
 import {
+  type FocusMove,
+  type SelectionState,
   applySelectionOverlay,
   captureScrolledRows,
   clearSelection,
   createSelectionState,
   extendSelection,
-  type FocusMove,
   findPlainTextUrlAt,
   getSelectedText,
   hasSelection,
   moveFocus,
-  type SelectionState,
   selectLineAt,
   selectWordAt,
   shiftAnchor,
@@ -71,19 +71,19 @@ import {
 } from './selection'
 import {
   SYNC_OUTPUT_SUPPORTED,
-  supportsExtendedKeys,
   type Terminal,
+  supportsExtendedKeys,
   writeDiffToTerminal,
 } from './terminal'
 import {
   CURSOR_HOME,
-  cursorMove,
-  cursorPosition,
   DISABLE_KITTY_KEYBOARD,
   DISABLE_MODIFY_OTHER_KEYS,
   ENABLE_KITTY_KEYBOARD,
   ENABLE_MODIFY_OTHER_KEYS,
   ERASE_SCREEN,
+  cursorMove,
+  cursorPosition,
 } from './termio/csi'
 import {
   DBP,

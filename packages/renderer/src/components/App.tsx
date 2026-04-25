@@ -1,5 +1,5 @@
-import React, { PureComponent, type ReactNode } from 'react'
-import { logForDebugging, isEnvTruthy, logError } from '@yokai/shared'
+import { isEnvTruthy, logError, logForDebugging } from '@yokai/shared'
+import { PureComponent, type ReactNode } from 'react'
 import { EventEmitter } from '../events/emitter'
 import { InputEvent } from '../events/input-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
@@ -11,7 +11,7 @@ import {
   parseMultipleKeypresses,
 } from '../parse-keypress'
 import reconciler from '../reconciler'
-import { finishSelection, hasSelection, type SelectionState, startSelection } from '../selection'
+import { type SelectionState, finishSelection, hasSelection, startSelection } from '../selection'
 import { isXtermJs, setXtversionName, supportsExtendedKeys } from '../terminal'
 import { getTerminalFocused, setTerminalFocused } from '../terminal-focus-state'
 import { TerminalQuerier, xtversion } from '../terminal-querier'

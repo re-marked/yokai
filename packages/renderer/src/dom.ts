@@ -301,11 +301,11 @@ export const createTextNode = (text: string): TextNode => {
   return node
 }
 
-const measureTextNode = function (
+const measureTextNode = (
   node: DOMNode,
   width: number,
   widthMode: LayoutMeasureMode,
-): { width: number; height: number } {
+): { width: number; height: number } => {
   const rawText = node.nodeName === '#text' ? node.nodeValue : squashTextNodes(node)
 
   // Expand tabs for measurement (worst case: 8 spaces each).
@@ -347,15 +347,15 @@ const measureTextNode = function (
 // ink-raw-ansi nodes hold pre-rendered ANSI strings with known dimensions.
 // No stringWidth, no wrapping, no tab expansion — the producer (e.g. ColorDiff)
 // already wrapped to the target width and each line is exactly one terminal row.
-const measureRawAnsiNode = function (node: DOMElement): {
+const measureRawAnsiNode = (
+  node: DOMElement,
+): {
   width: number
   height: number
-} {
-  return {
-    width: node.attributes['rawWidth'] as number,
-    height: node.attributes['rawHeight'] as number,
-  }
-}
+} => ({
+  width: node.attributes['rawWidth'] as number,
+  height: node.attributes['rawHeight'] as number,
+})
 
 /**
  * Mark a node and all its ancestors as dirty for re-rendering.

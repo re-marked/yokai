@@ -1,17 +1,18 @@
 /* eslint-disable custom-rules/no-top-level-side-effects */
 
 import { appendFileSync } from 'fs'
-import createReconciler from 'react-reconciler'
-import { getYogaCounters } from '@yokai/shared/yoga-layout'
 import { isEnvTruthy } from '@yokai/shared'
+import { getYogaCounters } from '@yokai/shared/yoga-layout'
+import createReconciler from 'react-reconciler'
 import {
+  type DOMElement,
+  type DOMNodeAttribute,
+  type ElementNames,
+  type TextNode,
   appendChildNode,
   clearYogaNodeReferences,
   createNode,
   createTextNode,
-  type DOMElement,
-  type DOMNodeAttribute,
-  type ElementNames,
   insertBeforeNode,
   markDirty,
   removeChildNode,
@@ -19,7 +20,6 @@ import {
   setStyle,
   setTextNodeValue,
   setTextStyles,
-  type TextNode,
 } from './dom'
 import { Dispatcher } from './events/dispatcher'
 import { EVENT_HANDLER_PROPS } from './events/event-handlers'

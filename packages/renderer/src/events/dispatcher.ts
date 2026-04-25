@@ -1,10 +1,10 @@
+import { logError } from '@yokai/shared'
 import {
   ContinuousEventPriority,
   DefaultEventPriority,
   DiscreteEventPriority,
   NoEventPriority,
 } from 'react-reconciler/constants.js'
-import { logError } from '@yokai/shared'
 import { HANDLER_FOR_EVENT } from './event-handlers.js'
 import type { EventTarget, TerminalEvent } from './terminal-event.js'
 

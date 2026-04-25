@@ -248,7 +248,7 @@ export function parseOSC(content: string): Action | null {
   const command = semicolonIdx >= 0 ? content.slice(0, semicolonIdx) : content
   const data = semicolonIdx >= 0 ? content.slice(semicolonIdx + 1) : ''
 
-  const commandNum = parseInt(command, 10)
+  const commandNum = Number.parseInt(command, 10)
 
   // Window/icon title
   if (commandNum === OSC.SET_TITLE_AND_ICON) {
@@ -309,15 +309,15 @@ export function parseOscColor(spec: string): Color | null {
   if (hex) {
     return {
       type: 'rgb',
-      r: parseInt(hex[1]!, 16),
-      g: parseInt(hex[2]!, 16),
-      b: parseInt(hex[3]!, 16),
+      r: Number.parseInt(hex[1]!, 16),
+      g: Number.parseInt(hex[2]!, 16),
+      b: Number.parseInt(hex[3]!, 16),
     }
   }
   const rgb = spec.match(/^rgb:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})$/i)
   if (rgb) {
     // XParseColor: N hex digits → value / (16^N - 1), scale to 0-255
-    const scale = (s: string) => Math.round((parseInt(s, 16) / (16 ** s.length - 1)) * 255)
+    const scale = (s: string) => Math.round((Number.parseInt(s, 16) / (16 ** s.length - 1)) * 255)
     return {
       type: 'rgb',
       r: scale(rgb[1]!),

@@ -5,21 +5,21 @@ import type { Point } from './layout/geometry'
 import {
   type Cell,
   CellWidth,
+  type Hyperlink,
+  type Screen,
+  type StylePool,
   cellAt,
   charInCellAt,
   diffEach,
-  type Hyperlink,
   isEmptyCellAt,
-  type Screen,
-  type StylePool,
   shiftRows,
   visibleCellAtIndex,
 } from './screen'
 import {
   CURSOR_HOME,
+  RESET_SCROLL_REGION,
   scrollDown as csiScrollDown,
   scrollUp as csiScrollUp,
-  RESET_SCROLL_REGION,
   setScrollRegion,
 } from './termio/csi'
 import { LINK_END, link as oscLink } from './termio/osc'

@@ -202,7 +202,7 @@ function applyStylesToWrappedText(
   segments: StyledSegment[],
   charToSegment: number[],
   originalPlain: string,
-  trimEnabled: boolean = false,
+  trimEnabled = false,
 ): string {
   const lines = wrappedPlain.split('\n')
   const resultLines: string[] = []

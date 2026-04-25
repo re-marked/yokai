@@ -33,7 +33,7 @@ function embedTextInBorder(
   borderLine: string,
   text: string,
   align: 'start' | 'end' | 'center',
-  offset: number = 0,
+  offset = 0,
   borderChar: string,
 ): [before: string, text: string, after: string] {
   const textLength = stringWidth(text)

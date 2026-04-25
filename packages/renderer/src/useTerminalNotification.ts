@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
-import { isProgressReportingAvailable, type Progress } from './terminal'
+import { type Progress, isProgressReportingAvailable } from './terminal'
 import { BEL } from './termio/ansi'
-import { ITERM2, OSC, osc, PROGRESS, wrapForMultiplexer } from './termio/osc'
+import { ITERM2, OSC, PROGRESS, osc, wrapForMultiplexer } from './termio/osc'
 
 type WriteRaw = (data: string) => void
 

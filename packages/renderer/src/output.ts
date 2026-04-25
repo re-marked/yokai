@@ -4,19 +4,19 @@ import {
   styledCharsFromTokens,
   tokenize,
 } from '@alcalzone/ansi-tokenize'
-import { logForDebugging, getGraphemeSegmenter, sliceAnsi } from '@yokai/shared'
+import { getGraphemeSegmenter, logForDebugging, sliceAnsi } from '@yokai/shared'
 import { reorderBidi } from './bidi'
 import { type Rectangle, unionRect } from './layout/geometry'
 import {
-  blitRegion,
   CellWidth,
+  OSC8_PREFIX,
+  type Screen,
+  type StylePool,
+  blitRegion,
   extractHyperlinkFromStyles,
   filterOutHyperlinkStyles,
   markNoSelectRegion,
-  OSC8_PREFIX,
   resetScreen,
-  type Screen,
-  type StylePool,
   setCellAt,
   shiftRows,
 } from './screen'
@@ -342,9 +342,14 @@ export default class Output {
             regionY + regionHeight,
             screenHeight,
             src.height,
-            clip?.y2 ?? Infinity,
+            clip?.y2 ?? Number.POSITIVE_INFINITY,
           )
-          const maxX = Math.min(regionX + regionWidth, screenWidth, src.width, clip?.x2 ?? Infinity)
+          const maxX = Math.min(
+            regionX + regionWidth,
+            screenWidth,
+            src.width,
+            clip?.x2 ?? Number.POSITIVE_INFINITY,
+          )
           if (startX >= maxX || startY >= maxY) continue
           // Skip rows covered by an absolute-positioned node's clear.
           // Absolute nodes overlay normal-flow siblings, so prevScreen in

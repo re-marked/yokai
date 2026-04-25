@@ -99,14 +99,14 @@ function resolveValue(v: Value, ownerSize: number): number {
     case Unit.Point:
       return v.value
     case Unit.Percent:
-      return isNaN(ownerSize) ? NaN : (v.value * ownerSize) / 100
+      return Number.isNaN(ownerSize) ? Number.NaN : (v.value * ownerSize) / 100
     default:
-      return NaN
+      return Number.NaN
   }
 }
 
 function isDefined(n: number): boolean {
-  return !isNaN(n)
+  return !Number.isNaN(n)
 }
 
 // NaN-safe equality for layout-cache input comparison.
@@ -228,7 +228,7 @@ function resolveEdge(
     if (physicalEdge === EDGE_RIGHT) v = edges[Edge.End]!
   }
   if (v.unit === Unit.Undefined) return 0
-  if (v.unit === Unit.Auto) return allowAuto ? NaN : 0
+  if (v.unit === Unit.Auto) return allowAuto ? Number.NaN : 0
   return resolveValue(v, ownerSize)
 }
 
@@ -279,7 +279,7 @@ function resolveEdges4Into(
   const eA = edges[8]! // Edge.All
   const eS = edges[4]! // Edge.Start
   const eE = edges[5]! // Edge.End
-  const pctDenom = isNaN(ownerSize) ? NaN : ownerSize / 100
+  const pctDenom = Number.isNaN(ownerSize) ? Number.NaN : ownerSize / 100
 
   // Left: edges[0] → Horizontal → All → Start
   let v = edges[0]!
@@ -441,12 +441,12 @@ export class Node {
   // different inputs per parent pass — a single slot thrashes. Re-layout
   // bench (dirty one leaf, recompute root) went 2.7x→1.1x with this:
   // clean siblings skip straight through, only the dirty chain recomputes.
-  _lW = NaN
-  _lH = NaN
+  _lW = Number.NaN
+  _lH = Number.NaN
   _lWM: MeasureMode = 0
   _lHM: MeasureMode = 0
-  _lOW = NaN
-  _lOH = NaN
+  _lOW = Number.NaN
+  _lOH = Number.NaN
   _lFW = false
   _lFH = false
   // _hasL stores INPUTS early (before compute) but layout.width/height are
@@ -454,17 +454,17 @@ export class Node {
   // different inputs. Without storing OUTPUTS, a _hasL hit returns whatever
   // layout.width/height happened to be left by the last call — the scrollbox
   // vpH=33→2624 bug. Store + restore outputs like the multi-entry cache does.
-  _lOutW = NaN
-  _lOutH = NaN
+  _lOutW = Number.NaN
+  _lOutH = Number.NaN
   _hasL = false
-  _mW = NaN
-  _mH = NaN
+  _mW = Number.NaN
+  _mH = Number.NaN
   _mWM: MeasureMode = 0
   _mHM: MeasureMode = 0
-  _mOW = NaN
-  _mOH = NaN
-  _mOutW = NaN
-  _mOutH = NaN
+  _mOW = Number.NaN
+  _mOH = Number.NaN
+  _mOutW = Number.NaN
+  _mOutH = Number.NaN
   _hasM = false
   // Cached computeFlexBasis result. For clean children, basis only depends
   // on the container's inner dimensions — if those haven't changed, skip the
@@ -472,11 +472,11 @@ export class Node {
   // for scroll: 500-message content container is dirty, its 499 clean
   // children each get measured ~20× as the dirty chain's measure/layout
   // passes cascade. Basis cache short-circuits at the child boundary.
-  _fbBasis = NaN
-  _fbOwnerW = NaN
-  _fbOwnerH = NaN
-  _fbAvailMain = NaN
-  _fbAvailCross = NaN
+  _fbBasis = Number.NaN
+  _fbOwnerW = Number.NaN
+  _fbOwnerH = Number.NaN
+  _fbAvailMain = Number.NaN
+  _fbAvailCross = Number.NaN
   _fbCrossMode: MeasureMode = 0
   // Generation at which _fbBasis was written. Dirty nodes from a PREVIOUS
   // generation have stale cache (subtree changed), but within the SAME
@@ -571,7 +571,7 @@ export class Node {
     this._hasM = false
     this._cN = 0
     this._cWr = 0
-    this._fbBasis = NaN
+    this._fbBasis = Number.NaN
   }
 
   // -- Dirty tracking
@@ -722,7 +722,7 @@ export class Node {
     this.markDirty()
   }
   setFlex(v: number | undefined): void {
-    if (v === undefined || isNaN(v)) {
+    if (v === undefined || Number.isNaN(v)) {
       this.style.flexGrow = 0
       this.style.flexShrink = 0
     } else if (v > 0) {
@@ -919,7 +919,7 @@ export class Node {
   }
   setAspectRatio(_: number | undefined): void {}
   getAspectRatio(): number {
-    return NaN
+    return Number.NaN
   }
   setAlwaysFormsContainingBlock(_: boolean): void {}
 
@@ -934,8 +934,8 @@ export class Node {
     _yogaMeasureCalls = 0
     _yogaCacheHits = 0
     _generation++
-    const w = ownerWidth === undefined ? NaN : ownerWidth
-    const h = ownerHeight === undefined ? NaN : ownerHeight
+    const w = ownerWidth === undefined ? Number.NaN : ownerWidth
+    const h = ownerHeight === undefined ? Number.NaN : ownerHeight
     layoutNode(
       this,
       w,
@@ -1207,8 +1207,8 @@ function layoutNode(
   const paddingBorderHeight = pad[1] + pad[3] + bor[1] + bor[3]
 
   // Resolve style dimensions
-  const styleWidth = forceWidth ? NaN : resolveValue(style.width, ownerWidth)
-  const styleHeight = forceHeight ? NaN : resolveValue(style.height, ownerHeight)
+  const styleWidth = forceWidth ? Number.NaN : resolveValue(style.width, ownerWidth)
+  const styleHeight = forceHeight ? Number.NaN : resolveValue(style.height, ownerHeight)
 
   // If style dimension is defined, it overrides the available size
   let width = availableWidth
@@ -1230,8 +1230,10 @@ function layoutNode(
 
   // Measure-func leaf node
   if (node.measureFunc && node.children.length === 0) {
-    const innerW = wMode === MeasureMode.Undefined ? NaN : Math.max(0, width - paddingBorderWidth)
-    const innerH = hMode === MeasureMode.Undefined ? NaN : Math.max(0, height - paddingBorderHeight)
+    const innerW =
+      wMode === MeasureMode.Undefined ? Number.NaN : Math.max(0, width - paddingBorderWidth)
+    const innerH =
+      hMode === MeasureMode.Undefined ? Number.NaN : Math.max(0, height - paddingBorderHeight)
     _yogaMeasureCalls++
     const measured = node.measureFunc(innerW, wMode, innerH, hMode)
     node.layout.width =
@@ -1318,8 +1320,8 @@ function layoutNode(
   const mainPadBorder = isMainRow ? paddingBorderWidth : paddingBorderHeight
   const crossPadBorder = isMainRow ? paddingBorderHeight : paddingBorderWidth
 
-  const innerMainSize = isDefined(mainSize) ? Math.max(0, mainSize - mainPadBorder) : NaN
-  const innerCrossSize = isDefined(crossSize) ? Math.max(0, crossSize - crossPadBorder) : NaN
+  const innerMainSize = isDefined(mainSize) ? Math.max(0, mainSize - mainPadBorder) : Number.NaN
+  const innerCrossSize = isDefined(crossSize) ? Math.max(0, crossSize - crossPadBorder) : Number.NaN
 
   // Resolve gap
   const gapMain = resolveGap(style, isMainRow ? Gutter.Column : Gutter.Row, innerMainSize)
@@ -1335,8 +1337,8 @@ function layoutNode(
   // values. Per CSS, a % width resolves against the parent's content-box
   // width. If this node's width is indefinite, children's % widths are also
   // indefinite — do NOT fall through to the grandparent's size.
-  const ownerW = isDefined(width) ? width : NaN
-  const ownerH = isDefined(height) ? height : NaN
+  const ownerW = isDefined(width) ? width : Number.NaN
+  const ownerH = isDefined(height) ? height : Number.NaN
   const isWrap = style.flexWrap !== Wrap.NoWrap
   const gapCross = resolveGap(style, isMainRow ? Gutter.Row : Gutter.Column, innerCrossSize)
 
@@ -1419,7 +1421,7 @@ function layoutNode(
       const cStyle = c.style
       const childAlign = cStyle.alignSelf === Align.Auto ? style.alignItems : cStyle.alignSelf
       const cMarginCross = childMarginForAxis(c, crossAx, ownerW)
-      let childCrossSize = NaN
+      let childCrossSize = Number.NaN
       let childCrossMode: MeasureMode = MeasureMode.Undefined
       const resolvedCrossStyle = resolveValue(
         isMainRow ? cStyle.height : cStyle.width,
@@ -2049,7 +2051,7 @@ function computeFlexBasis(
   //     with flex-grow children would grow into the AtMost constraint,
   //     inflating the basis (breaks YGMinMaxDimensionTest flex_grow_in_at_most
   //     where a flexGrow:1 child should stay at basis 0, not grow to 100).
-  let mainConstraint = NaN
+  let mainConstraint = Number.NaN
   let mainConstraintMode: MeasureMode = MeasureMode.Undefined
   if (isMainRow && isDefined(availableMain) && hasMeasureFuncInSubtree(child)) {
     mainConstraint = availableMain
@@ -2398,10 +2400,10 @@ function parseDimension(v: number | string | undefined): Value {
     return Number.isFinite(v) ? pointValue(v) : UNDEFINED_VALUE
   }
   if (typeof v === 'string' && v.endsWith('%')) {
-    return percentValue(parseFloat(v))
+    return percentValue(Number.parseFloat(v))
   }
-  const n = parseFloat(v)
-  return isNaN(n) ? UNDEFINED_VALUE : pointValue(n)
+  const n = Number.parseFloat(v)
+  return Number.isNaN(n) ? UNDEFINED_VALUE : pointValue(n)
 }
 
 function physicalEdge(edge: Edge): number {

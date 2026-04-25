@@ -1,4 +1,5 @@
-import React, { type PropsWithChildren, useContext, useInsertionEffect } from 'react'
+import type React from 'react'
+import { type PropsWithChildren, useContext, useInsertionEffect } from 'react'
 import instances from '../instances.js'
 import {
   DISABLE_MOUSE_TRACKING,
