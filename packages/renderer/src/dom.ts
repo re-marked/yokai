@@ -393,16 +393,14 @@ export const scheduleRenderFrom = (node?: DOMNode): void => {
 }
 
 export const setTextNodeValue = (node: TextNode, text: string): void => {
-  if (typeof text !== 'string') {
-    text = String(text)
-  }
+  // Coerce non-string inputs at the boundary. The signature claims string
+  // but React can hand us numbers/booleans during JSX child flattening.
+  const value = typeof text === 'string' ? text : String(text)
 
   // Skip if unchanged
-  if (node.nodeValue === text) {
-    return
-  }
+  if (node.nodeValue === value) return
 
-  node.nodeValue = text
+  node.nodeValue = value
   markDirty(node)
 }
 
