@@ -1275,10 +1275,30 @@ function renderChildren(
     const wasDirty = childElem.dirty
     const isAbsolute = childElem.style.position === 'absolute'
 
-    // Force re-render for clean absolutes that overlap a moving sibling's
-    // OLD rect. See dirtyAbsoluteCachedRects comment above for why.
+    // Force re-render for ANY clean child that overlaps a moving
+    // sibling's OLD rect — applies to both absolute and in-flow
+    // children. The blit fast-path would copy prevScreen[my rect],
+    // which has the moving sibling's STALE paint at the overlap (it
+    // was on top in prev). Per-cell suppression in output.ts zeros
+    // those stale cells, but then this child has empty cells where
+    // its actual content should be — visible as missing chunks.
+    //
+    // Forcing skipSelfBlit makes this child take the full render path
+    // and paint its own content (text characters, fill, border, etc.)
+    // into all its cells, including the overlap region.
+    //
+    // Originally this only fired for clean ABSOLUTE siblings, but
+    // in-flow children sit at the same DOM level as absolutes in
+    // typical layouts (a column container with header text +
+    // absolutely-positioned overlays). Dragging an overlay over the
+    // text and back left chunks of the text empty until something
+    // else triggered a repaint.
     let overlapsMovingAbsolute = false
-    if (isAbsolute && !childElem.dirty && dirtyAbsoluteCachedRects !== undefined) {
+    if (
+      !childElem.dirty &&
+      childElem.nodeName !== '#text' &&
+      dirtyAbsoluteCachedRects !== undefined
+    ) {
       const myCached = nodeCache.get(childElem)
       if (myCached) {
         for (const r of dirtyAbsoluteCachedRects) {
