@@ -13,7 +13,7 @@
     "build": "pnpm --filter @yokai/shared build && pnpm --filter @yokai/renderer build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=22.0.0"
