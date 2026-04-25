@@ -2370,16 +2370,21 @@ function boundAxis(
   const owner = isWidth ? ownerWidth : ownerHeight
   let v = value
   // Inlined resolveValue: Unit.Point=1, Unit.Percent=2. `m === m` is !isNaN.
+  // Self-compare instead of Number.isNaN to keep this branchy hot loop tight —
+  // the comment above explains the perf rationale (32k calls/layout). Biome's
+  // noSelfCompare flag is suppressed per-site to keep the override visible.
   if (maxU === 1) {
     if (v > maxV.value) v = maxV.value
   } else if (maxU === 2) {
     const m = (maxV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: NaN check, see comment above
     if (m === m && v > m) v = m
   }
   if (minU === 1) {
     if (v < minV.value) v = minV.value
   } else if (minU === 2) {
     const m = (minV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: NaN check, see comment above
     if (m === m && v < m) v = m
   }
   return v
