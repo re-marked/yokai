@@ -365,8 +365,9 @@ export default class App extends PureComponent<Props, State> {
     }
     this.lastStdinTime = now
     try {
-      let chunk
-      while ((chunk = this.props.stdin.read() as string | null) !== null) {
+      while (true) {
+        const chunk = this.props.stdin.read() as string | null
+        if (chunk === null) break
         // Process the input chunk
         this.processInput(chunk)
       }
