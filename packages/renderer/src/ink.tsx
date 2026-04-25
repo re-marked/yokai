@@ -17,9 +17,10 @@ import type {
 import { FRAME_INTERVAL_MS } from './constants'
 import * as dom from './dom'
 import { KeyboardEvent } from './events/keyboard-event'
+import type { GestureHandlers } from './events/mouse-event'
 import { FocusManager } from './focus'
 import { type Frame, type FrameEvent, emptyFrame } from './frame'
-import { dispatchClick, dispatchHover } from './hit-test'
+import { dispatchClick, dispatchHover, dispatchMouseDown } from './hit-test'
 import instances from './instances'
 import { noop, throttle } from './lodash-replacements'
 import { LogUpdate } from './log-update'
@@ -1441,6 +1442,14 @@ export default class Ink {
     const blank = isEmptyCellAt(this.frontFrame.screen, col, row)
     return dispatchClick(this.rootNode, col, row, blank)
   }
+  dispatchMouseDown(col: number, row: number, button: number): GestureHandlers | null {
+    // Same alt-screen gate as dispatchClick — mouse tracking is only
+    // enabled inside <AlternateScreen>, so onMouseDown handlers
+    // shouldn't fire on main-screen renders even if the parser
+    // somehow surfaces a mouse event.
+    if (!this.altScreenActive) return null
+    return dispatchMouseDown(this.rootNode, col, row, button)
+  }
   dispatchHover(col: number, row: number): void {
     if (!this.altScreenActive) return
     dispatchHover(this.rootNode, col, row, this.hoveredNodes)
@@ -1645,6 +1654,7 @@ export default class Ink {
         selection={this.selection}
         onSelectionChange={this.notifySelectionChange}
         onClickAt={this.dispatchClick}
+        onMouseDownAt={this.dispatchMouseDown}
         onHoverAt={this.dispatchHover}
         getHyperlinkAt={this.getHyperlinkAt}
         onOpenHyperlink={this.openHyperlink}
