@@ -3,7 +3,7 @@
  * Simplified version using Node.js child_process directly.
  */
 
-import { execFile as cpExecFile, type ExecFileOptions } from 'child_process'
+import { execFile as cpExecFile, type ExecFileOptions } from 'node:child_process'
 
 type ExecResult = {
   stdout: string
