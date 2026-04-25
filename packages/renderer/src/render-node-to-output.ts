@@ -1,6 +1,6 @@
 import indentString from 'indent-string'
 import { applyTextStyles } from './colorize'
-import type { DOMElement } from './dom'
+import type { DOMElement, DOMNode } from './dom'
 import getMaxWidth from './get-max-width'
 import type { Rectangle } from './layout/geometry'
 import { LayoutDisplay, LayoutEdge, type LayoutNode } from './layout/node'
@@ -1180,6 +1180,20 @@ function renderNodeToOutput(
 // still passing prevScreen so opaque descendants can blit their narrower
 // rects (NewMessagesPill's inner Text with backgroundColor). Opaque
 // absolute siblings fill their entire rect — direct blit is safe.
+// Effective z-index for paint ordering. Only absolute-positioned nodes
+// participate in z-stacking — for any other element (in-flow, relative,
+// text node) the property is meaningless and contributes 0 to the sort.
+//
+// Default-z absolutes (zIndex undefined OR 0) also return 0, so they
+// preserve tree order via the stable sort. Non-zero zIndex on an
+// absolute reorders that child relative to its siblings.
+function effectiveZ(node: DOMNode): number {
+  if (node.nodeName === '#text') return 0
+  const elem = node as DOMElement
+  if (elem.style.position !== 'absolute') return 0
+  return elem.style.zIndex ?? 0
+}
+
 function renderChildren(
   node: DOMElement,
   output: Output,
@@ -1189,9 +1203,40 @@ function renderChildren(
   prevScreen: Screen | undefined,
   inheritedBackgroundColor: Color | undefined,
 ): void {
+  // Sort children by effective z-index for paint ordering. Stable sort
+  // (ES2019+) preserves DOM order for equal-z ties, which is exactly
+  // today's behavior for all-z-zero children — the no-zIndex case stays
+  // bit-for-bit identical.
+  //
+  // Hot-path optimization: most renders have zero z-indexed children. A
+  // single O(n) scan to detect any non-zero zIndex avoids the O(n log n)
+  // sort + O(n) array copy on every renderChildren call. Only renders
+  // that actually use z-index pay for the sort.
+  //
+  // Recursion gives us CSS-like stacking contexts for free: when a
+  // z-indexed absolute child renders, its OWN renderChildren call sorts
+  // its descendants. Nested z values stay scoped to their parent's
+  // group — a sibling z=8 outside this absolute paints over the
+  // absolute's whole subtree, not interleaved with it.
+  let needsSort = false
+  for (const c of node.childNodes) {
+    if (c.nodeName === '#text') continue
+    const elem = c as DOMElement
+    if (elem.style.position === 'absolute' && (elem.style.zIndex ?? 0) !== 0) {
+      needsSort = true
+      break
+    }
+  }
+  const orderedChildren = needsSort
+    ? [...node.childNodes].sort((a, b) => effectiveZ(a) - effectiveZ(b))
+    : node.childNodes
+
+  // The contamination guards (seenDirtyChild, seenDirtyClipped) track
+  // "earlier in CURRENT-frame paint order" — which is the new sorted
+  // order, not raw tree order. Same logic, new iteration sequence.
   let seenDirtyChild = false
   let seenDirtyClipped = false
-  for (const childNode of node.childNodes) {
+  for (const childNode of orderedChildren) {
     const childElem = childNode as DOMElement
     // Capture dirty before rendering — renderNodeToOutput clears the flag
     const wasDirty = childElem.dirty

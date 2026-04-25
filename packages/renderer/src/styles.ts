@@ -72,6 +72,35 @@ export type Styles = {
   readonly right?: number | `${number}%`
 
   /**
+   * Paint-order arbiter for overlapping `position: 'absolute'` siblings.
+   *
+   * - **Default (`undefined`) / `0`**: paint order matches DOM tree order.
+   *   Identical to today's behavior — later-in-tree paints over
+   *   earlier-in-tree.
+   * - **`> 0`**: paints over siblings with lower effective z (or
+   *   undefined z), regardless of tree position.
+   * - **`< 0`**: paints under siblings with lower effective z, including
+   *   under in-flow content of the same parent. Useful for backdrops.
+   *
+   * Within a parent, siblings sort by `(effectiveZ, treeOrder)` —
+   * stable, so equal-z ties preserve DOM order.
+   *
+   * **Stacking-context behavior**: an absolute-positioned node with a
+   * non-zero `zIndex` renders as a contiguous group; nested z-indexed
+   * absolutes inside it sort *within* that group, not globally. A
+   * tooltip at `zIndex={5}` inside a popup at `zIndex={10}` paints
+   * over the popup's other children but cannot escape the popup — a
+   * sibling popup at `zIndex={20}` paints over the tooltip too. Matches
+   * CSS stacking-context semantics, no manual numeric coordination
+   * needed across nested overlays.
+   *
+   * **Only applies to `position: 'absolute'`.** On in-flow or relative
+   * nodes, `zIndex` is silently ignored (in-flow children don't overlap,
+   * so the property has no meaning).
+   */
+  readonly zIndex?: number
+
+  /**
    * Size of the gap between an element's columns.
    */
   readonly columnGap?: number
