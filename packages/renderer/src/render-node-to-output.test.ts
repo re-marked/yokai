@@ -12,24 +12,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  appendChildNode,
-  createNode,
-  createTextNode,
-  setStyle,
-  type DOMElement,
-  type TextNode,
-} from './dom.js'
+import { type DOMElement, appendChildNode, createNode, createTextNode, setStyle } from './dom.js'
 import Output from './output.js'
 import renderNodeToOutput from './render-node-to-output.js'
-import {
-  cellAt,
-  CharPool,
-  createScreen,
-  HyperlinkPool,
-  StylePool,
-  type Screen,
-} from './screen.js'
+import { CharPool, HyperlinkPool, type Screen, StylePool, cellAt, createScreen } from './screen.js'
 import applyStyles, { type Styles } from './styles.js'
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -72,14 +58,6 @@ function buildRow(width: number, height: number, ...children: DOMElement[]): DOM
   return root
 }
 
-/** Same as buildRow but with the default flexDirection (column). */
-function buildColumn(width: number, height: number, ...children: DOMElement[]): DOMElement {
-  const root = el('ink-root', { width, height })
-  for (const child of children) appendChildNode(root, child)
-  root.yogaNode!.calculateLayout(width, height)
-  return root
-}
-
 /**
  * Render to a fresh Screen and return it. One-shot — no Output reuse,
  * no prevScreen, no contamination concerns. Tests get a clean slate.
@@ -90,7 +68,7 @@ function render(root: DOMElement, width: number, height: number): Screen {
   const hyperlinkPool = new HyperlinkPool()
   const screen = createScreen(width, height, stylePool, charPool, hyperlinkPool)
   const output = new Output({ width, height, stylePool, screen })
-  renderNodeToOutput(root, output, {})
+  renderNodeToOutput(root, output, { prevScreen: undefined })
   return output.get()
 }
 
