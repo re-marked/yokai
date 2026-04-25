@@ -27,10 +27,7 @@ export const CUSTOM_BORDER_STYLES = {
   },
 } as const
 
-export type BorderStyle =
-  | keyof Boxes
-  | keyof typeof CUSTOM_BORDER_STYLES
-  | BoxStyle
+export type BorderStyle = keyof Boxes | keyof typeof CUSTOM_BORDER_STYLES | BoxStyle
 
 function embedTextInBorder(
   borderLine: string,
@@ -67,11 +64,7 @@ function embedTextInBorder(
   return [before, text, after]
 }
 
-function styleBorderLine(
-  line: string,
-  color: Color | undefined,
-  dim: boolean | undefined,
-): string {
+function styleBorderLine(line: string, color: Color | undefined, dim: boolean | undefined): string {
   let styled = applyColor(line, color)
   if (dim) {
     styled = chalk.dim(styled)
@@ -79,50 +72,35 @@ function styleBorderLine(
   return styled
 }
 
-const renderBorder = (
-  x: number,
-  y: number,
-  node: DOMNode,
-  output: Output,
-): void => {
+const renderBorder = (x: number, y: number, node: DOMNode, output: Output): void => {
   if (node.style.borderStyle) {
     const width = Math.floor(node.yogaNode!.getComputedWidth())
     const height = Math.floor(node.yogaNode!.getComputedHeight())
     const box =
       typeof node.style.borderStyle === 'string'
-        ? (CUSTOM_BORDER_STYLES[
-            node.style.borderStyle as keyof typeof CUSTOM_BORDER_STYLES
-          ] ?? cliBoxes[node.style.borderStyle as keyof Boxes])
+        ? (CUSTOM_BORDER_STYLES[node.style.borderStyle as keyof typeof CUSTOM_BORDER_STYLES] ??
+          cliBoxes[node.style.borderStyle as keyof Boxes])
         : node.style.borderStyle
 
     const topBorderColor = node.style.borderTopColor ?? node.style.borderColor
-    const bottomBorderColor =
-      node.style.borderBottomColor ?? node.style.borderColor
+    const bottomBorderColor = node.style.borderBottomColor ?? node.style.borderColor
     const leftBorderColor = node.style.borderLeftColor ?? node.style.borderColor
-    const rightBorderColor =
-      node.style.borderRightColor ?? node.style.borderColor
+    const rightBorderColor = node.style.borderRightColor ?? node.style.borderColor
 
-    const dimTopBorderColor =
-      node.style.borderTopDimColor ?? node.style.borderDimColor
+    const dimTopBorderColor = node.style.borderTopDimColor ?? node.style.borderDimColor
 
-    const dimBottomBorderColor =
-      node.style.borderBottomDimColor ?? node.style.borderDimColor
+    const dimBottomBorderColor = node.style.borderBottomDimColor ?? node.style.borderDimColor
 
-    const dimLeftBorderColor =
-      node.style.borderLeftDimColor ?? node.style.borderDimColor
+    const dimLeftBorderColor = node.style.borderLeftDimColor ?? node.style.borderDimColor
 
-    const dimRightBorderColor =
-      node.style.borderRightDimColor ?? node.style.borderDimColor
+    const dimRightBorderColor = node.style.borderRightDimColor ?? node.style.borderDimColor
 
     const showTopBorder = node.style.borderTop !== false
     const showBottomBorder = node.style.borderBottom !== false
     const showLeftBorder = node.style.borderLeft !== false
     const showRightBorder = node.style.borderRight !== false
 
-    const contentWidth = Math.max(
-      0,
-      width - (showLeftBorder ? 1 : 0) - (showRightBorder ? 1 : 0),
-    )
+    const contentWidth = Math.max(0, width - (showLeftBorder ? 1 : 0) - (showRightBorder ? 1 : 0))
 
     const topBorderLine = showTopBorder
       ? (showLeftBorder ? box.topLeft : '') +
@@ -145,11 +123,7 @@ const renderBorder = (
         text +
         styleBorderLine(after, topBorderColor, dimTopBorderColor)
     } else if (showTopBorder) {
-      topBorder = styleBorderLine(
-        topBorderLine,
-        topBorderColor,
-        dimTopBorderColor,
-      )
+      topBorder = styleBorderLine(topBorderLine, topBorderColor, dimTopBorderColor)
     }
 
     let verticalBorderHeight = height
@@ -164,17 +138,13 @@ const renderBorder = (
 
     verticalBorderHeight = Math.max(0, verticalBorderHeight)
 
-    let leftBorder = (applyColor(box.left, leftBorderColor) + '\n').repeat(
-      verticalBorderHeight,
-    )
+    let leftBorder = (applyColor(box.left, leftBorderColor) + '\n').repeat(verticalBorderHeight)
 
     if (dimLeftBorderColor) {
       leftBorder = chalk.dim(leftBorder)
     }
 
-    let rightBorder = (applyColor(box.right, rightBorderColor) + '\n').repeat(
-      verticalBorderHeight,
-    )
+    let rightBorder = (applyColor(box.right, rightBorderColor) + '\n').repeat(verticalBorderHeight)
 
     if (dimRightBorderColor) {
       rightBorder = chalk.dim(rightBorder)
@@ -201,11 +171,7 @@ const renderBorder = (
         text +
         styleBorderLine(after, bottomBorderColor, dimBottomBorderColor)
     } else if (showBottomBorder) {
-      bottomBorder = styleBorderLine(
-        bottomBorderLine,
-        bottomBorderColor,
-        dimBottomBorderColor,
-      )
+      bottomBorder = styleBorderLine(bottomBorderLine, bottomBorderColor, dimBottomBorderColor)
     }
 
     const offsetY = showTopBorder ? 1 : 0
@@ -229,4 +195,3 @@ const renderBorder = (
 }
 
 export default renderBorder
-

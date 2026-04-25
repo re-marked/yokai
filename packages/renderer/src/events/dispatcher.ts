@@ -43,10 +43,7 @@ function getHandler(
  *
  * Result: [root-cap, ..., parent-cap, target-cap, target-bub, parent-bub, ..., root-bub]
  */
-function collectListeners(
-  target: EventTarget,
-  event: TerminalEvent,
-): DispatchListener[] {
+function collectListeners(target: EventTarget, event: TerminalEvent): DispatchListener[] {
   const listeners: DispatchListener[] = []
 
   let node: EventTarget | undefined = target
@@ -84,10 +81,7 @@ function collectListeners(
  * Before each handler, calls event._prepareForTarget(node) so event
  * subclasses can do per-node setup.
  */
-function processDispatchQueue(
-  listeners: DispatchListener[],
-  event: TerminalEvent,
-): void {
+function processDispatchQueue(listeners: DispatchListener[], event: TerminalEvent): void {
   let previousNode: EventTarget | undefined
 
   for (const { node, handler, phase } of listeners) {
@@ -208,13 +202,7 @@ export class Dispatcher {
     if (!this.discreteUpdates) {
       return this.dispatch(target, event)
     }
-    return this.discreteUpdates(
-      (t, e) => this.dispatch(t, e),
-      target,
-      event,
-      undefined,
-      undefined,
-    )
+    return this.discreteUpdates((t, e) => this.dispatch(t, e), target, event, undefined, undefined)
   }
 
   /**

@@ -7,11 +7,7 @@ import { isEnvTruthy } from './envUtils'
 type Platform = 'win32' | 'darwin' | 'linux'
 
 function isSSHSession(): boolean {
-  return !!(
-    process.env.SSH_CONNECTION ||
-    process.env.SSH_CLIENT ||
-    process.env.SSH_TTY
-  )
+  return !!(process.env.SSH_CONNECTION || process.env.SSH_CLIENT || process.env.SSH_TTY)
 }
 
 function detectTerminal(): string | null {

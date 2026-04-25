@@ -109,9 +109,7 @@ export type DOMNodeAttribute = boolean | string | number
 
 export const createNode = (nodeName: ElementNames): DOMElement => {
   const needsYogaNode =
-    nodeName !== 'ink-virtual-text' &&
-    nodeName !== 'ink-link' &&
-    nodeName !== 'ink-progress'
+    nodeName !== 'ink-virtual-text' && nodeName !== 'ink-link' && nodeName !== 'ink-progress'
   const node: DOMElement = {
     nodeName,
     style: {},
@@ -131,10 +129,7 @@ export const createNode = (nodeName: ElementNames): DOMElement => {
   return node
 }
 
-export const appendChildNode = (
-  node: DOMElement,
-  childNode: DOMElement,
-): void => {
+export const appendChildNode = (node: DOMElement, childNode: DOMElement): void => {
   if (childNode.parentNode) {
     removeChildNode(childNode.parentNode, childNode)
   }
@@ -143,10 +138,7 @@ export const appendChildNode = (
   node.childNodes.push(childNode)
 
   if (childNode.yogaNode) {
-    node.yogaNode?.insertChild(
-      childNode.yogaNode,
-      node.yogaNode.getChildCount(),
-    )
+    node.yogaNode?.insertChild(childNode.yogaNode, node.yogaNode.getChildCount())
   }
 
   markDirty(node)
@@ -192,19 +184,13 @@ export const insertBeforeNode = (
   node.childNodes.push(newChildNode)
 
   if (newChildNode.yogaNode) {
-    node.yogaNode?.insertChild(
-      newChildNode.yogaNode,
-      node.yogaNode.getChildCount(),
-    )
+    node.yogaNode?.insertChild(newChildNode.yogaNode, node.yogaNode.getChildCount())
   }
 
   markDirty(node)
 }
 
-export const removeChildNode = (
-  node: DOMElement,
-  removeNode: DOMNode,
-): void => {
+export const removeChildNode = (node: DOMElement, removeNode: DOMNode): void => {
   if (removeNode.yogaNode) {
     removeNode.parentNode?.yogaNode?.removeChild(removeNode.yogaNode)
   }
@@ -222,11 +208,7 @@ export const removeChildNode = (
   markDirty(node)
 }
 
-function collectRemovedRects(
-  parent: DOMElement,
-  removed: DOMNode,
-  underAbsolute = false,
-): void {
+function collectRemovedRects(parent: DOMElement, removed: DOMNode, underAbsolute = false): void {
   if (removed.nodeName === '#text') return
   const elem = removed as DOMElement
   // If this node or any ancestor in the removed subtree was absolute,
@@ -244,11 +226,7 @@ function collectRemovedRects(
   }
 }
 
-export const setAttribute = (
-  node: DOMElement,
-  key: string,
-  value: DOMNodeAttribute,
-): void => {
+export const setAttribute = (node: DOMElement, key: string, value: DOMNodeAttribute): void => {
   // Skip 'children' - React handles children via appendChild/removeChild,
   // not attributes. React always passes a new children reference, so
   // tracking it as an attribute would mark everything dirty every render.
@@ -273,10 +251,7 @@ export const setStyle = (node: DOMNode, style: Styles): void => {
   markDirty(node)
 }
 
-export const setTextStyles = (
-  node: DOMElement,
-  textStyles: TextStyles,
-): void => {
+export const setTextStyles = (node: DOMElement, textStyles: TextStyles): void => {
   // Same dirty-check guard as setStyle: React (and buildTextStyles in Text.tsx)
   // allocate a new textStyles object on every render even when values are
   // unchanged, so compare by value to avoid markDirty -> yoga re-measurement
@@ -292,10 +267,7 @@ function stylesEqual(a: Styles, b: Styles): boolean {
   return shallowEqual(a, b)
 }
 
-function shallowEqual<T extends object>(
-  a: T | undefined,
-  b: T | undefined,
-): boolean {
+function shallowEqual<T extends object>(a: T | undefined, b: T | undefined): boolean {
   // Fast path: same object reference (or both undefined)
   if (a === b) return true
   if (a === undefined || b === undefined) return false
@@ -334,8 +306,7 @@ const measureTextNode = function (
   width: number,
   widthMode: LayoutMeasureMode,
 ): { width: number; height: number } {
-  const rawText =
-    node.nodeName === '#text' ? node.nodeValue : squashTextNodes(node)
+  const rawText = node.nodeName === '#text' ? node.nodeValue : squashTextNodes(node)
 
   // Expand tabs for measurement (worst case: 8 spaces each).
   // Actual tab expansion happens in output.ts based on screen position.
@@ -400,8 +371,7 @@ export const markDirty = (node?: DOMNode): void => {
       // Only mark yoga dirty on leaf nodes that have measure functions
       if (
         !markedYoga &&
-        (current.nodeName === 'ink-text' ||
-          current.nodeName === 'ink-raw-ansi') &&
+        (current.nodeName === 'ink-text' || current.nodeName === 'ink-raw-ansi') &&
         current.yogaNode
       ) {
         current.yogaNode.markDirty()
@@ -482,4 +452,3 @@ export function findOwnerChainAtRow(root: DOMElement, y: number): string[] {
     }
   }
 }
-

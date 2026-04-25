@@ -1,10 +1,4 @@
-import {
-  CellWidth,
-  cellAtIndex,
-  type Screen,
-  type StylePool,
-  setCellStyleId,
-} from './screen'
+import { CellWidth, cellAtIndex, type Screen, type StylePool, setCellStyleId } from './screen'
 
 /**
  * Highlight all visible occurrences of `query` in the screen buffer by
@@ -24,11 +18,7 @@ import {
  * Returns true if any match was highlighted (damage gate — caller forces
  * full-frame damage when true).
  */
-export function applySearchHighlight(
-  screen: Screen,
-  query: string,
-  stylePool: StylePool,
-): boolean {
+export function applySearchHighlight(screen: Screen, query: string, stylePool: StylePool): boolean {
   if (!query) return false
   const lq = query.toLowerCase()
   const qlen = lq.length
@@ -91,4 +81,3 @@ export function applySearchHighlight(
 
   return applied
 }
-

@@ -4,4 +4,3 @@ import { createYogaLayoutNode } from './yoga'
 export function createLayoutNode(): LayoutNode {
   return createYogaLayoutNode()
 }
-

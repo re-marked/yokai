@@ -6,4 +6,3 @@ import AppContext from '../components/AppContext'
  */
 const useApp = () => useContext(AppContext)
 export default useApp
-

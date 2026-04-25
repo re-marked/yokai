@@ -18,9 +18,7 @@ export class FocusManager {
   private enabled = true
   private focusStack: DOMElement[] = []
 
-  constructor(
-    dispatchFocusEvent: (target: DOMElement, event: FocusEvent) => boolean,
-  ) {
+  constructor(dispatchFocusEvent: (target: DOMElement, event: FocusEvent) => boolean) {
     this.dispatchFocusEvent = dispatchFocusEvent
   }
 
@@ -56,9 +54,7 @@ export class FocusManager {
    */
   handleNodeRemoved(node: DOMElement, root: DOMElement): void {
     // Remove the node and any descendants from the stack
-    this.focusStack = this.focusStack.filter(
-      n => n !== node && isInTree(n, root),
-    )
+    this.focusStack = this.focusStack.filter((n) => n !== node && isInTree(n, root))
 
     // Check if activeElement is the removed node OR a descendant
     if (!this.activeElement) return
@@ -113,9 +109,7 @@ export class FocusManager {
     const tabbable = collectTabbable(root)
     if (tabbable.length === 0) return
 
-    const currentIndex = this.activeElement
-      ? tabbable.indexOf(this.activeElement)
-      : -1
+    const currentIndex = this.activeElement ? tabbable.indexOf(this.activeElement) : -1
 
     const nextIndex =
       currentIndex === -1
@@ -179,4 +173,3 @@ export function getRootNode(node: DOMElement): DOMElement {
 export function getFocusManager(node: DOMElement): FocusManager {
   return getRootNode(node).focusManager!
 }
-

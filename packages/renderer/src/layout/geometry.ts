@@ -21,12 +21,7 @@ export type Edges = {
 /** Create uniform edges */
 export function edges(all: number): Edges
 export function edges(vertical: number, horizontal: number): Edges
-export function edges(
-  top: number,
-  right: number,
-  bottom: number,
-  left: number,
-): Edges
+export function edges(top: number, right: number, bottom: number, left: number): Edges
 export function edges(a: number, b?: number, c?: number, d?: number): Edges {
   if (b === undefined) {
     return { top: a, right: a, bottom: a, left: a }
@@ -82,12 +77,7 @@ export function clampRect(rect: Rectangle, size: Size): Rectangle {
 }
 
 export function withinBounds(size: Size, point: Point): boolean {
-  return (
-    point.x >= 0 &&
-    point.y >= 0 &&
-    point.x < size.width &&
-    point.y < size.height
-  )
+  return point.x >= 0 && point.y >= 0 && point.x < size.width && point.y < size.height
 }
 
 export function clamp(value: number, min?: number, max?: number): number {
@@ -95,4 +85,3 @@ export function clamp(value: number, min?: number, max?: number): number {
   if (max !== undefined && value > max) return max
   return value
 }
-

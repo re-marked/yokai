@@ -6,4 +6,3 @@ import StdinContext from '../components/StdinContext'
  */
 const useStdin = () => useContext(StdinContext)
 export default useStdin
-

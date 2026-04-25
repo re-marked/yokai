@@ -26,17 +26,13 @@ function isEndCode(code: AnsiCode): boolean {
 }
 
 function filterStartCodes(codes: AnsiCode[]): AnsiCode[] {
-  return codes.filter(c => !isEndCode(c))
+  return codes.filter((c) => !isEndCode(c))
 }
 
 /**
  * Slice a string containing ANSI escape codes by display width.
  */
-export default function sliceAnsi(
-  str: string,
-  start: number,
-  end?: number,
-): string {
+export default function sliceAnsi(str: string, start: number, end?: number): string {
   const tokens = tokenize(str)
   let activeCodes: AnsiCode[] = []
   let position = 0

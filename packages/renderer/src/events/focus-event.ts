@@ -11,12 +11,8 @@ import { type EventTarget, TerminalEvent } from './terminal-event'
 export class FocusEvent extends TerminalEvent {
   readonly relatedTarget: EventTarget | null
 
-  constructor(
-    type: 'focus' | 'blur',
-    relatedTarget: EventTarget | null = null,
-  ) {
+  constructor(type: 'focus' | 'blur', relatedTarget: EventTarget | null = null) {
     super(type, { bubbles: true, cancelable: false })
     this.relatedTarget = relatedTarget
   }
 }
-

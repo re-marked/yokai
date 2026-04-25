@@ -12,11 +12,7 @@ function sliceFit(text: string, start: number, end: number): string {
   return stringWidth(s) > end - start ? sliceAnsi(text, start, end - 1) : s
 }
 
-function truncate(
-  text: string,
-  columns: number,
-  position: 'start' | 'middle' | 'end',
-): string {
+function truncate(text: string, columns: number, position: 'start' | 'middle' | 'end'): string {
   if (columns < 1) return ''
   if (columns === 1) return ELLIPSIS
 
@@ -29,9 +25,7 @@ function truncate(
   if (position === 'middle') {
     const half = Math.floor(columns / 2)
     return (
-      sliceFit(text, 0, half) +
-      ELLIPSIS +
-      sliceFit(text, length - (columns - half) + 1, length)
+      sliceFit(text, 0, half) + ELLIPSIS + sliceFit(text, length - (columns - half) + 1, length)
     )
   }
   return sliceFit(text, 0, columns - 1) + ELLIPSIS
@@ -72,4 +66,3 @@ export default function wrapText(
 
   return text
 }
-
