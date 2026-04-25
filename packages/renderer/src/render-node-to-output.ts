@@ -515,7 +515,7 @@ function renderNodeToOutput(
       // Pre-rendered ANSI content. The producer already wrapped to width and
       // emitted terminal-ready escape codes. Skip squash, measure, wrap, and
       // style re-application — output.write() parses ANSI directly into cells.
-      const text = node.attributes['rawText'] as string
+      const text = node.attributes.rawText as string
       if (text) {
         output.write(x, y, text)
       }
@@ -713,7 +713,7 @@ function renderNodeToOutput(
         // active text selection by the same delta (native terminal behavior:
         // view keeps scrolling, highlight walks up with the text).
         const scrollTopBeforeFollow = node.scrollTop ?? 0
-        const sticky = node.stickyScroll ?? Boolean(node.attributes['stickyScroll'])
+        const sticky = node.stickyScroll ?? Boolean(node.attributes.stickyScroll)
         const prevMaxScroll = Math.max(0, prevScrollHeight - prevInnerHeight)
         // Positional check only valid when content grew — virtualization can
         // transiently SHRINK scrollHeight (tail unmount + stale heightCache

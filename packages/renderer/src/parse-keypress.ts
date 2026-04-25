@@ -4,7 +4,7 @@
  * Uses the termio tokenizer for escape sequence boundary detection,
  * then interprets sequences as keypresses.
  */
-import { Buffer } from 'buffer'
+import { Buffer } from 'node:buffer'
 import { PASTE_END, PASTE_START } from './termio/csi'
 import { type Tokenizer, createTokenizer } from './termio/tokenize'
 
@@ -197,17 +197,17 @@ function inputToString(input: Buffer | string): string {
   if (Buffer.isBuffer(input)) {
     if (input[0]! > 127 && input[1] === undefined) {
       ;(input[0] as unknown as number) -= 128
-      return '\x1b' + String(input)
-    } else {
-      return String(input)
+      return `\x1b${String(input)}`
     }
-  } else if (input !== undefined && typeof input !== 'string') {
     return String(input)
-  } else if (!input) {
-    return ''
-  } else {
-    return input
   }
+  if (input !== undefined && typeof input !== 'string') {
+    return String(input)
+  }
+  if (!input) {
+    return ''
+  }
+  return input
 }
 
 export function parseMultipleKeypresses(
@@ -274,7 +274,7 @@ export function parseMultipleKeypresses(
         // range would match typed input like `[MAX]` batched into one read
         // and silently drop it as a phantom click. Click/drag orphans leak
         // as visible garbage instead; deletable garbage beats silent loss.
-        const resynthesized = '\x1b' + token.value
+        const resynthesized = `\x1b${token.value}`
         const mouse = parseMouseEvent(resynthesized)
         keys.push(mouse ?? parseKeypress(resynthesized))
       } else {

@@ -41,7 +41,7 @@ export function squashTextNodesToSegments(
     } else if (childNode.nodeName === 'ink-text' || childNode.nodeName === 'ink-virtual-text') {
       squashTextNodesToSegments(childNode, mergedStyles, inheritedHyperlink, out)
     } else if (childNode.nodeName === 'ink-link') {
-      const href = childNode.attributes['href'] as string | undefined
+      const href = childNode.attributes.href as string | undefined
       squashTextNodesToSegments(childNode, mergedStyles, href || inheritedHyperlink, out)
     }
   }

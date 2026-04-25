@@ -1,4 +1,4 @@
-import type { Writable } from 'stream'
+import type { Writable } from 'node:stream'
 import { env, gte } from '@yokai/shared'
 import { coerce } from 'semver'
 import { getClearTerminalSequence } from './clearTerminal'
