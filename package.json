@@ -14,7 +14,8 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "vitest run",
-    "demo:drag": "pnpm --filter @yokai-example/drag start"
+    "demo:drag": "pnpm --filter @yokai-example/drag start",
+    "demo:constrained-drag": "pnpm --filter @yokai-example/constrained-drag start"
   },
   "engines": {
     "node": ">=22.0.0"
