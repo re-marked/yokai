@@ -3,6 +3,7 @@ import type { DOMElement } from '../dom'
 import type { ClickEvent } from '../events/click-event'
 import type { FocusEvent } from '../events/focus-event'
 import type { KeyboardEvent } from '../events/keyboard-event'
+import type { MouseDownEvent } from '../events/mouse-event'
 import type { Styles, TextStyles } from '../styles'
 
 type InkBoxProps = {
@@ -17,6 +18,7 @@ type InkBoxProps = {
   onBlurCapture?: (event: FocusEvent) => void
   onKeyDown?: (event: KeyboardEvent) => void
   onKeyDownCapture?: (event: KeyboardEvent) => void
+  onMouseDown?: (event: MouseDownEvent) => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   stickyScroll?: boolean

@@ -1,6 +1,7 @@
 import type { ClickEvent } from './click-event'
 import type { FocusEvent } from './focus-event'
 import type { KeyboardEvent } from './keyboard-event'
+import type { MouseDownEvent } from './mouse-event'
 import type { PasteEvent } from './paste-event'
 import type { ResizeEvent } from './resize-event'
 
@@ -9,6 +10,7 @@ type FocusEventHandler = (event: FocusEvent) => void
 type PasteEventHandler = (event: PasteEvent) => void
 type ResizeEventHandler = (event: ResizeEvent) => void
 type ClickEventHandler = (event: ClickEvent) => void
+type MouseDownEventHandler = (event: MouseDownEvent) => void
 type HoverEventHandler = () => void
 
 /**
@@ -33,6 +35,18 @@ export type EventHandlerProps = {
   onResize?: ResizeEventHandler
 
   onClick?: ClickEventHandler
+  /**
+   * Fires on mouse press over this element. Bubbles from the deepest
+   * hit node up through ancestors. Inside the handler, call
+   * `event.captureGesture({ onMove, onUp })` to claim subsequent
+   * mouse-motion events and the eventual release for this drag — the
+   * renderer will route motion events to your `onMove` handler instead
+   * of extending the text selection. See MouseDownEvent.captureGesture
+   * docs for the full lifecycle.
+   *
+   * Only fires inside `<AlternateScreen>` where mouse tracking is on.
+   */
+  onMouseDown?: MouseDownEventHandler
   onMouseEnter?: HoverEventHandler
   onMouseLeave?: HoverEventHandler
 }
@@ -51,6 +65,7 @@ export const HANDLER_FOR_EVENT: Record<
   paste: { bubble: 'onPaste', capture: 'onPasteCapture' },
   resize: { bubble: 'onResize' },
   click: { bubble: 'onClick' },
+  mousedown: { bubble: 'onMouseDown' },
 }
 
 /**
@@ -68,6 +83,7 @@ export const EVENT_HANDLER_PROPS = new Set<string>([
   'onPasteCapture',
   'onResize',
   'onClick',
+  'onMouseDown',
   'onMouseEnter',
   'onMouseLeave',
 ])

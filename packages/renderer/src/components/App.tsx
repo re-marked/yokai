@@ -2,6 +2,7 @@ import { isEnvTruthy, logError, logForDebugging } from '@yokai/shared'
 import { PureComponent, type ReactNode } from 'react'
 import { EventEmitter } from '../events/emitter'
 import { InputEvent } from '../events/input-event'
+import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
 import {
   INITIAL_STATE,
@@ -61,6 +62,11 @@ type Props = {
   // No-op (returns false) outside fullscreen mode (Ink.dispatchClick
   // gates on altScreenActive).
   readonly onClickAt: (col: number, row: number) => boolean
+  // Dispatch a mousedown at (col, row) — hit-tests the DOM tree and
+  // bubbles onMouseDown handlers. Returns the GestureHandlers if any
+  // handler called event.captureGesture(...), or null. Returns null
+  // (no-op) outside fullscreen.
+  readonly onMouseDownAt: (col: number, row: number, button: number) => GestureHandlers | null
   // Dispatch hover (onMouseEnter/onMouseLeave) as the pointer moves over
   // DOM elements. Called for mode-1003 motion events with no button held.
   // No-op outside fullscreen (Ink.dispatchHover gates on altScreenActive).
@@ -149,6 +155,18 @@ export default class App extends PureComponent<Props, State> {
   // repeat events (drag-then-release at same cell, etc.).
   lastHoverCol = -1
   lastHoverRow = -1
+
+  // Active drag-style gesture, set by an onMouseDown handler calling
+  // event.captureGesture(...). When non-null:
+  //   - subsequent drag-motion events route to activeGesture.onMove
+  //     instead of extending the text selection
+  //   - the next mouse-release fires activeGesture.onUp and clears
+  //     this field (selection finish + onClick are skipped for that
+  //     release — the user dragged, didn't click)
+  // Cleared on FOCUS_OUT and on no-button-motion lost-release recovery
+  // alongside the selection finish, so a drag aborted by leaving the
+  // window doesn't leave a dangling capture.
+  activeGesture: GestureHandlers | null = null
 
   // Timestamp of last stdin chunk. Used to detect long gaps (tmux attach,
   // ssh reconnect, laptop wake) and trigger terminal mode re-assert.
@@ -519,6 +537,14 @@ function processKeysInBatch(
         finishSelection(app.props.selection)
         app.props.onSelectionChange()
       }
+      // Same recovery for an active gesture — the user switched apps
+      // mid-drag, so the drag is implicitly cancelled. Fire onUp with
+      // the last known cursor position; handlers can use the focus-out
+      // signal to treat it as cancellation rather than commit.
+      if (app.activeGesture) {
+        app.activeGesture.onUp?.(new MouseUpEvent(app.lastHoverCol, app.lastHoverRow, 0))
+        app.activeGesture = null
+      }
       const event = new TerminalFocusEvent('terminalblur')
       app.internal_eventEmitter.emit('terminalblur', event)
       continue
@@ -566,6 +592,13 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
         finishSelection(sel)
         app.props.onSelectionChange()
       }
+      // Same lost-release drain for an active gesture: the cursor returned
+      // to the window with no button held, so the drag is over. Fire onUp
+      // at the cursor position so the gesture initiator can clean up.
+      if (app.activeGesture) {
+        app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+        app.activeGesture = null
+      }
       if (col === app.lastHoverCol && row === app.lastHoverRow) return
       app.lastHoverCol = col
       app.lastHoverRow = row
@@ -578,8 +611,16 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       return
     }
     if ((m.button & 0x20) !== 0) {
-      // Drag motion: mode-aware extension (char/word/line). onSelectionDrag
-      // calls notifySelectionChange internally — no extra onSelectionChange.
+      // Drag motion: route to active gesture (drag-and-drop) or extend
+      // selection (default). The gesture takes priority because the user
+      // explicitly opted out of selection by capturing on press; firing
+      // both would also trail a selection highlight underneath the drag.
+      if (app.activeGesture) {
+        app.activeGesture.onMove?.(new MouseMoveEvent(col, row, m.button))
+        return
+      }
+      // onSelectionDrag calls notifySelectionChange internally — no extra
+      // onSelectionChange.
       app.props.onSelectionDrag(col, row)
       return
     }
@@ -591,6 +632,29 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     if (sel.isDragging) {
       finishSelection(sel)
       app.props.onSelectionChange()
+    }
+    // Same lost-release recovery for an active gesture: the captured
+    // drag effectively ended when we missed the release. Fire onUp at
+    // the new press position so the gesture initiator can clean up,
+    // then clear capture so this fresh press starts cleanly.
+    if (app.activeGesture) {
+      app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+      app.activeGesture = null
+    }
+    // Dispatch onMouseDown to the DOM tree. If a handler called
+    // event.captureGesture(...), store the handlers as the active
+    // gesture and short-circuit — no multi-click bookkeeping, no
+    // selection start, no click on release. The user is dragging, not
+    // clicking, and we let the captured gesture own the entire
+    // press-drag-release sequence.
+    const gesture = app.props.onMouseDownAt(col, row, m.button)
+    if (gesture) {
+      app.activeGesture = gesture
+      // Reset multi-click chain too — a captured gesture interrupts
+      // any in-flight click cadence (releasing a drag at the same cell
+      // as a prior click shouldn't compose into a double-click).
+      app.clickCount = 0
+      return
     }
     // Fresh left press. Detect multi-click HERE (not on release) so the
     // word/line highlight appears immediately and a subsequent drag can
@@ -628,6 +692,16 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     return
   }
 
+  // Release: end the active gesture (if any) FIRST. The user dragged a
+  // captured object — not a text selection or a click — so the normal
+  // selection-finish + onClick paths must not run for this release.
+  // Fires onUp at the cursor's release position (handlers can hit-test
+  // for a drop target from there) and clears the capture.
+  if (app.activeGesture) {
+    app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+    app.activeGesture = null
+    return
+  }
   // Release: end the drag even for non-zero button codes. Some terminals
   // encode release with the motion bit or button=3 "no button" (carried
   // over from pre-SGR X10 encoding) — filtering those would orphan

@@ -1,6 +1,7 @@
 import type { DOMElement } from './dom'
 import { ClickEvent } from './events/click-event'
 import type { EventHandlerProps } from './events/event-handlers'
+import { type GestureHandlers, MouseDownEvent } from './events/mouse-event'
 import { nodeCache } from './node-cache'
 
 /**
@@ -75,6 +76,50 @@ export function dispatchClick(
     target = target.parentNode
   }
   return handled
+}
+
+/**
+ * Hit-test the root at (col, row) and bubble a MouseDownEvent from the
+ * deepest containing node up through parentNode. Only nodes with an
+ * onMouseDown handler fire. Stops when a handler calls
+ * stopImmediatePropagation().
+ *
+ * Returns the GestureHandlers installed via event.captureGesture() if
+ * any handler called it, or null otherwise. The caller (App) is
+ * responsible for storing those handlers as the active gesture and
+ * routing subsequent motion + release events to them.
+ *
+ * Unlike dispatchClick, this does NOT trigger click-to-focus. Focus
+ * still moves on click (i.e. on release after a non-drag press), so
+ * the focus side-effect remains tied to the user's intent of "I
+ * pressed and released here without dragging."
+ */
+export function dispatchMouseDown(
+  root: DOMElement,
+  col: number,
+  row: number,
+  button: number,
+): GestureHandlers | null {
+  let target: DOMElement | undefined = hitTest(root, col, row) ?? undefined
+  if (!target) return null
+
+  const event = new MouseDownEvent(col, row, button)
+  while (target) {
+    const handler = target._eventHandlers?.onMouseDown as
+      | ((event: MouseDownEvent) => void)
+      | undefined
+    if (handler) {
+      const rect = nodeCache.get(target)
+      if (rect) {
+        event.localCol = col - rect.x
+        event.localRow = row - rect.y
+      }
+      handler(event)
+      if (event.didStopImmediatePropagation()) break
+    }
+    target = target.parentNode
+  }
+  return event._capturedHandlers
 }
 
 /**

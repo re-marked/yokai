@@ -5,6 +5,7 @@ import type { DOMElement } from '../dom.js'
 import type { ClickEvent } from '../events/click-event.js'
 import type { FocusEvent } from '../events/focus-event.js'
 import type { KeyboardEvent } from '../events/keyboard-event.js'
+import type { MouseDownEvent } from '../events/mouse-event.js'
 import type { Styles } from '../styles.js'
 import * as warn from '../warn.js'
 
@@ -35,6 +36,16 @@ export type Props = Except<Styles, 'textWrap'> & {
   onKeyDown?: (event: KeyboardEvent) => void
   onKeyDownCapture?: (event: KeyboardEvent) => void
   /**
+   * Fired on mouse press over this Box (left button). Bubbles like
+   * onClick. Inside the handler, call
+   * `event.captureGesture({ onMove, onUp })` to start a drag — the
+   * renderer will route subsequent mouse-motion events to your `onMove`
+   * handler (instead of extending the text selection) and the eventual
+   * release to `onUp`. Only works inside `<AlternateScreen>` where
+   * mouse tracking is enabled.
+   */
+  onMouseDown?: (event: MouseDownEvent) => void
+  /**
    * Fired when the mouse moves into this Box's rendered rect. Like DOM
    * `mouseenter`, does NOT bubble — moving between children does not
    * re-fire on the parent. Only works inside `<AlternateScreen>` where
@@ -62,6 +73,7 @@ function Box({
   onFocusCapture,
   onBlur,
   onBlurCapture,
+  onMouseDown,
   onMouseEnter,
   onMouseLeave,
   onKeyDown,
@@ -97,6 +109,7 @@ function Box({
       onFocusCapture={onFocusCapture}
       onBlur={onBlur}
       onBlurCapture={onBlurCapture}
+      onMouseDown={onMouseDown}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onKeyDown={onKeyDown}
