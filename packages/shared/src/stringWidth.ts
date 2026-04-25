@@ -5,10 +5,14 @@ import { getGraphemeSegmenter } from './intl.js'
 
 const EMOJI_REGEX = emojiRegex()
 
-function stringWidthJavaScript(str: string): number {
-  if (typeof str !== 'string' || str.length === 0) {
+function stringWidthJavaScript(input: string): number {
+  if (typeof input !== 'string' || input.length === 0) {
     return 0
   }
+  // Local mutable copy: the ANSI-strip branch below reassigns. Avoiding
+  // parameter reassignment keeps the signature's intent clear (input is
+  // never observably mutated for callers) and satisfies noParameterAssign.
+  let str = input
 
   let isPureAscii = true
   for (let i = 0; i < str.length; i++) {
