@@ -2,7 +2,7 @@
 
 React terminal renderer — pure TypeScript Yoga layout, diff-based rendering, ScrollBox.
 
-Built for [Claude Corp](https://github.com/re-marked/claude-corp).
+Built for [Claude Corp](https://github.com/re-marked/claude-corp), forked from [claude-code-kit](https://github.com/minnzen/claude-code-kit)
 
 ## Packages
 
