@@ -109,9 +109,11 @@ function isDefined(n: number): boolean {
   return !isNaN(n)
 }
 
-// NaN-safe equality for layout-cache input comparison
+// NaN-safe equality for layout-cache input comparison.
+// `a === b` short-circuits the common case; the explicit isNaN check on
+// both sides handles NaN === NaN being false in JS.
 function sameFloat(a: number, b: number): boolean {
-  return a === b || (a !== a && b !== b)
+  return a === b || (Number.isNaN(a) && Number.isNaN(b))
 }
 
 // --
