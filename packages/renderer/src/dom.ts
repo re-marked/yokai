@@ -7,6 +7,7 @@ import { addPendingClear, nodeCache } from './node-cache'
 import squashTextNodes from './squash-text-nodes'
 import type { Styles, TextStyles } from './styles'
 import { expandTabs } from './tabstops'
+import * as warn from './warn'
 import wrapText from './wrap-text'
 
 type InkNode = {
@@ -247,6 +248,11 @@ export const setStyle = (node: DOMNode, style: Styles): void => {
   if (stylesEqual(node.style, style)) {
     return
   }
+  // Fires only on actual style changes (after the equality early-return),
+  // so this isn't a per-frame spam source even when React rebuilds the
+  // style object on every render. Gated by logForDebugging — no-op in
+  // production unless debug logging is explicitly enabled.
+  warn.ifZIndexWithoutAbsolute(style)
   node.style = style
   markDirty(node)
 }
