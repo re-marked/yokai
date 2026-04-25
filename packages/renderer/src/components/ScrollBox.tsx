@@ -184,7 +184,7 @@ function ScrollBox({
       isSticky() {
         const el = domRef.current
         if (!el) return false
-        return el.stickyScroll ?? Boolean(el.attributes['stickyScroll'])
+        return el.stickyScroll ?? Boolean(el.attributes.stickyScroll)
       },
       subscribe(listener: () => void) {
         listenersRef.current.add(listener)

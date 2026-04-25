@@ -55,10 +55,9 @@ export function getClearTerminalSequence(): string {
   if (process.platform === 'win32') {
     if (isModernWindowsTerminal()) {
       return ERASE_SCREEN + ERASE_SCROLLBACK + CURSOR_HOME
-    } else {
-      // Legacy Windows console - can't clear scrollback
-      return ERASE_SCREEN + CURSOR_HOME_WINDOWS
     }
+    // Legacy Windows console - can't clear scrollback
+    return ERASE_SCREEN + CURSOR_HOME_WINDOWS
   }
   return ERASE_SCREEN + ERASE_SCROLLBACK + CURSOR_HOME
 }

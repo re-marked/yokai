@@ -30,8 +30,8 @@ function needsBidi(): boolean {
   if (needsSoftwareBidi === undefined) {
     needsSoftwareBidi =
       process.platform === 'win32' ||
-      typeof process.env['WT_SESSION'] === 'string' || // WSL in Windows Terminal
-      process.env['TERM_PROGRAM'] === 'vscode' // VS Code integrated terminal (xterm.js)
+      typeof process.env.WT_SESSION === 'string' || // WSL in Windows Terminal
+      process.env.TERM_PROGRAM === 'vscode' // VS Code integrated terminal (xterm.js)
   }
   return needsSoftwareBidi
 }

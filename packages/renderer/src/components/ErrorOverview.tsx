@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { readFileSync } from 'node:fs'
 import codeExcerpt, { type CodeExcerpt } from 'code-excerpt'
 import StackUtils from 'stack-utils'
 import Box from './Box'
@@ -82,7 +82,7 @@ export default function ErrorOverview({ error }: Props) {
                 backgroundColor={line_0 === origin.line ? 'ansi:red' : undefined}
                 color={line_0 === origin.line ? 'ansi:white' : undefined}
               >
-                {' ' + value}
+                {` ${value}`}
               </Text>
             </Box>
           ))}
