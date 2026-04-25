@@ -13,9 +13,13 @@
     "build": "pnpm --filter @yokai/shared build && pnpm --filter @yokai/renderer build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "vitest": "^2.1.0"
   }
 }
