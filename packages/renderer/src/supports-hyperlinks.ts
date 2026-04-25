@@ -23,11 +23,8 @@ type SupportsHyperlinksOptions = {
  * Extends the supports-hyperlinks library with additional terminal detection.
  * @param options Optional overrides for testing (env, stdoutSupported)
  */
-export function supportsHyperlinks(
-  options?: SupportsHyperlinksOptions,
-): boolean {
-  const stdoutSupported =
-    options?.stdoutSupported ?? supportsHyperlinksLib.stdout
+export function supportsHyperlinks(options?: SupportsHyperlinksOptions): boolean {
+  const stdoutSupported = options?.stdoutSupported ?? supportsHyperlinksLib.stdout
   if (stdoutSupported) {
     return true
   }
@@ -55,4 +52,3 @@ export function supportsHyperlinks(
 
   return false
 }
-

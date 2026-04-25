@@ -145,14 +145,12 @@ export class TerminalQuerier {
    * Never rejects; never times out on its own. If you never call flush()
    * and the terminal doesn't respond, the promise remains pending.
    */
-  send<T extends TerminalResponse>(
-    query: TerminalQuery<T>,
-  ): Promise<T | undefined> {
-    return new Promise(resolve => {
+  send<T extends TerminalResponse>(query: TerminalQuery<T>): Promise<T | undefined> {
+    return new Promise((resolve) => {
       this.queue.push({
         kind: 'query',
         match: query.match,
-        resolve: r => resolve(r as T | undefined),
+        resolve: (r) => resolve(r as T | undefined),
       })
       this.stdout.write(query.request)
     })
@@ -168,7 +166,7 @@ export class TerminalQuerier {
    * Safe to call with no pending queries — still waits for a round-trip.
    */
   flush(): Promise<void> {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       this.queue.push({ kind: 'sentinel', resolve })
       this.stdout.write(SENTINEL)
     })
@@ -193,7 +191,7 @@ export class TerminalQuerier {
    * - Unsolicited responses (no match, no sentinel) are silently dropped.
    */
   onResponse(r: TerminalResponse): void {
-    const idx = this.queue.findIndex(p => p.kind === 'query' && p.match(r))
+    const idx = this.queue.findIndex((p) => p.kind === 'query' && p.match(r))
     if (idx !== -1) {
       const [q] = this.queue.splice(idx, 1)
       if (q?.kind === 'query') q.resolve(r)
@@ -201,7 +199,7 @@ export class TerminalQuerier {
     }
 
     if (r.type === 'da1') {
-      const s = this.queue.findIndex(p => p.kind === 'sentinel')
+      const s = this.queue.findIndex((p) => p.kind === 'sentinel')
       if (s === -1) return
       for (const p of this.queue.splice(0, s + 1)) {
         if (p.kind === 'query') p.resolve(undefined)
@@ -210,4 +208,3 @@ export class TerminalQuerier {
     }
   }
 }
-

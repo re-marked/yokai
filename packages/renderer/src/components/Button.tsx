@@ -1,10 +1,4 @@
-import React, {
-  type Ref,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
+import React, { type Ref, useCallback, useEffect, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../dom.js'
 import type { ClickEvent } from '../events/click-event.js'
@@ -71,11 +65,7 @@ function Button({
         setIsActive(true)
         onAction()
         if (activeTimer.current) clearTimeout(activeTimer.current)
-        activeTimer.current = setTimeout(
-          setter => setter(false),
-          100,
-          setIsActive,
-        )
+        activeTimer.current = setTimeout((setter) => setter(false), 100, setIsActive)
       }
     },
     [onAction],

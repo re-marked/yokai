@@ -3,12 +3,7 @@
  * Detects modern terminals that support ESC[3J for clearing scrollback.
  */
 
-import {
-  CURSOR_HOME,
-  csi,
-  ERASE_SCREEN,
-  ERASE_SCROLLBACK,
-} from './termio/csi'
+import { CURSOR_HOME, csi, ERASE_SCREEN, ERASE_SCROLLBACK } from './termio/csi'
 
 // HVP (Horizontal Vertical Position) - legacy Windows cursor home
 const CURSOR_HOME_WINDOWS = csi(0, 'f')
@@ -72,4 +67,3 @@ export function getClearTerminalSequence(): string {
  * Clears the terminal screen. On supported terminals, also clears scrollback.
  */
 export const clearTerminal = getClearTerminalSequence()
-

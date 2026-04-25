@@ -40,13 +40,7 @@ export type Color =
 // =============================================================================
 
 /** Underline style variants */
-export type UnderlineStyle =
-  | 'none'
-  | 'single'
-  | 'double'
-  | 'curly'
-  | 'dotted'
-  | 'dashed'
+export type UnderlineStyle = 'none' | 'single' | 'double' | 'curly' | 'dotted' | 'dashed'
 
 /** Text style attributes - represents current styling state */
 export type TextStyle = {
@@ -109,11 +103,7 @@ export function colorsEqual(a: Color, b: Color): boolean {
     case 'indexed':
       return a.index === (b as typeof a).index
     case 'rgb':
-      return (
-        a.r === (b as typeof a).r &&
-        a.g === (b as typeof a).g &&
-        a.b === (b as typeof a).b
-      )
+      return a.r === (b as typeof a).r && a.g === (b as typeof a).g && a.b === (b as typeof a).b
     case 'default':
       return true
   }
@@ -234,4 +224,3 @@ export type Action =
   | { type: 'bell' }
   | { type: 'reset' } // Full terminal reset (ESC c)
   | { type: 'unknown'; sequence: string } // Unrecognized sequence
-

@@ -203,4 +203,3 @@ function isZeroWidth(codePoint: number): boolean {
 }
 
 export const stringWidth: (str: string) => number = stringWidthJavaScript
-

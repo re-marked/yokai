@@ -9,11 +9,7 @@ export type Props = {
   readonly fallback?: ReactNode
 }
 
-export default function Link({
-  children,
-  url,
-  fallback,
-}: Props): React.ReactNode {
+export default function Link({ children, url, fallback }: Props): React.ReactNode {
   // Use children if provided, otherwise display the URL
   const content = children ?? url
 

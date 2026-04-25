@@ -109,19 +109,13 @@ function intersectClip(parent: Clip | undefined, child: Clip): Clip {
   }
 }
 
-function maxDefined(
-  a: number | undefined,
-  b: number | undefined,
-): number | undefined {
+function maxDefined(a: number | undefined, b: number | undefined): number | undefined {
   if (a === undefined) return b
   if (b === undefined) return a
   return Math.max(a, b)
 }
 
-function minDefined(
-  a: number | undefined,
-  b: number | undefined,
-): number | undefined {
+function minDefined(a: number | undefined, b: number | undefined): number | undefined {
   if (a === undefined) return b
   if (b === undefined) return a
   return Math.min(a, b)
@@ -350,12 +344,7 @@ export default class Output {
             src.height,
             clip?.y2 ?? Infinity,
           )
-          const maxX = Math.min(
-            regionX + regionWidth,
-            screenWidth,
-            src.width,
-            clip?.x2 ?? Infinity,
-          )
+          const maxX = Math.min(regionX + regionWidth, screenWidth, src.width, clip?.x2 ?? Infinity)
           if (startX >= maxX || startY >= maxY) continue
           // Skip rows covered by an absolute-positioned node's clear.
           // Absolute nodes overlay normal-flow siblings, so prevScreen in
@@ -371,11 +360,7 @@ export default class Output {
             const excluded =
               row < maxY &&
               absoluteClears.some(
-                r =>
-                  row >= r.y &&
-                  row < r.y + r.height &&
-                  startX >= r.x &&
-                  maxX <= r.x + r.width,
+                (r) => row >= r.y && row < r.y + r.height && startX >= r.x && maxX <= r.x + r.width,
               )
             if (excluded || row === maxY) {
               if (row > rowStart) {
@@ -403,11 +388,9 @@ export default class Output {
           const clip = getCurrentClip()
 
           if (clip) {
-            const clipHorizontally =
-              typeof clip?.x1 === 'number' && typeof clip?.x2 === 'number'
+            const clipHorizontally = typeof clip?.x1 === 'number' && typeof clip?.x2 === 'number'
 
-            const clipVertically =
-              typeof clip?.y1 === 'number' && typeof clip?.y2 === 'number'
+            const clipVertically = typeof clip?.y1 === 'number' && typeof clip?.y2 === 'number'
 
             // If text is positioned outside of clipping area altogether,
             // skip to the next operation to avoid unnecessary calculations
@@ -428,7 +411,7 @@ export default class Output {
             }
 
             if (clipHorizontally) {
-              lines = lines.map(line => {
+              lines = lines.map((line) => {
                 const from = x < clip.x1! ? clip.x1! - x : 0
                 const width = stringWidth(line)
                 const to = x + width > clip.x2! ? clip.x2! - x : width
@@ -599,13 +582,8 @@ function flushBuffer(
   const hyperlink = extractHyperlinkFromStyles(styles) ?? undefined
   const hasOsc8Styles =
     hyperlink !== undefined ||
-    styles.some(
-      s =>
-        s.code.length >= OSC8_PREFIX.length && s.code.startsWith(OSC8_PREFIX),
-    )
-  const filteredStyles = hasOsc8Styles
-    ? filterOutHyperlinkStyles(styles)
-    : styles
+    styles.some((s) => s.code.length >= OSC8_PREFIX.length && s.code.startsWith(OSC8_PREFIX))
+  const filteredStyles = hasOsc8Styles ? filterOutHyperlinkStyles(styles) : styles
   const styleId = stylePool.intern(filteredStyles)
 
   for (const { segment: grapheme } of getGraphemeSegmenter().segment(buffer)) {
@@ -641,10 +619,7 @@ function writeLineToScreen(
   let characters = charCache.get(line)
   if (!characters) {
     characters = reorderBidi(
-      styledCharsWithGraphemeClustering(
-        styledCharsFromTokens(tokenize(line)),
-        stylePool,
-      ),
+      styledCharsWithGraphemeClustering(styledCharsFromTokens(tokenize(line)), stylePool),
     )
     charCache.set(line, characters)
   }
@@ -681,12 +656,7 @@ function writeLineToScreen(
       else if (codePoint === 0x1b) {
         const nextChar = characters[charIdx + 1]?.value
         const nextCode = nextChar?.codePointAt(0)
-        if (
-          nextChar === '(' ||
-          nextChar === ')' ||
-          nextChar === '*' ||
-          nextChar === '+'
-        ) {
+        if (nextChar === '(' || nextChar === ')' || nextChar === '*' || nextChar === '+') {
           // Charset selection: ESC ( X, ESC ) X, etc.
           // Skip the intermediate char and the charset designator
           charIdx += 2
@@ -734,11 +704,7 @@ function writeLineToScreen(
               }
             }
           }
-        } else if (
-          nextCode !== undefined &&
-          nextCode >= 0x30 &&
-          nextCode <= 0x7e
-        ) {
+        } else if (nextCode !== undefined && nextCode >= 0x30 && nextCode <= 0x7e) {
           // Single-character escape sequences: ESC followed by 0x30-0x7E
           // (excluding the multi-char introducers already handled above)
           // - Fp range (0x30-0x3F): ESC 7 (save cursor), ESC 8 (restore)

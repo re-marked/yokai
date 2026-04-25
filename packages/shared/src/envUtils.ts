@@ -9,9 +9,7 @@ export function isEnvTruthy(envVar: string | boolean | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(normalizedValue)
 }
 
-export function isEnvDefinedFalsy(
-  envVar: string | boolean | undefined,
-): boolean {
+export function isEnvDefinedFalsy(envVar: string | boolean | undefined): boolean {
   if (envVar === undefined) return false
   if (typeof envVar === 'boolean') return !envVar
   if (!envVar) return false

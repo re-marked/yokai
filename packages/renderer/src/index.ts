@@ -19,7 +19,9 @@ export { default as ErrorOverview } from './components/ErrorOverview'
 export { Ansi } from './Ansi'
 
 // Theme hook stub (returns [themeName, setThemeName])
-export function useTheme(): [string, (name: string) => void] { return ['default', () => {}] }
+export function useTheme(): [string, (name: string) => void] {
+  return ['default', () => {}]
+}
 
 // Hooks
 export { default as useInput } from './hooks/use-input'

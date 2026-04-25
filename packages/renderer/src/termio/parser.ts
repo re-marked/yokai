@@ -80,7 +80,7 @@ function* segmentGraphemes(str: string): Generator<Grapheme> {
 
 function parseCSIParams(paramStr: string): number[] {
   if (paramStr === '') return []
-  return paramStr.split(/[;:]/).map(s => (s === '' ? 0 : parseInt(s, 10)))
+  return paramStr.split(/[;:]/).map((s) => (s === '' ? 0 : parseInt(s, 10)))
 }
 
 /** Parse a raw CSI sequence (e.g., "\x1b[31m") into an action */
@@ -242,9 +242,7 @@ function parseCSI(rawSequence: string): Action | null {
 /**
  * Identify the type of escape sequence from its raw form.
  */
-function identifySequence(
-  seq: string,
-): 'csi' | 'osc' | 'esc' | 'ss3' | 'unknown' {
+function identifySequence(seq: string): 'csi' | 'osc' | 'esc' | 'ss3' | 'unknown' {
   if (seq.length < 2) return 'unknown'
   if (seq.charCodeAt(0) !== C0.ESC) return 'unknown'
 
@@ -392,4 +390,3 @@ export class Parser {
     }
   }
 }
-

@@ -38,24 +38,11 @@ export function squashTextNodesToSegments(
           hyperlink: inheritedHyperlink,
         })
       }
-    } else if (
-      childNode.nodeName === 'ink-text' ||
-      childNode.nodeName === 'ink-virtual-text'
-    ) {
-      squashTextNodesToSegments(
-        childNode,
-        mergedStyles,
-        inheritedHyperlink,
-        out,
-      )
+    } else if (childNode.nodeName === 'ink-text' || childNode.nodeName === 'ink-virtual-text') {
+      squashTextNodesToSegments(childNode, mergedStyles, inheritedHyperlink, out)
     } else if (childNode.nodeName === 'ink-link') {
       const href = childNode.attributes['href'] as string | undefined
-      squashTextNodesToSegments(
-        childNode,
-        mergedStyles,
-        href || inheritedHyperlink,
-        out,
-      )
+      squashTextNodesToSegments(childNode, mergedStyles, href || inheritedHyperlink, out)
     }
   }
 
@@ -76,10 +63,7 @@ function squashTextNodes(node: DOMElement): string {
 
     if (childNode.nodeName === '#text') {
       text += childNode.nodeValue
-    } else if (
-      childNode.nodeName === 'ink-text' ||
-      childNode.nodeName === 'ink-virtual-text'
-    ) {
+    } else if (childNode.nodeName === 'ink-text' || childNode.nodeName === 'ink-virtual-text') {
       text += squashTextNodes(childNode)
     } else if (childNode.nodeName === 'ink-link') {
       text += squashTextNodes(childNode)
@@ -90,4 +74,3 @@ function squashTextNodes(node: DOMElement): string {
 }
 
 export default squashTextNodes
-

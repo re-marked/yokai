@@ -6,10 +6,6 @@ type WrapAnsiOptions = {
   trim?: boolean
 }
 
-const wrapAnsi: (
-  input: string,
-  columns: number,
-  options?: WrapAnsiOptions,
-) => string = wrapAnsiNpm
+const wrapAnsi: (input: string, columns: number, options?: WrapAnsiOptions) => string = wrapAnsiNpm
 
 export { wrapAnsi }

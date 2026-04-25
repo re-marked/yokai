@@ -69,8 +69,7 @@ export type Errata = (typeof Errata)[keyof typeof Errata]
 export const ExperimentalFeature = {
   WebFlexBasis: 0,
 } as const
-export type ExperimentalFeature =
-  (typeof ExperimentalFeature)[keyof typeof ExperimentalFeature]
+export type ExperimentalFeature = (typeof ExperimentalFeature)[keyof typeof ExperimentalFeature]
 
 export const FlexDirection = {
   Column: 0,
@@ -132,4 +131,3 @@ export const Wrap = {
   WrapReverse: 2,
 } as const
 export type Wrap = (typeof Wrap)[keyof typeof Wrap]
-

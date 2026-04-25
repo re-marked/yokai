@@ -22,7 +22,7 @@ export function execFileNoThrow(
     useCwd?: boolean
   } = {},
 ): Promise<ExecResult> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const opts: ExecFileOptions & { encoding: 'utf8' } = {
       timeout: options.timeout ?? 600000,
       env: options.env,
