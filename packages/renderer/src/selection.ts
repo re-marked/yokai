@@ -111,6 +111,9 @@ export function updateSelection(
   if (!s.focus && s.anchor && s.anchor.col === col && s.anchor.row === row)
     return
   s.focus = { col, row }
+  // User moved the mouse to a new screen position — any accumulated
+  // text-relative tracking from drag-to-scroll frames no longer applies.
+  s.virtualFocusRow = undefined
 }
 
 export function finishSelection(s: SelectionState): void {

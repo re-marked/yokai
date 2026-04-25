@@ -483,6 +483,18 @@ export default class Ink {
           captureScrolledRows(this.selection, this.frontFrame.screen, viewportTop, viewportTop + delta - 1, 'above');
         }
         shiftAnchor(this.selection, -delta, viewportTop, viewportBottom);
+        // Mirror virtualAnchorRow tracking for focus so the drag→follow
+        // transition is seamless. During drag, focus stays at the mouse
+        // screen position but the TEXT under it shifts by -delta each
+        // scroll frame. Without this, shiftSelectionForFollow on the first
+        // post-release frame reads `virtualFocusRow ?? focus.row` = the raw
+        // mouse row, missing the accumulated drag-phase scroll, and the
+        // focus lands delta rows too low. updateSelection clears this when
+        // the user actually moves the mouse (new screen position resets debt).
+        if (this.selection.focus) {
+          const rawFocus = (this.selection.virtualFocusRow ?? this.selection.focus.row) - delta;
+          this.selection.virtualFocusRow = rawFocus < viewportTop || rawFocus > viewportBottom ? rawFocus : undefined;
+        }
       } else if (
       // Flag-3 guard: the anchor check above only proves ONE endpoint is
       // on scrollbox content. A drag from row 3 (scrollbox) into the
@@ -1476,11 +1488,14 @@ export default class Ink {
     // terminals that don't support them.
     /* eslint-disable custom-rules/no-sync-fs -- process exiting; async writes would be dropped */
     if (this.options.stdout.isTTY) {
-      if (this.altScreenActive) {
-        // <AlternateScreen>'s unmount effect won't run during signal-exit.
-        // Exit alt screen FIRST so other cleanup sequences go to the main screen.
-        writeSync(1, EXIT_ALT_SCREEN);
-      }
+      // Exit alt screen FIRST so all subsequent cleanup sequences go to the
+      // main screen. Unconditional for the same reason as DISABLE_MOUSE_TRACKING
+      // below: altScreenActive can be stale if AlternateScreen's unmount (which
+      // clears the flag) raced a blocked event loop + SIGINT. ?1049l is a no-op
+      // on terminals already on the main screen, so sending it unconditionally
+      // is safe. <AlternateScreen>'s unmount effect won't run during signal-exit,
+      // so this is the only guaranteed cleanup path.
+      writeSync(1, EXIT_ALT_SCREEN);
       // Disable mouse tracking — unconditional because altScreenActive can be
       // stale if AlternateScreen's unmount (which flips the flag) raced a
       // blocked event loop + SIGINT. No-op if tracking was never enabled.
