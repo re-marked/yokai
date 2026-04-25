@@ -66,6 +66,7 @@ function Draggable({
     })
   }
 
+  const fillColor = isDragging ? 'yellow' : color
   return (
     <Box
       position="absolute"
@@ -75,11 +76,18 @@ function Draggable({
       height={3}
       zIndex={10}
       borderStyle="single"
-      borderColor={isDragging ? 'yellow' : color}
+      borderColor={fillColor}
+      backgroundColor={fillColor}
       onMouseDown={handleMouseDown}
     >
-      <Box paddingX={1} flexGrow={1} justifyContent="center" alignItems="center">
-        <Text color={isDragging ? 'yellow' : color} bold={isDragging}>
+      <Box
+        paddingX={1}
+        flexGrow={1}
+        justifyContent="center"
+        alignItems="center"
+        backgroundColor={fillColor}
+      >
+        <Text color="black" bold backgroundColor={fillColor}>
           {isDragging ? `▶ ${label} ◀` : label}
         </Text>
       </Box>
