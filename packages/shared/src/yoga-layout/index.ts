@@ -84,8 +84,8 @@ export type Value = {
   value: number
 }
 
-const UNDEFINED_VALUE: Value = { unit: Unit.Undefined, value: NaN }
-const AUTO_VALUE: Value = { unit: Unit.Auto, value: NaN }
+const UNDEFINED_VALUE: Value = { unit: Unit.Undefined, value: Number.NaN }
+const AUTO_VALUE: Value = { unit: Unit.Auto, value: Number.NaN }
 
 function pointValue(v: number): Value {
   return { unit: Unit.Point, value: v }
