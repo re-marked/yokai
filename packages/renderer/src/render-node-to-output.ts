@@ -344,19 +344,16 @@ function wrapWithSoftWrap(
 // so their coordinates will be relative to the first node anyway
 function applyPaddingToText(node: DOMElement, text: string, softWrap?: boolean[]): string {
   const yogaNode = node.childNodes[0]?.yogaNode
+  if (!yogaNode) return text
 
-  if (yogaNode) {
-    const offsetX = yogaNode.getComputedLeft()
-    const offsetY = yogaNode.getComputedTop()
-    text = '\n'.repeat(offsetY) + indentString(text, offsetX)
-    if (softWrap && offsetY > 0) {
-      // Prepend `false` for each padding line so indices stay aligned
-      // with text.split('\n'). Mutate in place — caller owns the array.
-      softWrap.unshift(...Array<boolean>(offsetY).fill(false))
-    }
+  const offsetX = yogaNode.getComputedLeft()
+  const offsetY = yogaNode.getComputedTop()
+  if (softWrap && offsetY > 0) {
+    // Prepend `false` for each padding line so indices stay aligned
+    // with text.split('\n'). Mutate in place — caller owns the array.
+    softWrap.unshift(...Array<boolean>(offsetY).fill(false))
   }
-
-  return text
+  return '\n'.repeat(offsetY) + indentString(text, offsetX)
 }
 
 // After nodes are laid out, render each to output object, which later gets rendered to terminal

@@ -440,15 +440,14 @@ export function createScreen(
   warn.ifNotInteger(width, 'createScreen width')
   warn.ifNotInteger(height, 'createScreen height')
 
-  // Ensure width and height are valid integers to prevent crashes
-  if (!Number.isInteger(width) || width < 0) {
-    width = Math.max(0, Math.floor(width) || 0)
-  }
-  if (!Number.isInteger(height) || height < 0) {
-    height = Math.max(0, Math.floor(height) || 0)
-  }
+  // Sanitize: clamp to non-negative integers. Yoga can hand us NaN or
+  // negatives in degenerate layouts; passing those into typed-array
+  // allocation crashes. Locals instead of param reassign for clarity.
+  const w = Number.isInteger(width) && width >= 0 ? width : Math.max(0, Math.floor(width) || 0)
+  const h =
+    Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
 
-  const size = width * height
+  const size = w * h
 
   // Allocate one buffer, two views: Int32Array for per-word access,
   // BigInt64Array for bulk fill in resetScreen/clearRegion.
@@ -459,8 +458,8 @@ export function createScreen(
   const cells64 = new BigInt64Array(buf)
 
   return {
-    width,
-    height,
+    width: w,
+    height: h,
     cells,
     cells64,
     charPool,
@@ -468,7 +467,7 @@ export function createScreen(
     emptyStyleId: styles.none,
     damage: undefined,
     noSelect: new Uint8Array(size),
-    softWrap: new Int32Array(height),
+    softWrap: new Int32Array(h),
   }
 }
 
@@ -484,15 +483,12 @@ export function resetScreen(screen: Screen, width: number, height: number): void
   warn.ifNotInteger(width, 'resetScreen width')
   warn.ifNotInteger(height, 'resetScreen height')
 
-  // Ensure width and height are valid integers to prevent crashes
-  if (!Number.isInteger(width) || width < 0) {
-    width = Math.max(0, Math.floor(width) || 0)
-  }
-  if (!Number.isInteger(height) || height < 0) {
-    height = Math.max(0, Math.floor(height) || 0)
-  }
+  // Sanitize: clamp to non-negative integers (see createScreen for rationale).
+  const w = Number.isInteger(width) && width >= 0 ? width : Math.max(0, Math.floor(width) || 0)
+  const h =
+    Number.isInteger(height) && height >= 0 ? height : Math.max(0, Math.floor(height) || 0)
 
-  const size = width * height
+  const size = w * h
 
   // Resize if needed (only grow, to avoid reallocations)
   if (screen.cells64.length < size) {
@@ -501,18 +497,18 @@ export function resetScreen(screen: Screen, width: number, height: number): void
     screen.cells64 = new BigInt64Array(buf)
     screen.noSelect = new Uint8Array(size)
   }
-  if (screen.softWrap.length < height) {
-    screen.softWrap = new Int32Array(height)
+  if (screen.softWrap.length < h) {
+    screen.softWrap = new Int32Array(h)
   }
 
   // Reset all cells — single fill call, no loop
   screen.cells64.fill(EMPTY_CELL_VALUE, 0, size)
   screen.noSelect.fill(0, 0, size)
-  screen.softWrap.fill(0, 0, height)
+  screen.softWrap.fill(0, 0, h)
 
   // Update dimensions
-  screen.width = width
-  screen.height = height
+  screen.width = w
+  screen.height = h
 
   // Shared pools accumulate — no clearing needed. Unique char/hyperlink sets are bounded.
 
