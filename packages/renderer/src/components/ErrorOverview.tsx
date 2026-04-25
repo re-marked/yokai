@@ -13,10 +13,13 @@ const cleanupPath = (path: string | undefined): string | undefined => {
 }
 let stackUtils: StackUtils | undefined
 function getStackUtils(): StackUtils {
-  return (stackUtils ??= new StackUtils({
-    cwd: process.cwd(),
-    internals: StackUtils.nodeInternals(),
-  }))
+  if (!stackUtils) {
+    stackUtils = new StackUtils({
+      cwd: process.cwd(),
+      internals: StackUtils.nodeInternals(),
+    })
+  }
+  return stackUtils
 }
 
 /* eslint-enable custom-rules/no-process-cwd */
