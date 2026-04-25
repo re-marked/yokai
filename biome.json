@@ -31,5 +31,38 @@
   },
   "files": {
     "ignore": ["node_modules", "dist", ".turbo", "*.d.ts"]
-  }
+  },
+  "overrides": [
+    {
+      "include": ["**/parse-keypress.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noControlCharactersInRegex": "off",
+            "noAssignInExpressions": "off"
+          }
+        }
+      }
+    },
+    {
+      "include": ["**/components/Box.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noAutofocus": "off"
+          }
+        }
+      }
+    },
+    {
+      "include": ["**/lodash-replacements.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noEmptyBlockStatements": "off"
+          }
+        }
+      }
+    }
+  ]
 }
