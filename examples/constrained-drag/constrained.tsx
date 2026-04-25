@@ -44,14 +44,12 @@ function Draggable({
   width,
   height,
   color,
-  label,
   bounds,
 }: {
   initialPos: Pos
   width: number
   height: number
   color: string
-  label: string
   bounds?: Bounds
 }): React.ReactNode {
   const [pos, setPos] = useState(initialPos)
@@ -99,13 +97,7 @@ function Draggable({
       zIndex={isDragging ? 30 : 10}
       backgroundColor={fillColor}
       onMouseDown={handleMouseDown}
-    >
-      <Box flexGrow={1} justifyContent="center" alignItems="center" backgroundColor={fillColor}>
-        <Text color="black" bold backgroundColor={fillColor}>
-          {label}
-        </Text>
-      </Box>
-    </Box>
+    />
   )
 }
 
@@ -156,13 +148,17 @@ function App(): React.ReactNode {
       <Box flexDirection="column" width="100%" height="100%" padding={1}>
         <Text bold>yokai · constrained-vs-free drag demo</Text>
         <Text dim>
-          each container has a <Text color="cyan">CONSTRAINED</Text> box (clamped to the container's
-          interior) and a <Text color="magenta">FREE</Text> box (can drag anywhere, even out of the
-          container).
+          left container: <Text color="cyan">cyan</Text> = constrained,{' '}
+          <Text color="magenta">magenta</Text> = free
         </Text>
         <Text dim>
-          drag the constrained box against an edge — it stops. drag the free box past the edge —
-          it leaves. <Text bold>q</Text> or <Text bold>Esc</Text> to quit.
+          right container: <Text color="green">green</Text> = constrained,{' '}
+          <Text color="yellow">orange</Text> = free
+        </Text>
+        <Text dim>
+          drag a constrained box against an edge — it stops. drag a free box past the edge — it
+          leaves and can land anywhere on screen. <Text bold>q</Text> / <Text bold>Esc</Text>{' '}
+          quits.
         </Text>
 
         <Container top={6} left={2} bgColor="#1a1a3a">
@@ -171,7 +167,6 @@ function App(): React.ReactNode {
             width={BOX_W}
             height={BOX_H}
             color="cyan"
-            label="constrained"
             bounds={containerBounds}
           />
           <Draggable
@@ -179,7 +174,6 @@ function App(): React.ReactNode {
             width={BOX_W}
             height={BOX_H}
             color="magenta"
-            label="free"
           />
         </Container>
 
@@ -189,7 +183,6 @@ function App(): React.ReactNode {
             width={BOX_W}
             height={BOX_H}
             color="green"
-            label="constrained"
             bounds={containerBounds}
           />
           <Draggable
@@ -197,7 +190,6 @@ function App(): React.ReactNode {
             width={BOX_W}
             height={BOX_H}
             color="orange"
-            label="free"
           />
         </Container>
       </Box>
