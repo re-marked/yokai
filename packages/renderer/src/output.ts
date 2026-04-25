@@ -351,28 +351,60 @@ export default class Output {
             clip?.x2 ?? Number.POSITIVE_INFINITY,
           )
           if (startX >= maxX || startY >= maxY) continue
-          // Skip rows covered by an absolute-positioned node's clear.
+          // Skip cells covered by an absolute-positioned node's clear.
           // Absolute nodes overlay normal-flow siblings, so prevScreen in
           // that region holds the absolute node's stale paint — blitting
           // it back would ghost. See absoluteClears collection above.
+          //
+          // Partial overlap: the clear's rect may cover a SUBSET of any
+          // given blit row's cells, not necessarily the entire blit. We
+          // split the blit into x-segments per row, blitting only the
+          // segments that aren't covered by ANY active clear. Without
+          // this per-cell granularity, an absolute that MOVES (rather
+          // than gets removed) leaves a trail: a clean sibling's blit
+          // partially overlaps the cleared old rect, the suppression
+          // doesn't fire (not full containment), and prevScreen's stale
+          // paint at the overlap gets copied into the new frame. The
+          // demo drag case lives entirely in this regime — every drag
+          // motion moves an absolute, every clean sibling blit risks
+          // restoring stale paint at partial overlaps.
           if (absoluteClears.length === 0) {
             blitRegion(screen, src, startX, startY, maxX, maxY)
             blitCells += (maxY - startY) * (maxX - startX)
             continue
           }
-          let rowStart = startY
-          for (let row = startY; row <= maxY; row++) {
-            const excluded =
-              row < maxY &&
-              absoluteClears.some(
-                (r) => row >= r.y && row < r.y + r.height && startX >= r.x && maxX <= r.x + r.width,
-              )
-            if (excluded || row === maxY) {
-              if (row > rowStart) {
-                blitRegion(screen, src, startX, rowStart, maxX, row)
-                blitCells += (row - rowStart) * (maxX - startX)
+          for (let row = startY; row < maxY; row++) {
+            // Collect clear x-ranges that cover this specific row, then
+            // walk the row in segments between them. Common case (no
+            // clears on this row): one full-width segment, single
+            // blitRegion call — same cost as the no-clears path.
+            const rowClears: Array<{ x1: number; x2: number }> = []
+            for (const r of absoluteClears) {
+              if (row < r.y || row >= r.y + r.height) continue
+              const cx1 = Math.max(startX, r.x)
+              const cx2 = Math.min(maxX, r.x + r.width)
+              if (cx1 < cx2) rowClears.push({ x1: cx1, x2: cx2 })
+            }
+            if (rowClears.length === 0) {
+              blitRegion(screen, src, startX, row, maxX, row + 1)
+              blitCells += maxX - startX
+              continue
+            }
+            // Sort by x1 and merge overlapping ranges so we walk one
+            // cleared region at a time. Typical drag has 1-2 clears
+            // per row; sort cost is negligible.
+            rowClears.sort((a, b) => a.x1 - b.x1)
+            let cursor = startX
+            for (const { x1, x2 } of rowClears) {
+              if (x1 > cursor) {
+                blitRegion(screen, src, cursor, row, x1, row + 1)
+                blitCells += x1 - cursor
               }
-              rowStart = row + 1
+              if (x2 > cursor) cursor = x2
+            }
+            if (cursor < maxX) {
+              blitRegion(screen, src, cursor, row, maxX, row + 1)
+              blitCells += maxX - cursor
             }
           }
           continue
