@@ -57,8 +57,13 @@ export const Ansi = React.memo(function Ansi({ children, dimColor }: Props): Rea
     }
     const hasTextProps = hasAnyTextProps(span.props)
 
+    // Index keys are correct for ANSI-parsed spans: the array is derived
+    // freshly from `children` (the raw string) on every render, so when the
+    // input changes the whole array changes — there's no stable identity
+    // to track. biome's noArrayIndexKey is conservative; suppress per-site.
     if (hyperlink) {
       return hasTextProps ? (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         <Link key={i} url={hyperlink}>
           <StyledText
             color={span.props.color}
@@ -74,6 +79,7 @@ export const Ansi = React.memo(function Ansi({ children, dimColor }: Props): Rea
           </StyledText>
         </Link>
       ) : (
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         <Link key={i} url={hyperlink}>
           {span.text}
         </Link>
@@ -82,6 +88,7 @@ export const Ansi = React.memo(function Ansi({ children, dimColor }: Props): Rea
 
     return hasTextProps ? (
       <StyledText
+        // biome-ignore lint/suspicious/noArrayIndexKey: parsed spans, see comment above
         key={i}
         color={span.props.color}
         backgroundColor={span.props.backgroundColor}
