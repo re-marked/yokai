@@ -1231,6 +1231,39 @@ function renderChildren(
     ? [...node.childNodes].sort((a, b) => effectiveZ(a) - effectiveZ(b))
     : node.childNodes
 
+  // Pre-scan for dirty absolute siblings whose OLD rect (cached from
+  // the previous frame) might overlap a clean absolute sibling's rect.
+  // When found, the clean sibling MUST re-render rather than blit:
+  //
+  //   prevScreen at the overlap holds the dirty sibling's OLD paint
+  //   (it was painted on top in prev — last-in-tree wins for equal z).
+  //   The clean sibling's blit would copy that stale paint into the new
+  //   frame, putting the moving box's old color where the clean box's
+  //   actual content should be. Per-cell suppression in output.ts hides
+  //   the stale paint by zeroing those cells — but then the clean
+  //   sibling has HOLES in its rect (the overlap cells stay empty).
+  //
+  //   Forcing re-render lets the clean sibling paint its own content
+  //   into the overlap cells, which is what the user sees as that box's
+  //   actual paint. The cost is one extra full-render per affected
+  //   sibling per frame the absolute moves — amortized across drag
+  //   frames, totally fine.
+  //
+  // Hot-path optimization: only run the scan if any sibling is BOTH
+  // dirty AND absolute. Most renders have no moving absolutes; we pay
+  // a single short loop per renderChildren call in that case.
+  let dirtyAbsoluteCachedRects: Rectangle[] | undefined
+  for (const c of orderedChildren) {
+    if (c.nodeName === '#text') continue
+    const elem = c as DOMElement
+    if (elem.dirty && elem.style.position === 'absolute') {
+      const cached = nodeCache.get(elem)
+      if (!cached) continue
+      if (!dirtyAbsoluteCachedRects) dirtyAbsoluteCachedRects = []
+      dirtyAbsoluteCachedRects.push(cached)
+    }
+  }
+
   // The contamination guards (seenDirtyChild, seenDirtyClipped) track
   // "earlier in CURRENT-frame paint order" — which is the new sorted
   // order, not raw tree order. Same logic, new iteration sequence.
@@ -1241,6 +1274,27 @@ function renderChildren(
     // Capture dirty before rendering — renderNodeToOutput clears the flag
     const wasDirty = childElem.dirty
     const isAbsolute = childElem.style.position === 'absolute'
+
+    // Force re-render for clean absolutes that overlap a moving sibling's
+    // OLD rect. See dirtyAbsoluteCachedRects comment above for why.
+    let overlapsMovingAbsolute = false
+    if (isAbsolute && !childElem.dirty && dirtyAbsoluteCachedRects !== undefined) {
+      const myCached = nodeCache.get(childElem)
+      if (myCached) {
+        for (const r of dirtyAbsoluteCachedRects) {
+          if (
+            myCached.x < r.x + r.width &&
+            myCached.x + myCached.width > r.x &&
+            myCached.y < r.y + r.height &&
+            myCached.y + myCached.height > r.y
+          ) {
+            overlapsMovingAbsolute = true
+            break
+          }
+        }
+      }
+    }
+
     renderNodeToOutput(childElem, output, {
       offsetX,
       offsetY,
@@ -1248,10 +1302,11 @@ function renderChildren(
       // Short-circuits on seenDirtyClipped (false in the common case) so
       // the opaque/bg reads don't happen per-child per-frame.
       skipSelfBlit:
-        seenDirtyClipped &&
-        isAbsolute &&
-        !childElem.style.opaque &&
-        childElem.style.backgroundColor === undefined,
+        overlapsMovingAbsolute ||
+        (seenDirtyClipped &&
+          isAbsolute &&
+          !childElem.style.opaque &&
+          childElem.style.backgroundColor === undefined),
       inheritedBackgroundColor,
     })
     if (wasDirty && !seenDirtyChild) {

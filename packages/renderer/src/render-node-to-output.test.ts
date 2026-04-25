@@ -767,6 +767,61 @@ describe('renderNodeToOutput — absolute node moving between frames', () => {
     }
   })
 
+  it('clean sibling stays fully painted when an overlapping absolute moves away (notch repro)', () => {
+    // Reproduces the "notches" bug from the drag demo: when A overlaps
+    // B in prev (A on top, last in tree), then A moves away, B's blit
+    // path would normally copy prev[B's rect] — which has A's old
+    // paint at the overlap. Per-cell suppression (the previous fix)
+    // hides that stale paint by zeroing those cells, but then B has
+    // empty cells where its paint should be — visible as missing
+    // chunks / notches.
+    //
+    // Fix: clean absolutes whose rect overlaps any moving sibling's
+    // OLD rect must re-render fully (not blit), so they paint their
+    // own content into the overlap cells.
+    const a = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: 10,
+      height: 1,
+    })
+    appendChildNode(a, txt('AAAAAAAAAA'))
+    const b = el('ink-box', {
+      position: 'absolute',
+      top: 0,
+      left: 5,
+      width: 10,
+      height: 1,
+    })
+    appendChildNode(b, txt('BBBBBBBBBB'))
+    const root = el('ink-root', { width: 30, height: 1, flexDirection: 'row' })
+    appendChildNode(root, a)
+    appendChildNode(root, b)
+    root.yogaNode!.calculateLayout(30, 1)
+
+    const frame2 = render2Frames(root, 30, 1, () => {
+      // Move A right, out of overlap with B
+      setStyle(a, { ...a.style, left: 20 })
+      applyStyles(a.yogaNode!, { ...a.style, left: 20 })
+    })
+
+    // B is at cols 5-14. ALL those cells should have 'B' — even the
+    // overlap region (cols 5-9) where A used to be on top in prev.
+    // Without the fix: cols 5-9 have empty cells (notch), cols 10-14
+    // have 'B' from B's own non-overlap area.
+    for (let col = 5; col <= 14; col++) {
+      expect(charAt(frame2, col, 0)).toBe('B')
+    }
+    // A's old non-overlap cells (cols 0-4) should be empty
+    for (let col = 0; col <= 4; col++) {
+      expect(charAt(frame2, col, 0)).not.toBe('A')
+    }
+    // A's new position (cols 20-29)
+    expect(charAt(frame2, 20, 0)).toBe('A')
+    expect(charAt(frame2, 29, 0)).toBe('A')
+  })
+
   it('clears the old position when an absolute node moves down', () => {
     // Same bug, vertical axis. Two-row viewport, overlay starts at
     // row 0, moves to row 1.
