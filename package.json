@@ -16,7 +16,8 @@
     "test": "vitest run",
     "demo:drag": "pnpm --filter @yokai-example/drag start",
     "demo:constrained-drag": "pnpm --filter @yokai-example/constrained-drag start",
-    "demo:drag-and-drop": "pnpm --filter @yokai-example/drag-and-drop start"
+    "demo:drag-and-drop": "pnpm --filter @yokai-example/drag-and-drop start",
+    "demo:resizable": "pnpm --filter @yokai-example/resizable start"
   },
   "engines": {
     "node": ">=22.0.0"
