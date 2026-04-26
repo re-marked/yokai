@@ -899,4 +899,76 @@ describe('renderNodeToOutput — absolute node moving between frames', () => {
     expect(charAt(frame2, 1, 1)).toBe('Y')
     expect(charAt(frame2, 2, 1)).toBe('Y')
   })
+
+  it('clean cousin of a moving absolute is repainted (cross-subtree notch repro)', () => {
+    // Reproduces the constrained-drag demo notch bug Mark observed:
+    //   Outer
+    //     ├─ text  (in-flow, rendered first)
+    //     └─ container (absolute, with bg)
+    //          └─ overlay (absolute, dragged this frame)
+    //
+    // The overlay clears its OLD rect with fromAbsolute=true, which adds
+    // that rect to absoluteClears (output.ts) — global, suppresses ANY
+    // blit covering those cells. If the overlay's old rect lies on a row
+    // shared with the in-flow text, the text's clean-blit at the outer
+    // renderChildren level gets per-cell suppressed there → cells go
+    // empty → notches in the text.
+    //
+    // The pre-fix overlap-rerender check at the outer level only looked
+    // at the container's cached rect (the only DIRECT dirty absolute
+    // sibling of the text). The overlay's rect, being a descendant, was
+    // invisible there, so the text wasn't forced to re-render.
+    //
+    // Fix: collect EVERY dirty absolute's cached rect tree-wide and use
+    // that for the overlap check at every level.
+    // Text on row 0. Container absolute on row 3 (does NOT overlap text).
+    // Overlay nested in container with negative top so its screen y lands
+    // back on row 0 (the text's row). Critical: at the root level, the
+    // only dirty absolute that's a direct child is the container, whose
+    // rect is at row 3 — does NOT overlap text. Without tree-wide
+    // collection, the text isn't forced to re-render and its blit cells
+    // get zeroed by the overlay's clear (in absoluteClears).
+    const text = txt('hello world hello world')
+    const overlay = el('ink-box', {
+      position: 'absolute',
+      top: -3, // container at row 3, overlay at -3 → screen row 0
+      left: 5,
+      width: 6,
+      height: 1,
+      backgroundColor: 'cyan',
+    })
+    const container = el('ink-box', {
+      position: 'absolute',
+      top: 3,
+      left: 0,
+      width: 30,
+      height: 1,
+    })
+    appendChildNode(container, overlay)
+
+    const root = el('ink-root', { width: 30, height: 4, flexDirection: 'column' })
+    appendChildNode(root, text)
+    appendChildNode(root, container)
+    root.yogaNode!.calculateLayout(30, 4)
+
+    const frame2 = render2Frames(root, 30, 4, () => {
+      // Move overlay sideways so it's no longer at cols 5..10 of row 0
+      setStyle(overlay, { ...overlay.style, left: 20 })
+      applyStyles(overlay.yogaNode!, { ...overlay.style, left: 20 })
+    })
+
+    // Cells (5..10, row 0) had the overlay in prev. The overlay moved
+    // away → text should be visible there. Without the tree-wide fix,
+    // those cells stay empty (per-cell suppression zeroed text's blit
+    // and nothing forced text to re-render).
+    expect(charAt(frame2, 5, 0)).toBe(' ')
+    expect(charAt(frame2, 6, 0)).toBe('w')
+    expect(charAt(frame2, 7, 0)).toBe('o')
+    expect(charAt(frame2, 8, 0)).toBe('r')
+    expect(charAt(frame2, 9, 0)).toBe('l')
+    expect(charAt(frame2, 10, 0)).toBe('d')
+    // Text still intact at non-overlap cells
+    expect(charAt(frame2, 0, 0)).toBe('h')
+    expect(charAt(frame2, 4, 0)).toBe('o')
+  })
 })

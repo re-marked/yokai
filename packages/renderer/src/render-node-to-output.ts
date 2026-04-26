@@ -54,6 +54,37 @@ let scrollHint: ScrollHint | null = null
 let absoluteRectsPrev: Rectangle[] = []
 let absoluteRectsCur: Rectangle[] = []
 
+// Cached rects of every dirty + position:absolute node anywhere in the
+// tree, captured ONCE at the start of each frame's render. Read by
+// renderChildren's overlap-rerender pre-scan to decide whether a clean
+// child must re-render (vs blit). Tree-wide rather than per-level
+// because a dirty absolute's clear lands in absoluteClears (output.ts),
+// which suppresses blits at any level — so a clean ancestor's clean
+// sibling can have its blit cells zeroed by a cousin's clear. The old
+// per-level check missed those cross-subtree overlaps; in the
+// constrained-drag demo, dragging a Draggable INSIDE a Container
+// stenciled the header text above (text is sibling of Container, not
+// of Draggable; Container's own rect doesn't overlap text rows; only
+// Draggable's clear does, and Draggable lived in a different subtree
+// from text's overlap check).
+let globalDirtyAbsoluteRects: Rectangle[] = []
+
+function resetGlobalDirtyAbsoluteRects(): void {
+  globalDirtyAbsoluteRects = []
+}
+
+function collectDirtyAbsoluteRects(node: DOMElement, out: Rectangle[]): void {
+  for (const c of node.childNodes) {
+    if (c.nodeName === '#text') continue
+    const elem = c as DOMElement
+    if (elem.dirty && elem.style.position === 'absolute') {
+      const cached = nodeCache.get(elem)
+      if (cached) out.push(cached)
+    }
+    collectDirtyAbsoluteRects(elem, out)
+  }
+}
+
 export function resetScrollHint(): void {
   scrollHint = null
   absoluteRectsPrev = absoluteRectsCur
@@ -379,6 +410,15 @@ function renderNodeToOutput(
     inheritedBackgroundColor?: Color
   },
 ): void {
+  // At the root entry, capture every dirty absolute's cached rect once
+  // for the whole frame. renderChildren reads this via the closure-shared
+  // module variable to do tree-wide overlap-rerender checks (see comment
+  // at globalDirtyAbsoluteRects). Recursive calls into renderNodeToOutput
+  // re-enter here too, but they pass non-root nodes — guard on ink-root.
+  if (node.nodeName === 'ink-root') {
+    resetGlobalDirtyAbsoluteRects()
+    collectDirtyAbsoluteRects(node, globalDirtyAbsoluteRects)
+  }
   const { yogaNode } = node
 
   if (yogaNode) {
@@ -1249,20 +1289,14 @@ function renderChildren(
   //   sibling per frame the absolute moves — amortized across drag
   //   frames, totally fine.
   //
-  // Hot-path optimization: only run the scan if any sibling is BOTH
-  // dirty AND absolute. Most renders have no moving absolutes; we pay
-  // a single short loop per renderChildren call in that case.
-  let dirtyAbsoluteCachedRects: Rectangle[] | undefined
-  for (const c of orderedChildren) {
-    if (c.nodeName === '#text') continue
-    const elem = c as DOMElement
-    if (elem.dirty && elem.style.position === 'absolute') {
-      const cached = nodeCache.get(elem)
-      if (!cached) continue
-      if (!dirtyAbsoluteCachedRects) dirtyAbsoluteCachedRects = []
-      dirtyAbsoluteCachedRects.push(cached)
-    }
-  }
+  // The dirty absolute rects we check overlap against are tree-wide,
+  // not just direct children of this node — see globalDirtyAbsoluteRects
+  // for the rationale (a clean child here can still have its blit cells
+  // suppressed by a moving absolute COUSIN's clear, since absoluteClears
+  // in output.ts is global). Computed once per frame at the ink-root
+  // entry; this loop just reads it.
+  const dirtyAbsoluteCachedRects =
+    globalDirtyAbsoluteRects.length > 0 ? globalDirtyAbsoluteRects : undefined
 
   // The contamination guards (seenDirtyChild, seenDirtyClipped) track
   // "earlier in CURRENT-frame paint order" — which is the new sorted
