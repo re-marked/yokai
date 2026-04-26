@@ -4,14 +4,37 @@ import type { EventHandlerProps } from './events/event-handlers'
 import { type GestureHandlers, MouseDownEvent } from './events/mouse-event'
 import { nodeCache } from './node-cache'
 
+/** Effective z-index for hit-testing — mirrors the renderer's
+ *  effectiveZ in render-node-to-output.ts. Only absolutes participate
+ *  in stacking; everything else returns 0. Same paint-order math
+ *  used here means hit-test agrees with what the user sees. */
+function effectiveZ(node: DOMElement): number {
+  if (node.style.position !== 'absolute') return 0
+  return node.style.zIndex ?? 0
+}
+
 /**
  * Find the deepest DOM element whose rendered rect contains (col, row).
  *
  * Uses the nodeCache populated by renderNodeToOutput — rects are in screen
  * coordinates with all offsets (including scrollTop translation) already
- * applied. Children are traversed in reverse so later siblings (painted on
- * top) win. Nodes not in nodeCache (not rendered this frame, or lacking a
+ * applied. Nodes not in nodeCache (not rendered this frame, or lacking a
  * yogaNode) are skipped along with their subtrees.
+ *
+ * **Hit ordering matches paint order**: children are tried in reverse
+ * (effectiveZ, treeOrder) — same sort the renderer uses for paint. Without
+ * this, hit-test would resolve clicks by raw DOM order, ignoring zIndex
+ * boosts (e.g. raise-on-press patterns where the most-recently-pressed
+ * box has been bumped above siblings).
+ *
+ * **Absolute children that escape parent bounds are still hit-tested.**
+ * In CSS, `position: absolute` is positioned in its own coordinate space
+ * — the child's painted rect is independent of its ancestor's rect.
+ * Naively bailing when the cursor isn't inside an ancestor would miss
+ * absolutes that have been dragged outside their container. So when
+ * the click is OUTSIDE this node's rect we still recurse, but only into
+ * absolute children (in-flow children are constrained by Yoga to stay
+ * within ancestor bounds, so the bail is correct for them).
  *
  * Returns the hit node even if it has no onClick — dispatchClick walks up
  * via parentNode to find handlers.
@@ -19,17 +42,55 @@ import { nodeCache } from './node-cache'
 export function hitTest(node: DOMElement, col: number, row: number): DOMElement | null {
   const rect = nodeCache.get(node)
   if (!rect) return null
-  if (col < rect.x || col >= rect.x + rect.width || row < rect.y || row >= rect.y + rect.height) {
-    return null
+  const inBounds =
+    col >= rect.x && col < rect.x + rect.width && row >= rect.y && row < rect.y + rect.height
+
+  // Build the iteration order matching paint order. Most parents have
+  // no z-indexed absolute children — skip the sort and just walk in
+  // reverse tree order.
+  let needsSort = false
+  for (const c of node.childNodes) {
+    if (c.nodeName === '#text') continue
+    const elem = c as DOMElement
+    if (elem.style.position === 'absolute' && (elem.style.zIndex ?? 0) !== 0) {
+      needsSort = true
+      break
+    }
   }
-  // Later siblings paint on top; reversed traversal returns topmost hit.
-  for (let i = node.childNodes.length - 1; i >= 0; i--) {
-    const child = node.childNodes[i]!
+  // Iterate in reverse paint order so the topmost match wins. For the
+  // sorted case we copy + sort by (effectiveZ, treeOrder) ASC, then
+  // walk back-to-front. For the no-sort case we just iterate the
+  // childNodes array in reverse.
+  let orderedReversed: typeof node.childNodes
+  if (needsSort) {
+    const indexed = node.childNodes.map((c, i) => ({ node: c, i }))
+    indexed.sort((a, b) => {
+      const za = a.node.nodeName === '#text' ? 0 : effectiveZ(a.node as DOMElement)
+      const zb = b.node.nodeName === '#text' ? 0 : effectiveZ(b.node as DOMElement)
+      if (za !== zb) return za - zb
+      return a.i - b.i
+    })
+    orderedReversed = indexed.reverse().map((e) => e.node)
+  } else {
+    orderedReversed = node.childNodes.slice().reverse()
+  }
+
+  for (const child of orderedReversed) {
     if (child.nodeName === '#text') continue
-    const hit = hitTest(child, col, row)
+    const childElem = child as DOMElement
+    // When this node doesn't contain the click, only absolute children
+    // are worth checking — in-flow children stay within ancestor bounds
+    // by construction (Yoga places them inside the parent's content
+    // area). Skipping them when out-of-bounds avoids quadratic walks
+    // through deep in-flow subtrees that can never contain the click.
+    if (!inBounds && childElem.style.position !== 'absolute') continue
+    const hit = hitTest(childElem, col, row)
     if (hit) return hit
   }
-  return node
+  // Self only matches if the click is actually within our own rect.
+  // When out-of-bounds we may have descended into absolute children
+  // (above) but we ourselves aren't a hit candidate.
+  return inBounds ? node : null
 }
 
 /**
