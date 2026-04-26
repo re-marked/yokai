@@ -33,6 +33,18 @@ import {
 
 type Pos = { top: number; left: number }
 
+// Monotonic counter for "raise on press" behavior. Each press bumps
+// the counter; the new value is assigned to the pressed box's zIndex.
+// Without this, after a drag releases the box's z drops back to the
+// shared base value (10), and the next click on its overlap area
+// hit-tests to whichever sibling is later in tree order — meaning
+// you can't easily re-grab the box you just moved.
+let nextZ = 10
+function takeNextZ(): number {
+  nextZ += 1
+  return nextZ
+}
+
 function Draggable({
   initialPos,
   color,
@@ -42,6 +54,7 @@ function Draggable({
 }): React.ReactNode {
   const [pos, setPos] = useState(initialPos)
   const [isDragging, setIsDragging] = useState(false)
+  const [zIndex, setZIndex] = useState(10)
 
   const handleMouseDown = (e: MouseDownEvent): void => {
     // Anchor the drag at the cursor's offset within the box so the
@@ -51,6 +64,7 @@ function Draggable({
     const startCol = e.col
     const startRow = e.row
     setIsDragging(true)
+    setZIndex(takeNextZ())
     e.captureGesture({
       onMove(m) {
         setPos({
@@ -72,7 +86,11 @@ function Draggable({
       left={pos.left}
       width={20}
       height={3}
-      zIndex={10}
+      // While dragging, lift WAY above any sibling's persisted z
+      // so we paint on top during motion. Otherwise use this box's
+      // own persisted z, which was bumped on press — keeps the box
+      // in front of siblings it was just dragged on top of.
+      zIndex={isDragging ? zIndex + 1000 : zIndex}
       backgroundColor={fillColor}
       onMouseDown={handleMouseDown}
     />
