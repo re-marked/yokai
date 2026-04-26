@@ -17,7 +17,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import { type DOMElement, createNode, setStyle } from '../dom.js'
+import {
+  _resetDragRegistryForTesting,
+  registerDropTarget,
+  unregisterDropTarget,
+} from '../drag-registry.js'
 import { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
+import { nodeCache } from '../node-cache.js'
 import {
   type DragBounds,
   type DragInfo,
@@ -108,6 +115,7 @@ function makeDeps(
     onDragStart?: (info: DragInfo) => void
     onDrag?: (info: DragInfo) => void
     onDragEnd?: (info: DragInfo) => void
+    dragData?: unknown
   } = {},
 ): Parameters<typeof handleDragPress>[1] & {
   setPos: ReturnType<typeof vi.fn>
@@ -129,6 +137,7 @@ function makeDeps(
     onDragStartRef: { current: opts.onDragStart },
     onDragRef: { current: opts.onDrag },
     onDragEndRef: { current: opts.onDragEnd },
+    dragDataRef: { current: opts.dragData },
   }
 }
 
@@ -254,6 +263,9 @@ describe('handleDragPress', () => {
       pos: { top: 3, left: 8 },
       startPos: { top: 0, left: 0 },
       delta: { dx: 8, dy: 3 },
+      // No drop targets registered → dropped is false. (See drop-target
+      // integration tests below for the truthy case.)
+      dropped: false,
     })
   })
 
@@ -326,5 +338,151 @@ describe('handleDragPress', () => {
     // No gesture captured → no onUp to call. Sanity-check the contract.
     expect(e._capturedHandlers).toBeNull()
     expect(onDragEnd).not.toHaveBeenCalled()
+  })
+})
+
+// ── drop-target integration ──────────────────────────────────────────
+
+/** Build a hand-positioned absolute ink-box and pre-populate its
+ *  nodeCache rect — same helper shape as drag-registry tests. */
+function mkDropZone(rect: { x: number; y: number; w: number; h: number }): DOMElement {
+  const node = createNode('ink-box')
+  setStyle(node, { position: 'absolute' })
+  nodeCache.set(node, { x: rect.x, y: rect.y, width: rect.w, height: rect.h, top: rect.y })
+  return node
+}
+
+describe('handleDragPress — drop-target integration', () => {
+  it('forwards dragData to startDrag (visible to drop targets)', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDragOver = vi.fn()
+    const target = mkDropZone({ x: 0, y: 0, w: 50, h: 50 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDragOver }),
+    })
+
+    const e = new MouseDownEvent(0, 0, 0)
+    handleDragPress(e, makeDeps({ dragData: { id: 'card-7' } }))
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(5, 5, 0))
+
+    expect(onDragOver).toHaveBeenCalledTimes(1)
+    expect(onDragOver).toHaveBeenCalledWith({
+      data: { id: 'card-7' },
+      cursor: { col: 5, row: 5 },
+      local: { col: 5, row: 5 },
+    })
+    unregisterDropTarget(id)
+  })
+
+  it('does NOT engage drop targets on press alone (drag has not started)', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDragEnter = vi.fn()
+    const target = mkDropZone({ x: 0, y: 0, w: 50, h: 50 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDragEnter }),
+    })
+
+    const e = new MouseDownEvent(5, 5, 0)
+    handleDragPress(e, makeDeps())
+    expect(onDragEnter).not.toHaveBeenCalled()
+    unregisterDropTarget(id)
+  })
+
+  it('ticks drop targets on EVERY motion event', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDragOver = vi.fn()
+    const target = mkDropZone({ x: 0, y: 0, w: 50, h: 50 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDragOver }),
+    })
+
+    const e = new MouseDownEvent(0, 0, 0)
+    handleDragPress(e, makeDeps())
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(1, 1, 0))
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(2, 2, 0))
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(3, 3, 0))
+
+    expect(onDragOver).toHaveBeenCalledTimes(3)
+    unregisterDropTarget(id)
+  })
+
+  it('dispatches onDrop on release over a target, sets dropped=true on onDragEnd', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDrop = vi.fn()
+    const onDragEnd = vi.fn()
+    const target = mkDropZone({ x: 0, y: 0, w: 50, h: 50 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDrop }),
+    })
+
+    const e = new MouseDownEvent(0, 0, 0)
+    handleDragPress(e, makeDeps({ onDragEnd, dragData: 'payload' }))
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(5, 5, 0))
+    e._capturedHandlers!.onUp!(new MouseUpEvent(5, 5, 0))
+
+    expect(onDrop).toHaveBeenCalledTimes(1)
+    expect(onDrop).toHaveBeenCalledWith({
+      data: 'payload',
+      cursor: { col: 5, row: 5 },
+      local: { col: 5, row: 5 },
+    })
+    expect(onDragEnd).toHaveBeenCalledWith(expect.objectContaining({ dropped: true }))
+    unregisterDropTarget(id)
+  })
+
+  it('sets dropped=false on onDragEnd when release lands outside any target', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDrop = vi.fn()
+    const onDragEnd = vi.fn()
+    const target = mkDropZone({ x: 100, y: 100, w: 10, h: 5 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDrop }),
+    })
+
+    const e = new MouseDownEvent(0, 0, 0)
+    handleDragPress(e, makeDeps({ onDragEnd }))
+    e._capturedHandlers!.onMove!(new MouseMoveEvent(5, 5, 0))
+    e._capturedHandlers!.onUp!(new MouseUpEvent(5, 5, 0))
+
+    expect(onDrop).not.toHaveBeenCalled()
+    expect(onDragEnd).toHaveBeenCalledWith(expect.objectContaining({ dropped: false }))
+    unregisterDropTarget(id)
+  })
+
+  it('clears the drag from the registry at release (so a subsequent click does not engage targets)', () => {
+    _resetDraggableZForTesting()
+    _resetDragRegistryForTesting()
+    const onDragEnter = vi.fn()
+    const target = mkDropZone({ x: 0, y: 0, w: 50, h: 50 })
+    const id = registerDropTarget({
+      getNode: () => target,
+      getCallbacks: () => ({ onDragEnter }),
+    })
+
+    // First gesture: full drag + release
+    const e1 = new MouseDownEvent(0, 0, 0)
+    handleDragPress(e1, makeDeps())
+    e1._capturedHandlers!.onMove!(new MouseMoveEvent(5, 5, 0))
+    e1._capturedHandlers!.onUp!(new MouseUpEvent(5, 5, 0))
+    expect(onDragEnter).toHaveBeenCalledTimes(1)
+
+    // Second gesture: press + release with NO motion → no drag → no
+    // tick → no enter on the target. Confirms the active drag was
+    // cleared on release of the first gesture.
+    const e2 = new MouseDownEvent(5, 5, 0)
+    handleDragPress(e2, makeDeps())
+    e2._capturedHandlers!.onUp!(new MouseUpEvent(5, 5, 0))
+    expect(onDragEnter).toHaveBeenCalledTimes(1)
+    unregisterDropTarget(id)
   })
 })
