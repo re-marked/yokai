@@ -8,7 +8,7 @@ export default defineConfig({
     // through packages/renderer/node_modules/@yokai/shared/src/foo.test.ts
     // and run twice.
     exclude: ['**/node_modules/**', '**/dist/**'],
-    include: ['packages/*/src/**/*.test.ts'],
+    include: ['packages/*/src/**/*.test.ts', 'packages/*/src/**/*.test.tsx'],
   },
 })
 

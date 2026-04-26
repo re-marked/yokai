@@ -10,6 +10,13 @@ export { default as Spacer } from './components/Spacer'
 export { default as Newline } from './components/Newline'
 export { default as Link } from './components/Link'
 export { default as Button } from './components/Button'
+export { default as Draggable } from './components/Draggable'
+export type {
+  DraggableProps,
+  DragPos,
+  DragBounds,
+  DragInfo,
+} from './components/Draggable'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'

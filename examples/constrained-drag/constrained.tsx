@@ -3,129 +3,31 @@
  *
  *   pnpm demo:constrained-drag
  *
- * Two parent containers side by side. Each contains two draggable
- * rectangles:
+ * Two parent containers side by side. Each contains two `<Draggable>`s:
  *
- *   - **constrained** (cyan/green): clamped to the parent's interior.
- *     Drag it right against an edge — it stops there. Useful for
- *     real-world UIs where some elements must stay within their
- *     region (resize handles, sliders, in-pane drag-to-reorder).
+ *   - **constrained** (cyan/green): pass `bounds={containerBounds}` so
+ *     the box stays inside the parent. Drag against an edge, it stops.
  *
- *   - **free** (orange/pink): no clamping. Drag it anywhere on screen,
- *     including past its parent's edge or into the other container.
- *     Useful for elements that can be detached from their starting
- *     pane (moving cards between columns, dragging an item to trash).
+ *   - **free** (magenta/orange): no `bounds` prop → drag anywhere on
+ *     screen, including past the parent's edge into the other container
+ *     or onto the title text.
  *
- * The same Draggable component handles both — the only difference is
- * an optional `bounds` prop. When set, onMove clamps the new position;
- * when unset, the box can go anywhere. Mixed-mode drag in one screen
- * is the realistic shape for actual TUI apps: persistent layout
- * elements alongside transient draggable widgets.
+ * Same `<Draggable>` component handles both — the only difference is
+ * presence/absence of `bounds`. Mixed-mode drag in one screen is the
+ * realistic shape for actual TUI apps: persistent layout regions
+ * alongside transient widgets that can be repositioned anywhere.
  *
  * Press q or Escape to quit.
  */
 
-import React, { useState } from 'react'
-import {
-  AlternateScreen,
-  Box,
-  type MouseDownEvent,
-  Text,
-  render,
-  useApp,
-  useInput,
-} from '@yokai/renderer'
-
-type Pos = { top: number; left: number }
-type Bounds = { width: number; height: number }
-
-// Monotonic counter for "raise on press" behavior. Each press bumps
-// the counter and assigns the new value to the pressed box's zIndex.
-// After release the box keeps that value, so subsequent clicks on the
-// same screen position correctly hit-test to the most-recently-pressed
-// box (rather than reverting to whoever's last in tree order). Matches
-// how every web drag-and-drop UI handles "bring to front."
-let nextZ = 10
-function takeNextZ(): number {
-  nextZ += 1
-  return nextZ
-}
-
-function Draggable({
-  initialPos,
-  width,
-  height,
-  color,
-  bounds,
-}: {
-  initialPos: Pos
-  width: number
-  height: number
-  color: string
-  bounds?: Bounds
-}): React.ReactNode {
-  const [pos, setPos] = useState(initialPos)
-  const [isDragging, setIsDragging] = useState(false)
-  // Persisted across renders: the box's current paint-order rank.
-  // Starts at the base z (10) and bumps on each press.
-  const [zIndex, setZIndex] = useState(10)
-
-  const handleMouseDown = (e: MouseDownEvent): void => {
-    const startTop = pos.top
-    const startLeft = pos.left
-    const startCol = e.col
-    const startRow = e.row
-    setIsDragging(true)
-    setZIndex(takeNextZ())
-    e.captureGesture({
-      onMove(m) {
-        let newTop = startTop + (m.row - startRow)
-        let newLeft = startLeft + (m.col - startCol)
-        // Clamp to the container's interior if bounds were provided.
-        // The min/max are inclusive on the leading edge and exclusive
-        // on the trailing edge minus our own size — i.e. the box's
-        // (top, left) can be at the container's top-left corner (0,0)
-        // but no further than (bounds.height - height, bounds.width
-        // - width), so the box's bottom-right edge lands exactly on
-        // the container's bottom-right edge.
-        if (bounds) {
-          newTop = Math.max(0, Math.min(bounds.height - height, newTop))
-          newLeft = Math.max(0, Math.min(bounds.width - width, newLeft))
-        }
-        setPos({ top: newTop, left: newLeft })
-      },
-      onUp() {
-        setIsDragging(false)
-      },
-    })
-  }
-
-  const fillColor = isDragging ? 'yellow' : color
-  return (
-    <Box
-      position="absolute"
-      top={pos.top}
-      left={pos.left}
-      width={width}
-      height={height}
-      // While dragging, lift WAY above any sibling's persisted z
-      // (siblings cap out at the latest takeNextZ value, drag offset
-      // ensures we paint on top regardless of what they grew to).
-      // Otherwise use this box's own persisted z, which was bumped on
-      // its last press — so it stays in front of siblings it was
-      // recently dragged on top of.
-      zIndex={isDragging ? zIndex + 1000 : zIndex}
-      backgroundColor={fillColor}
-      onMouseDown={handleMouseDown}
-    />
-  )
-}
+import { AlternateScreen, Box, Draggable, Text, render, useApp, useInput } from '@yokai/renderer'
+import type React from 'react'
 
 const CONTAINER_W = 36
 const CONTAINER_H = 10
 const BOX_W = 10
 const BOX_H = 3
-const containerBounds: Bounds = { width: CONTAINER_W, height: CONTAINER_H }
+const containerBounds = { width: CONTAINER_W, height: CONTAINER_H }
 
 function Container({
   top,
@@ -146,8 +48,8 @@ function Container({
       width={CONTAINER_W}
       height={CONTAINER_H}
       backgroundColor={bgColor}
-      // zIndex keeps the container behind the inner draggables (which
-      // are z=10+ when idle, z=30 while dragging) but in front of
+      // zIndex keeps the container behind the inner draggables (Draggable
+      // base z is 10, drag-time boost adds 1000 on top) but in front of
       // background. Without it the in-flow header text could end up
       // on top in the equal-z tree-order tiebreak.
       zIndex={1}
@@ -177,8 +79,7 @@ function App(): React.ReactNode {
         </Text>
         <Text dim>
           drag a constrained box against an edge — it stops. drag a free box past the edge — it
-          leaves and can land anywhere on screen. <Text bold>q</Text> / <Text bold>Esc</Text>{' '}
-          quits.
+          leaves and can land anywhere on screen. <Text bold>q</Text> / <Text bold>Esc</Text> quits.
         </Text>
 
         <Container top={6} left={2} bgColor="#1a1a3a">
@@ -186,14 +87,14 @@ function App(): React.ReactNode {
             initialPos={{ top: 1, left: 2 }}
             width={BOX_W}
             height={BOX_H}
-            color="cyan"
+            backgroundColor="cyan"
             bounds={containerBounds}
           />
           <Draggable
             initialPos={{ top: 5, left: 18 }}
             width={BOX_W}
             height={BOX_H}
-            color="magenta"
+            backgroundColor="magenta"
           />
         </Container>
 
@@ -202,14 +103,14 @@ function App(): React.ReactNode {
             initialPos={{ top: 1, left: 2 }}
             width={BOX_W}
             height={BOX_H}
-            color="green"
+            backgroundColor="green"
             bounds={containerBounds}
           />
           <Draggable
             initialPos={{ top: 5, left: 18 }}
             width={BOX_W}
             height={BOX_H}
-            color="orange"
+            backgroundColor="orange"
           />
         </Container>
       </Box>
