@@ -19,6 +19,13 @@ export type {
 } from './components/Draggable'
 export { default as DropTarget } from './components/DropTarget'
 export type { DropTargetProps, DropInfo } from './components/DropTarget'
+export { default as Resizable } from './components/Resizable'
+export type {
+  ResizableProps,
+  ResizeSize,
+  ResizeHandleDirection,
+  ResizeInfo,
+} from './components/Resizable'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'
