@@ -1,7 +1,6 @@
 import type React from 'react'
-import { type PropsWithChildren, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { type PropsWithChildren, useCallback, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
-import type { DOMElement } from '../dom.js'
 import type { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
 import type { Color } from '../styles.js'
 import Box, { type Props as BoxProps } from './Box.js'
@@ -58,21 +57,6 @@ export type ResizableProps = Except<BoxProps, 'width' | 'height' | 'onMouseDown'
   /** Background color of the handle when the cursor is over it. Hover
    *  affordance. Default `'white'`. */
   handleHoverColor?: Color
-  /**
-   * When true (default), the box's effective minimum height tracks its
-   * content's natural height — i.e. you cannot shrink the box smaller
-   * than the space its content needs to display. As the user shrinks
-   * the WIDTH (text wraps into more lines), the box auto-grows in
-   * HEIGHT to accommodate. The `minSize.height` you pass still applies
-   * as a FLOOR; the effective minimum is `max(minSize.height,
-   * contentNaturalHeight)`.
-   *
-   * Set to false to opt out — the box will accept any minSize down to
-   * (1, 1) and clip overflowing content. Useful when the content is
-   * itself scrollable / virtualised and the user wants raw size
-   * control.
-   */
-  autoFit?: boolean
   /** Fires once at the FIRST motion of a resize (not on press). A press
    *  on a handle without subsequent motion is not a resize, so this won't
    *  fire — symmetrical with Draggable's onDragStart. */
@@ -127,7 +111,6 @@ export default function Resizable({
   handles = ['se'],
   handleColor = 'gray',
   handleHoverColor = 'white',
-  autoFit = true,
   onResizeStart,
   onResize,
   onResizeEnd,
@@ -136,65 +119,19 @@ export default function Resizable({
 }: PropsWithChildren<ResizableProps>): React.ReactNode {
   const [size, setSize] = useState<ResizeSize>(initialSize)
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandleDirection | null>(null)
-  // Tracks the content's natural height for the current width (yoga's
-  // computed height of the content wrapper, ignoring the box's height
-  // constraint). Used as the effective minHeight when autoFit is on.
-  // Starts at 0; first useLayoutEffect after mount fills it in.
-  const [contentNaturalHeight, setContentNaturalHeight] = useState(0)
-  // Ref to the inner content wrapper, queried by useLayoutEffect to read
-  // its yoga-computed height.
-  const contentRef = useRef<DOMElement>(null)
 
   // Refs read at gesture time so mid-resize prop changes apply on the
   // next motion event (mirrors Draggable's pattern).
   const onResizeStartRef = useRef(onResizeStart)
   const onResizeRef = useRef(onResize)
   const onResizeEndRef = useRef(onResizeEnd)
+  const minSizeRef = useRef(minSize)
   const maxSizeRef = useRef(maxSize)
   onResizeStartRef.current = onResizeStart
   onResizeRef.current = onResize
   onResizeEndRef.current = onResizeEnd
+  minSizeRef.current = minSize
   maxSizeRef.current = maxSize
-
-  // Effective min: width from user (or default 1); height is the larger
-  // of user-supplied min and the content's natural height when autoFit
-  // is on. This is what the resize gesture clamps against, so the box
-  // refuses to shrink past what its content needs to show.
-  const effectiveMin: ResizeSize = {
-    width: minSize?.width ?? 1,
-    height: autoFit
-      ? Math.max(minSize?.height ?? 1, contentNaturalHeight || 1)
-      : (minSize?.height ?? 1),
-  }
-  const minSizeRef = useRef(effectiveMin)
-  minSizeRef.current = effectiveMin
-
-  // After every render, read the content wrapper's yoga-computed height.
-  // Wrapper has no height constraint, so yoga gives it its content's
-  // natural height for the wrapper's own width (which equals box width
-  // via alignSelf:'stretch'). When that height differs from what we last
-  // saw, update state — gated by equality so this isn't a render loop.
-  useLayoutEffect(() => {
-    if (!autoFit) return
-    if (!contentRef.current?.yogaNode) return
-    const h = contentRef.current.yogaNode.getComputedHeight()
-    if (h > 0) {
-      setContentNaturalHeight((prev) => (h !== prev ? h : prev))
-    }
-  })
-
-  // Auto-grow size.height when content needs more than current height
-  // can show. Pairs with the gesture's effectiveMin clamp to guarantee
-  // the box never displays less than the full content. Fires both on
-  // initial measurement (first render → useLayoutEffect → bump if
-  // needed) and on width-driven re-wrap (text wraps tighter → more
-  // lines → contentNaturalHeight grows → height bumps up to match).
-  useLayoutEffect(() => {
-    if (!autoFit) return
-    if (size.height < effectiveMin.height) {
-      setSize((s) => ({ ...s, height: effectiveMin.height }))
-    }
-  }, [autoFit, effectiveMin.height, size.height])
 
   // Mirror of `size` accessible synchronously from gesture callbacks
   // (setSize batches; onResizeEnd needs the latest committed size).
@@ -237,21 +174,20 @@ export default function Resizable({
     hoveredHandle === dir ? handleHoverColor : handleColor
 
   return (
-    // overflow:'hidden' default protects against the auto-fit timing
-    // gap (one frame between content growing and the box catching up)
-    // AND against autoFit={false} cases where content is intentionally
-    // larger than the box. Spread boxProps after our default so user
-    // can override with `overflow:"visible"` for an opt-in bleed.
+    // overflow:'hidden' default keeps content from bleeding outside the
+    // box when the user shrinks past what content needs to display.
+    // Spread boxProps after our default so users can override with
+    // `overflow:'visible'` if they explicitly want the bleed (e.g. the
+    // content is itself responsible for size).
+    //
+    // KNOWN LIMITATION: when content overflows, it's clipped (visible
+    // chunks vanish below the box edge). True "box can't shrink past
+    // content" auto-fit needs to read yoga's computed height after a
+    // layout pass, but useLayoutEffect runs BEFORE ink's renderer calls
+    // calculateLayout, so measurements come back stale. Tracked for a
+    // follow-up that hooks into ink's onFrame callback.
     <Box overflow="hidden" {...boxProps} width={size.width} height={size.height}>
-      {/* Inner content wrapper exists solely so we have a stable yoga
-          node to measure for autoFit. Default alignSelf in yoga is
-          'auto' which inherits 'stretch' from the parent's column
-          flex, so the wrapper takes the full box width — its measured
-          natural height then reflects how content wraps at that width,
-          which is the input we need for the auto-min calculation.
-          Skipped measurement-wise when autoFit is false; the wrapper
-          itself is harmless either way (no margins, no flex shrink). */}
-      <Box ref={contentRef}>{children}</Box>
+      {children}
       {/* Handles are absolute children so they paint on top of content
           without affecting flex layout inside the Resizable. zIndex on
           SE > E,S so the corner cell paints over the edge strips when
