@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useCallback, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
+import { dispatchDrop, endDrag, startDrag, tickDrag } from '../drag-registry.js'
 import type { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
 import Box, { type Props as BoxProps } from './Box.js'
 
@@ -22,12 +23,16 @@ export type DragBounds = { width: number; height: number }
 /**
  * Lifecycle payload passed to onDragStart / onDrag / onDragEnd.
  * `delta` is screen-space cell delta from the press point — not from
- * the previous frame.
+ * the previous frame. `dropped` is only set on `onDragEnd` and indicates
+ * whether a `<DropTarget>` accepted the drop (true) or the box landed
+ * on empty terminal space (false). Source consumers use this to e.g.
+ * snap-back if no target took the drop.
  */
 export type DragInfo = {
   pos: DragPos
   startPos: DragPos
   delta: { dx: number; dy: number }
+  dropped?: boolean
 }
 
 export type DraggableProps = Except<
@@ -79,6 +84,18 @@ export type DraggableProps = Except<
    * clamped to bounds.
    */
   onDragEnd?: (info: DragInfo) => void
+  /**
+   * Arbitrary payload to attach to this drag. Forwarded to any
+   * `<DropTarget>` the box hovers over or is released onto. Use to carry
+   * the identity of the dragged item ({ id: 'card-3' }), its kind for
+   * `accept` filtering, or whatever the receiving target needs to
+   * reconcile its own state on drop.
+   *
+   * Plain `unknown` rather than a generic — TUI app data is usually
+   * heterogeneous, and a user-supplied generic on `<Draggable>` would
+   * fight every JSX call site. Cast on the receiving side.
+   */
+  dragData?: unknown
 }
 
 /**
@@ -118,6 +135,7 @@ export default function Draggable({
   onDragStart,
   onDrag,
   onDragEnd,
+  dragData,
   ...boxProps
 }: DraggableProps): React.ReactNode {
   const [pos, setPos] = useState<DragPos>(initialPos)
@@ -140,10 +158,12 @@ export default function Draggable({
   const onDragRef = useRef(onDrag)
   const onDragEndRef = useRef(onDragEnd)
   const boundsRef = useRef(bounds)
+  const dragDataRef = useRef(dragData)
   onDragStartRef.current = onDragStart
   onDragRef.current = onDrag
   onDragEndRef.current = onDragEnd
   boundsRef.current = bounds
+  dragDataRef.current = dragData
 
   // boxWidth/boxHeight needed for bounds clamping. Drawn from props each
   // render so a hot-resize during drag clamps to the new size on the
@@ -172,6 +192,7 @@ export default function Draggable({
         onDragStartRef,
         onDragRef,
         onDragEndRef,
+        dragDataRef,
       })
     },
     [pos, disabled],
@@ -210,6 +231,8 @@ type DragPressDeps = {
   onDragStartRef: { current: ((info: DragInfo) => void) | undefined }
   onDragRef: { current: ((info: DragInfo) => void) | undefined }
   onDragEndRef: { current: ((info: DragInfo) => void) | undefined }
+  /** Latest `dragData` prop, payload forwarded to drop targets. */
+  dragDataRef: { current: unknown }
 }
 
 /**
@@ -253,15 +276,30 @@ export function handleDragPress(e: MouseDownEvent, deps: DragPressDeps): void {
       if (!dragStarted) {
         dragStarted = true
         deps.setIsDragging(true)
+        // Engage drop-target tracking on the SAME event we treat as
+        // drag-start. startDrag must come before onDragStart fires so
+        // user code in onDragStart can already query isDragActive() if
+        // it needs to (rare, but consistent ordering matters).
+        startDrag(deps.dragDataRef.current)
         deps.onDragStartRef.current?.({ pos: newPos, startPos, delta: { dx, dy } })
       }
       deps.latestPosRef.current = newPos
       deps.setPos(newPos)
       deps.onDragRef.current?.({ pos: newPos, startPos, delta: { dx, dy } })
+      // Tick AFTER setPos / onDrag so drop-target callbacks see the box
+      // already at its new position when they read from refs / state.
+      tickDrag(m.col, m.row)
     },
     onUp(u: MouseUpEvent) {
       if (!dragStarted) return
       deps.setIsDragging(false)
+      // dispatchDrop walks the registered targets and fires onDrop on
+      // the topmost containing one. Returns whether anyone took it so
+      // the source can react (e.g. snap back if no target accepted).
+      const dropped = dispatchDrop(u.col, u.row)
+      // endDrag must come AFTER dispatchDrop — it clears the active drag,
+      // and dispatchDrop reads activeDrag.data to populate the DropInfo.
+      endDrag()
       // The position the user SEES at release is whatever onMove last
       // committed — read straight from the ref so onDragEnd matches the
       // rendered state exactly, even if bounds or size shifted between
@@ -271,6 +309,7 @@ export function handleDragPress(e: MouseDownEvent, deps: DragPressDeps): void {
         pos: finalPos,
         startPos,
         delta: { dx: u.col - startCol, dy: u.row - startRow },
+        dropped,
       })
     },
   })

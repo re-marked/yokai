@@ -17,6 +17,8 @@ export type {
   DragBounds,
   DragInfo,
 } from './components/Draggable'
+export { default as DropTarget } from './components/DropTarget'
+export type { DropTargetProps, DropInfo } from './components/DropTarget'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'

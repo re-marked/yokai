@@ -1334,11 +1334,7 @@ function renderChildren(
     // overlap-rerender shortcut is not meaningful for them.
     const isTextNode = childNode.nodeName === '#text'
     let overlapsMovingAbsolute = false
-    if (
-      !childElem.dirty &&
-      !isTextNode &&
-      dirtyAbsoluteCachedRects !== undefined
-    ) {
+    if (!childElem.dirty && !isTextNode && dirtyAbsoluteCachedRects !== undefined) {
       const myCached = nodeCache.get(childElem)
       if (myCached) {
         for (const r of dirtyAbsoluteCachedRects) {
