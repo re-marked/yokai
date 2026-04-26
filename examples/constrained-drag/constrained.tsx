@@ -39,6 +39,18 @@ import {
 type Pos = { top: number; left: number }
 type Bounds = { width: number; height: number }
 
+// Monotonic counter for "raise on press" behavior. Each press bumps
+// the counter and assigns the new value to the pressed box's zIndex.
+// After release the box keeps that value, so subsequent clicks on the
+// same screen position correctly hit-test to the most-recently-pressed
+// box (rather than reverting to whoever's last in tree order). Matches
+// how every web drag-and-drop UI handles "bring to front."
+let nextZ = 10
+function takeNextZ(): number {
+  nextZ += 1
+  return nextZ
+}
+
 function Draggable({
   initialPos,
   width,
@@ -54,6 +66,9 @@ function Draggable({
 }): React.ReactNode {
   const [pos, setPos] = useState(initialPos)
   const [isDragging, setIsDragging] = useState(false)
+  // Persisted across renders: the box's current paint-order rank.
+  // Starts at the base z (10) and bumps on each press.
+  const [zIndex, setZIndex] = useState(10)
 
   const handleMouseDown = (e: MouseDownEvent): void => {
     const startTop = pos.top
@@ -61,6 +76,7 @@ function Draggable({
     const startCol = e.col
     const startRow = e.row
     setIsDragging(true)
+    setZIndex(takeNextZ())
     e.captureGesture({
       onMove(m) {
         let newTop = startTop + (m.row - startRow)
@@ -92,9 +108,13 @@ function Draggable({
       left={pos.left}
       width={width}
       height={height}
-      // Lift the dragged box above its siblings so it paints on top
-      // while moving. Z drops back when released.
-      zIndex={isDragging ? 30 : 10}
+      // While dragging, lift WAY above any sibling's persisted z
+      // (siblings cap out at the latest takeNextZ value, drag offset
+      // ensures we paint on top regardless of what they grew to).
+      // Otherwise use this box's own persisted z, which was bumped on
+      // its last press — so it stays in front of siblings it was
+      // recently dragged on top of.
+      zIndex={isDragging ? zIndex + 1000 : zIndex}
       backgroundColor={fillColor}
       onMouseDown={handleMouseDown}
     />
