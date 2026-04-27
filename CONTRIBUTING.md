@@ -12,11 +12,6 @@ Yokai is a foundation library — claude-corp and other downstream consumers dep
 
 - **Granular and frequent.** One logical change = one commit. If you're about to commit two unrelated things, split them.
 - **No "WIP" commits, no batched-up commits.** A commit should always pass CI on its own.
-- **Co-authorship is mandatory** on every commit:
-  ```
-  Co-Authored-By: Mark <psyhik17@gmail.com>
-  Co-Authored-By: Claude <noreply@anthropic.com>
-  ```
 
 ## Quality bar
 
