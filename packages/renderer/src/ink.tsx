@@ -1663,6 +1663,8 @@ export default class Ink {
         onStdinResume={this.reassertTerminalModes}
         onCursorDeclaration={this.setCursorDeclaration}
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
+        focusManager={this.focusManager}
+        rootNode={this.rootNode}
       >
         <TerminalWriteProvider value={this.writeRaw}>{node}</TerminalWriteProvider>
       </App>

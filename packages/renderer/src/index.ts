@@ -26,6 +26,10 @@ export type {
   ResizeHandleDirection,
   ResizeInfo,
 } from './components/Resizable'
+export { default as FocusGroup } from './components/FocusGroup'
+export type { FocusGroupProps, FocusGroupDirection } from './components/FocusGroup'
+export { default as FocusRing } from './components/FocusRing'
+export type { FocusRingProps } from './components/FocusRing'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'
@@ -41,6 +45,10 @@ export function useTheme(): [string, (name: string) => void] {
 
 // Hooks
 export { default as useInput } from './hooks/use-input'
+export { default as useFocus } from './hooks/use-focus'
+export type { UseFocusOptions, UseFocusResult } from './hooks/use-focus'
+export { default as useFocusManager } from './hooks/use-focus-manager'
+export type { UseFocusManagerResult } from './hooks/use-focus-manager'
 export { default as useApp } from './hooks/use-app'
 export { default as useStdin } from './hooks/use-stdin'
 export { useTerminalFocus } from './hooks/use-terminal-focus'

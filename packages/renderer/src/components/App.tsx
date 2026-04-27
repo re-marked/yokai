@@ -1,9 +1,11 @@
 import { isEnvTruthy, logError, logForDebugging } from '@yokai/shared'
 import { PureComponent, type ReactNode } from 'react'
+import type { DOMElement } from '../dom'
 import { EventEmitter } from '../events/emitter'
 import { InputEvent } from '../events/input-event'
 import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
+import type { FocusManager } from '../focus'
 import {
   INITIAL_STATE,
   type ParsedInput,
@@ -29,6 +31,7 @@ import AppContext from './AppContext'
 import { ClockProvider } from './ClockContext'
 import CursorDeclarationContext, { type CursorDeclarationSetter } from './CursorDeclarationContext'
 import ErrorOverview from './ErrorOverview'
+import FocusContext from './FocusContext'
 import StdinContext from './StdinContext'
 import { TerminalFocusProvider } from './TerminalFocusContext'
 import { TerminalSizeContext } from './TerminalSizeContext'
@@ -99,6 +102,11 @@ type Props = {
   // Dispatch a keyboard event through the DOM tree. Called for each
   // parsed key alongside the legacy EventEmitter path.
   readonly dispatchKeyboardEvent: (parsedKey: ParsedKey) => void
+  // Focus subsystem references — exposed to React land via FocusContext
+  // so useFocus / useFocusManager / FocusGroup can subscribe / dispatch
+  // without walking the DOM each call.
+  readonly focusManager: FocusManager
+  readonly rootNode: DOMElement
 }
 
 // Multi-click detection thresholds. 500ms is the macOS default; a small
@@ -205,11 +213,18 @@ export default class App extends PureComponent<Props, State> {
                 <CursorDeclarationContext.Provider
                   value={this.props.onCursorDeclaration ?? (() => {})}
                 >
-                  {this.state.error ? (
-                    <ErrorOverview error={this.state.error as Error} />
-                  ) : (
-                    this.props.children
-                  )}
+                  <FocusContext.Provider
+                    value={{
+                      manager: this.props.focusManager,
+                      root: this.props.rootNode,
+                    }}
+                  >
+                    {this.state.error ? (
+                      <ErrorOverview error={this.state.error as Error} />
+                    ) : (
+                      this.props.children
+                    )}
+                  </FocusContext.Provider>
                 </CursorDeclarationContext.Provider>
               </ClockProvider>
             </TerminalFocusProvider>
