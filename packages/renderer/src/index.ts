@@ -28,6 +28,8 @@ export type {
 } from './components/Resizable'
 export { default as FocusGroup } from './components/FocusGroup'
 export type { FocusGroupProps, FocusGroupDirection } from './components/FocusGroup'
+export { default as FocusRing } from './components/FocusRing'
+export type { FocusRingProps } from './components/FocusRing'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'
