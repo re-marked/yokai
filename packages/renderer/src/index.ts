@@ -41,6 +41,8 @@ export function useTheme(): [string, (name: string) => void] {
 
 // Hooks
 export { default as useInput } from './hooks/use-input'
+export { default as useFocus } from './hooks/use-focus'
+export type { UseFocusOptions, UseFocusResult } from './hooks/use-focus'
 export { default as useApp } from './hooks/use-app'
 export { default as useStdin } from './hooks/use-stdin'
 export { useTerminalFocus } from './hooks/use-terminal-focus'
