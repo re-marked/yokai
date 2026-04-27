@@ -41,7 +41,8 @@ docs/
 │   ├── drop-target.md
 │   ├── resizable.md
 │   ├── focus-group.md
-│   └── focus-ring.md
+│   ├── focus-ring.md
+│   └── text-input.md
 ├── hooks/
 │   ├── use-input.md
 │   ├── use-app.md
@@ -130,6 +131,7 @@ docs/
 - [Resizable](components/resizable.md)
 - [FocusGroup](components/focus-group.md)
 - [FocusRing](components/focus-ring.md)
+- [TextInput](components/text-input.md)
 
 ### Hooks
 

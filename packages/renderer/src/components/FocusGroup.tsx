@@ -1,8 +1,8 @@
 import type React from 'react'
-import { type PropsWithChildren, useRef } from 'react'
+import { type PropsWithChildren, useCallback, useRef } from 'react'
 import type { DOMElement } from '../dom.js'
+import type { KeyboardEvent } from '../events/keyboard-event.js'
 import useFocusManager from '../hooks/use-focus-manager.js'
-import useInput from '../hooks/use-input.js'
 import Box, { type Props as BoxProps } from './Box.js'
 
 /**
@@ -53,13 +53,13 @@ export type FocusGroupProps = BoxProps & {
  *   JSX.
  * - Wrap is per-group: each group decides independently whether to
  *   cycle at its own boundaries.
- * - Nested groups work: the innermost containing group wins arrow
- *   handling because its useInput fires regardless, and only acts when
- *   focus is inside its OWN subtree. The outer group also fires but
- *   its descendant check ALSO passes — so both move focus. Avoid
- *   nesting groups with overlapping arrow assignments; if you must,
- *   set the outer group's `direction` to handle a different axis from
- *   the inner one.
+ * - Nested groups work: the inner group's onKeyDown fires first
+ *   (deepest target on the bubble path), navigates, and calls
+ *   preventDefault. The outer group's onKeyDown fires next and skips
+ *   on `event.defaultPrevented`, so the inner group wins. To suppress
+ *   arrow nav for a focused element entirely (e.g. a `<TextInput>`
+ *   that wants ←/→ for caret movement), the focused element's
+ *   onKeyDown can call `preventDefault()` first.
  *
  * @example
  *   <FocusGroup direction="column" wrap>
@@ -80,23 +80,26 @@ export default function FocusGroup({
   const ref = useRef<DOMElement>(null)
   const { focused, focus } = useFocusManager()
 
-  useInput(
-    (_input, key) => {
+  const onKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (!isActive) return
+      if (e.defaultPrevented) return // a focused descendant claimed the key
       const node = ref.current
       if (!node || !focused) return
       if (!isDescendant(focused, node)) return
 
+      const k = e.key
       // Decide direction. Each branch checks independently so 'both'
       // handles all four arrows. 'row' / 'column' ignore the irrelevant
       // axis — keys pass through to other handlers / groups.
       let move: -1 | 1 | 0 = 0
       if (direction === 'row' || direction === 'both') {
-        if (key.leftArrow) move = -1
-        else if (key.rightArrow) move = 1
+        if (k === 'left') move = -1
+        else if (k === 'right') move = 1
       }
       if (move === 0 && (direction === 'column' || direction === 'both')) {
-        if (key.upArrow) move = -1
-        else if (key.downArrow) move = 1
+        if (k === 'up') move = -1
+        else if (k === 'down') move = 1
       }
       if (move === 0) return
 
@@ -111,13 +114,16 @@ export default function FocusGroup({
         nextIdx = (nextIdx + tabbables.length) % tabbables.length
       }
       const target = tabbables[nextIdx]
-      if (target) focus(target)
+      if (target) {
+        e.preventDefault()
+        focus(target)
+      }
     },
-    { isActive },
+    [direction, wrap, isActive, focused, focus],
   )
 
   return (
-    <Box ref={ref} {...boxProps}>
+    <Box ref={ref} {...boxProps} onKeyDown={onKeyDown}>
       {children}
     </Box>
   )

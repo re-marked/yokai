@@ -12,6 +12,7 @@ Yokai dispatches events through a DOM-style capture + bubble tree, modeled on th
 | `MouseMoveEvent` / `MouseUpEvent` | captured gesture handler only | no |
 | `FocusEvent` (`'focus'` / `'blur'`) | focused / blurred node | no |
 | `InputEvent` | `useInput` subscribers | n/a |
+| `PasteEvent` (`'paste'`) | focused element, then ancestors | yes |
 
 All events extend `TerminalEvent`, which carries `target`, `currentTarget`, `eventPhase`, `timeStamp`, `defaultPrevented`.
 
@@ -49,8 +50,18 @@ event.preventDefault()            // suppress default action (e.g. Tab cycling o
 | `dispatchMouseDown(root, col, row, button)` | `hit-test.ts` |
 | `dispatchHover(root, col, row, hovered)` | `hit-test.ts` |
 | `dispatchKeyboardEvent(parsedKey)` | `ink.tsx` — fires from `focusManager.activeElement ?? root` |
+| `dispatchPasteEvent(text)` | `ink.tsx` — long-form pastes from `App.handleParsedInput` |
 
 Discrete events run inside React's `discreteUpdates` so all state updates batch synchronously.
+
+## Smart bracketed paste
+
+Yokai enables bracketed paste mode (DEC 2004) on alt-screen entry. Pasted text comes back from the parser tagged `isPasted: true`. `App.handleParsedInput` then splits it by length:
+
+- **≤ threshold** (configurable via `<AlternateScreen pasteThreshold>`, default 32 chars): the paste is dispatched as a stream of per-character keypresses. `useInput` and `onKeyDown` see normal typing — short pastes feel like text entry.
+- **> threshold**: the paste fires once as a `PasteEvent` through the DOM (focused element + bubble) AND once as a single `useInput` event with `key.isPasted = true` (backwards compat for consumers that key off the flag).
+
+`<TextInput>` listens for `PasteEvent` to insert long pastes as one undo step. Custom consumers attach `onPaste` on any `<Box>`.
 
 ## See also
 - [Mouse](../concepts/mouse.md)

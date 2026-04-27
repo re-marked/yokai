@@ -1,5 +1,5 @@
 import type React from 'react'
-import { type PropsWithChildren, useContext, useInsertionEffect } from 'react'
+import { type PropsWithChildren, useContext, useEffect, useInsertionEffect } from 'react'
 import instances from '../instances.js'
 import {
   DISABLE_MOUSE_TRACKING,
@@ -9,11 +9,24 @@ import {
 } from '../termio/dec.js'
 import { TerminalWriteContext } from '../useTerminalNotification.js'
 import Box from './Box.js'
+import PasteContext from './PasteContext.js'
 import { TerminalSizeContext } from './TerminalSizeContext.js'
 
 type Props = PropsWithChildren<{
   /** Enable SGR mouse tracking (wheel + click/drag). Default true. */
   mouseTracking?: boolean
+  /**
+   * Smart-paste threshold in characters. Bracketed pastes ≤ this length
+   * are dispatched as per-character keypresses (so short pastes feel
+   * like typing). Pastes above fire a single `PasteEvent` so consumers
+   * can treat them as one atomic edit. Default 32.
+   *
+   * Set this higher (e.g. 200) when most expected pastes are URLs or
+   * single-line snippets and you want them to feel like typing rather
+   * than a discrete paste action. Set lower (e.g. 4) when even tiny
+   * paste blocks should fire `onPaste`.
+   */
+  pasteThreshold?: number
 }>
 
 /**
@@ -36,9 +49,24 @@ type Props = PropsWithChildren<{
  * from scrolling content) and so signal-exit cleanup can exit the alt
  * screen if the component's own unmount doesn't run.
  */
-export function AlternateScreen({ children, mouseTracking = true }: Props): React.ReactNode {
+export function AlternateScreen({
+  children,
+  mouseTracking = true,
+  pasteThreshold,
+}: Props): React.ReactNode {
   const size = useContext(TerminalSizeContext)
   const writeRaw = useContext(TerminalWriteContext)
+  const paste = useContext(PasteContext)
+
+  // Push the pasteThreshold to the App's instance field whenever it
+  // changes. App reads the field at parse time (outside React) so the
+  // simplest plumbing is a setter on context that mutates the field.
+  // Skipping the effect when pasteThreshold is undefined leaves App's
+  // own default in place.
+  useEffect(() => {
+    if (pasteThreshold === undefined) return
+    paste?.setPasteThreshold(pasteThreshold)
+  }, [paste, pasteThreshold])
 
   // useInsertionEffect (not useLayoutEffect): react-reconciler calls
   // resetAfterCommit between the mutation and layout commit phases, and

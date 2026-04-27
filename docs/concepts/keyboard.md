@@ -73,6 +73,7 @@ useInput((input, key) => {
 ```
 
 ## See also
-- [Events](../concepts/events.md)
+- [Events](../concepts/events.md) — including the smart-paste split
 - [Focus](../concepts/focus.md)
 - [useInput](../hooks/use-input.md)
+- [`<TextInput>`](../components/text-input.md) — handles all the editing keybindings out of the box
