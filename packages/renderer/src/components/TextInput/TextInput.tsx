@@ -119,27 +119,30 @@ export default function TextInput({
   ...boxProps
 }: PropsWithChildren<TextInputProps>): React.ReactNode {
   const isControlled = value !== undefined
+
+  // optsRef MUST be declared before useReducer. On a render that has
+  // queued dispatches, useReducer drains them by calling the reducer
+  // immediately — which reads optsRef.current. With the ref declared
+  // AFTER useReducer in render order, the reducer would hit a TDZ
+  // ("Cannot access 'optsRef' before initialization") when the React
+  // Compiler-transformed code re-enters this scope.
+  const optsRef = useRef<ReducerOptions>({ multiline, maxLength, historyCap })
+  // Mutate inline so the next dispatch sees the latest options without
+  // a re-renders-update-state-before-effects round trip.
+  optsRef.current = { multiline, maxLength, historyCap }
+
+  // Reducer bridge — the React-shape (state, action) => state, closing
+  // over the ref so opts changes propagate to the next dispatch.
+  const reducerWithOpts = useCallback(
+    (s: TextInputState, a: Action): TextInputState => reduce(s, a, optsRef.current),
+    [],
+  )
+
   const [state, dispatch] = useReducer(
     reducerWithOpts,
     isControlled ? value : (defaultValue ?? ''),
     initialState,
   )
-
-  // Keep reducer options stable per-render so the dispatcher and
-  // event handlers see consistent multiline/maxLength even mid-event.
-  const opts: ReducerOptions = useMemo(
-    () => ({ multiline, maxLength, historyCap }),
-    [multiline, maxLength, historyCap],
-  )
-  const optsRef = useRef(opts)
-  optsRef.current = opts
-
-  // Bridge: dispatch invokes reduce with the current opts ref.
-  // The reducer signature React expects is (state, action) => state,
-  // so we close over the latest opts via the ref.
-  function reducerWithOpts(s: TextInputState, a: Action): TextInputState {
-    return reduce(s, a, optsRef.current)
-  }
 
   // Controlled mode: when external `value` differs from internal,
   // reset state to the new value. Clearing history is intentional —
