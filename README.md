@@ -64,6 +64,10 @@ render(<App />)
 
 **`<Resizable>`** — resize primitive with `s`, `e`, `se` handles. Hover-highlighted chrome, `minSize` / `maxSize` clamping, `onResizeStart` / `onResize` / `onResizeEnd`. Defaults `overflow: 'hidden'` to keep content from bleeding outside the box.
 
+**`<FocusGroup>`** — adds arrow-key navigation between focusable descendants without interfering with Tab. `direction="row" | "column" | "both"`, optional `wrap`, optional `isActive`. Tab still cycles globally; arrows are bounded to the group.
+
+**`<FocusRing>`** — focusable Box with built-in focus-visible border indicator (default `cyan` border on focus). Pair with `<FocusGroup>` for keyboard-navigable lists / menus.
+
 ## ScrollBox API
 
 ```tsx
@@ -118,6 +122,7 @@ pnpm demo:drag                # three overlapping draggable rectangles
 pnpm demo:constrained-drag    # constrained-vs-free drag inside containers
 pnpm demo:drag-and-drop       # kanban: cards into columns
 pnpm demo:resizable           # two panels, three handles each
+pnpm demo:focus-nav           # Tab + arrow navigation between FocusGroups
 ```
 
 Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bottom — they're meant to be the first place you look when wiring a new interaction.
@@ -142,8 +147,8 @@ Pin to a tag, not `main` — `main` moves. See [release notes](https://github.co
 | `useStdin()` | Stdin stream + `isRawModeSupported` |
 | `useStdout()` | Stdout stream + `write` |
 | `useTerminalViewport()` | `{ columns, rows }`, updates on resize |
-| `useFocusManager()` | `focus`, `focusNext`, `focusPrevious` |
-| `useFocus(options?)` | Focus state for the current component |
+| `useFocus(options?)` | `{ ref, isFocused, focus }` — per-element focus tracking + imperative focus |
+| `useFocusManager()` | `{ focused, focus, focusNext, focusPrevious, blur }` — global focus actions, reactive to changes |
 | `useInterval(fn, ms)` | Stable interval that cleans up on unmount |
 
 ## Development
