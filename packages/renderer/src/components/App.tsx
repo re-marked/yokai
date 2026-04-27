@@ -249,9 +249,7 @@ export default class App extends PureComponent<Props, State> {
                       root: this.props.rootNode,
                     }}
                   >
-                    <PasteContext.Provider
-                      value={{ setPasteThreshold: this.setPasteThreshold }}
-                    >
+                    <PasteContext.Provider value={{ setPasteThreshold: this.setPasteThreshold }}>
                       {this.state.error ? (
                         <ErrorOverview error={this.state.error as Error} />
                       ) : (
