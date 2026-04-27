@@ -18,7 +18,8 @@ Guide for AI agents writing code that uses yokai. Read this before generating yo
 | `<DropTarget>` | Manual mouse-up coordinate checks |
 | `<Resizable>` | Hand-built handles + `captureGesture` |
 | `<FocusGroup>` + `<FocusRing>` | Manual `useFocus` + arrow-key dispatch in `useInput` |
-| `<AlternateScreen mouseTracking>` | Manually writing `\x1b[?1049h` and `\x1b[?1000h` |
+| `<TextInput>` | Hand-rolled buffer + `useInput` editing loop |
+| `<AlternateScreen mouseTracking pasteThreshold={n}>` | Manually writing `\x1b[?1049h`, `\x1b[?1000h`, `\x1b[?2004h`, parsing `200~`/`201~` for paste |
 | `<ScrollBox stickyScroll>` | Manual scroll-offset tracking + viewport math |
 | `<Link>` | Hand-rolled OSC 8 escape sequences |
 | `useTerminalViewport()` | Reading `process.stdout.columns` directly |
@@ -40,6 +41,8 @@ The high-level component handles edge cases (lost-release recovery, gesture canc
 - **`onClick` on `<Draggable>`.** Gesture capture suppresses click dispatch for the drag's duration. Distinguish click from drag in `onDragEnd` (zero displacement) instead.
 - **Scrolling `<ScrollBox>` via React state.** ScrollBox's `scrollTo` / `scrollBy` mutate the DOM in place by design. Use the imperative ref, not state-driven props.
 - **Calling `render(<App />)` twice in the same process.** Unmount the previous instance with `instance.unmount()` first.
+- **Hand-rolling a text input with `useInput` + `useState`.** Use `<TextInput>`. The hand-rolled version misses caret rendering via `useDeclaredCursor`, smart bracketed paste, undo grouping, word nav, selection, wide-char math, and password masking — all of which TextInput handles.
+- **Listening for paste in `useInput`.** Pastes ≤ 32 chars (default threshold) come through as a stream of regular keystrokes, not as a single string. For long pastes, attach `onPaste` on a `<Box>` to receive a `PasteEvent` with the full text.
 
 ## When you can't find what you need
 

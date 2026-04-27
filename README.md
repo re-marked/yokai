@@ -68,6 +68,8 @@ render(<App />)
 
 **`<FocusRing>`** — focusable Box with built-in focus-visible border indicator (default `cyan` border on focus). Pair with `<FocusGroup>` for keyboard-navigable lists / menus.
 
+**`<TextInput>`** — editable text. Single-line or multiline. Caret via the real terminal cursor (IME / a11y correct). Smart bracketed paste, undo/redo, word nav, selection, password masking. See [docs/components/text-input.md](./docs/components/text-input.md).
+
 ## ScrollBox API
 
 ```tsx
@@ -160,6 +162,7 @@ pnpm demo:constrained-drag    # constrained-vs-free drag inside containers
 pnpm demo:drag-and-drop       # kanban: cards into columns
 pnpm demo:resizable           # two panels, three handles each
 pnpm demo:focus-nav           # Tab + arrow navigation between FocusGroups
+pnpm demo:text-input          # text input fields: single, multiline, password
 ```
 
 Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bottom — they're meant to be the first place you look when wiring a new interaction.
