@@ -48,7 +48,7 @@ function App() {
 render(<App />)
 ```
 
-**`<Box>`** — flex container. Accepts all Yoga layout props: `flexDirection`, `flexGrow`, `flexShrink`, `flexBasis`, `alignItems`, `justifyContent`, `gap`, `margin`, `padding`, `width`, `height`, `position`, `top`, `left`, `right`, `bottom`, `overflow`.
+**`<Box>`** — flex container. Accepts all Yoga layout props: `flexDirection`, `flexGrow`, `flexShrink`, `flexBasis`, `alignItems`, `justifyContent`, `gap`, `margin`, `padding`, `width`, `height`, `position`, `top`, `left`, `right`, `bottom`, `overflow`, `zIndex` (only honored on `position: 'absolute'`).
 
 **`<Text>`** — text node. Accepts `color`, `backgroundColor`, `bold`, `italic`, `underline`, `dimColor`, `wrap`.
 
@@ -57,6 +57,12 @@ render(<App />)
 **`<AlternateScreen>`** — enters the terminal alternate buffer with optional mouse tracking on mount, exits cleanly on unmount.
 
 **`<Link>`** — OSC 8 hyperlink.
+
+**`<Draggable>`** — gesture-captured drag primitive. Raise-on-press, drag-time z boost, optional `bounds` clamp, `onDragStart` / `onDrag` / `onDragEnd`. `dragData` payload forwarded to drop targets.
+
+**`<DropTarget>`** — receiver side of drag-and-drop. Optional `accept(data) => boolean` filter, hover lifecycle (`onDragEnter` / `onDragOver` / `onDragLeave`), `onDrop` on the topmost target containing the cursor at release.
+
+**`<Resizable>`** — resize primitive with `s`, `e`, `se` handles. Hover-highlighted chrome, `minSize` / `maxSize` clamping, `onResizeStart` / `onResize` / `onResizeEnd`. Defaults `overflow: 'hidden'` to keep content from bleeding outside the box.
 
 ## ScrollBox API
 
@@ -80,10 +86,52 @@ Mouse tracking is enabled inside `<AlternateScreen mouseTracking>`. Events are d
 
 ```tsx
 <Box
+  onClick={(e) => console.log(e.col, e.row)}
   onMouseDown={(e) => console.log(e.col, e.row)}
+  onMouseEnter={() => console.log('hover')}
+  onMouseLeave={() => console.log('leave')}
   onKeyDown={(e) => console.log(e.key)}
 >
 ```
+
+### Gesture capture
+
+Inside `onMouseDown`, call `event.captureGesture({ onMove, onUp })` to claim subsequent mouse-motion events and the eventual release for that one drag. Selection extension is suppressed for the duration; the captured handlers fire even when the cursor leaves the originally-pressed element's bounds.
+
+```tsx
+<Box
+  onMouseDown={(e) => {
+    e.captureGesture({
+      onMove: (m) => console.log('drag at', m.col, m.row),
+      onUp: (u) => console.log('release at', u.col, u.row),
+    })
+  }}
+/>
+```
+
+`<Draggable>`, `<DropTarget>`, and `<Resizable>` are all built on top of this primitive. Reach for them first; reach for raw `captureGesture` when none of the components fit your interaction.
+
+## Demos
+
+```bash
+pnpm demo:drag                # three overlapping draggable rectangles
+pnpm demo:constrained-drag    # constrained-vs-free drag inside containers
+pnpm demo:drag-and-drop       # kanban: cards into columns
+pnpm demo:resizable           # two panels, three handles each
+```
+
+Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bottom — they're meant to be the first place you look when wiring a new interaction.
+
+## Consumption
+
+```jsonc
+// package.json
+"dependencies": {
+  "@yokai/renderer": "github:re-marked/yokai#v0.4.0"
+}
+```
+
+Pin to a tag, not `main` — `main` moves. See [release notes](https://github.com/re-marked/yokai/releases) for what's in each version.
 
 ## Hooks
 
@@ -107,6 +155,10 @@ pnpm typecheck      # both packages
 pnpm lint           # biome
 pnpm test           # vitest
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the rules of the road — branching, granular commits, co-authorship, quality bar, and release workflow.
 
 ## License
 
