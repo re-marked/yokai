@@ -1,5 +1,5 @@
 import type React from 'react'
-import { type PropsWithChildren } from 'react'
+import type { PropsWithChildren } from 'react'
 import type { Except } from 'type-fest'
 import useFocus from '../hooks/use-focus.js'
 import type { Color } from '../styles.js'

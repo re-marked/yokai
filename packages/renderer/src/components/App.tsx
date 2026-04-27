@@ -1,9 +1,11 @@
 import { isEnvTruthy, logError, logForDebugging } from '@yokai/shared'
 import { PureComponent, type ReactNode } from 'react'
+import type { DOMElement } from '../dom'
 import { EventEmitter } from '../events/emitter'
 import { InputEvent } from '../events/input-event'
 import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
+import type { FocusManager } from '../focus'
 import {
   INITIAL_STATE,
   type ParsedInput,
@@ -25,8 +27,6 @@ import {
   FOCUS_OUT,
 } from '../termio/csi'
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, EBP, EFE, HIDE_CURSOR, SHOW_CURSOR } from '../termio/dec'
-import type { DOMElement } from '../dom'
-import type { FocusManager } from '../focus'
 import AppContext from './AppContext'
 import { ClockProvider } from './ClockContext'
 import CursorDeclarationContext, { type CursorDeclarationSetter } from './CursorDeclarationContext'

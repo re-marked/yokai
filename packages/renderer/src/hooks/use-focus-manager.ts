@@ -62,9 +62,7 @@ export function useFocusManager(): UseFocusManagerResult {
   // when focus moves. The global subscribe fires after every focus
   // change, including programmatic moves and Tab cycling — so this
   // covers all paths.
-  const [focused, setFocused] = useState<DOMElement | null>(
-    ctx?.manager.activeElement ?? null,
-  )
+  const [focused, setFocused] = useState<DOMElement | null>(ctx?.manager.activeElement ?? null)
 
   useEffect(() => {
     if (!ctx) return

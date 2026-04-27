@@ -147,12 +147,7 @@ describe('FocusGroup navigation logic', () => {
   // The FocusGroup's useInput callback runs this exact recipe; tests
   // here drive the same steps with a real FocusManager.
 
-  function navigate(
-    fm: FocusManager,
-    group: DOMElement,
-    move: -1 | 1,
-    wrap: boolean,
-  ): void {
+  function navigate(fm: FocusManager, group: DOMElement, move: -1 | 1, wrap: boolean): void {
     if (!fm.activeElement) return
     if (!isDescendant(fm.activeElement, group)) return
     const tabbables = collectTabbablesInSubtree(group)

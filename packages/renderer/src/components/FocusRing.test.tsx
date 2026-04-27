@@ -32,27 +32,16 @@ describe('FocusRing — prop surface', () => {
   })
 
   it('accepts an explicit borderStyle override', () => {
-    expect(() =>
-      React.createElement(FocusRing, { borderStyle: 'double' }),
-    ).not.toThrow()
+    expect(() => React.createElement(FocusRing, { borderStyle: 'double' })).not.toThrow()
   })
 
   it('accepts an explicit tabIndex override (e.g. -1 for programmatic-only)', () => {
-    expect(() =>
-      React.createElement(FocusRing, { tabIndex: -1 }),
-    ).not.toThrow()
+    expect(() => React.createElement(FocusRing, { tabIndex: -1 })).not.toThrow()
   })
 
   it('accepts children of arbitrary React node shape', () => {
     expect(() =>
-      React.createElement(
-        FocusRing,
-        null,
-        React.createElement('div'),
-        'plain text',
-        null,
-        false,
-      ),
+      React.createElement(FocusRing, null, React.createElement('div'), 'plain text', null, false),
     ).not.toThrow()
   })
 })
