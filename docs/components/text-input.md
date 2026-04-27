@@ -88,13 +88,17 @@ const [name, setName] = useState('')
 - **Undo grouping.** Consecutive same-kind insertions or deletions merge into one undo step (a typed word is one Ctrl+Z, not N). Pastes are always their own step.
 - **Wide chars.** Caret math counts CJK / wide chars as 2 cells, combining marks as 0. Click positioning snaps to the LEFT edge of a wide char if the click lands mid-glyph.
 
+## Scrolling
+
+- **Single-line**: when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
+- **Multiline**: when content exceeds the box height, the visible window scrolls vertically so the caret line stays in view. Each visible line truncates if it exceeds the inner width.
+- The inner content area is read from yoga's computed size minus padding + border, so `width` / `height` props refer to the OUTER box. If you don't pass `width` / `height`, no scrolling — content fills the box's natural size.
+
 ## Known limitations
 
-Slated for the follow-up PR:
-- No horizontal scroll for single-line content longer than the box width (truncates).
-- No vertical scroll for multiline content taller than the box (overflows).
-- IME composition is not yet handled — multi-byte composition sequences from CJK / Korean IMEs may produce intermediate state.
-- `disabled` is honored for keystrokes but not for paste / mouse drag.
+- IME composition is not yet handled — multi-byte composition sequences from CJK / Korean IMEs may produce intermediate state. Committed text works correctly.
+- Selection highlight may render approximately when it crosses a horizontally-scrolled wide character boundary.
+- Click positioning doesn't subtract padding/border from the click coordinates — clicks within padding may snap to the wrong char by the padding amount.
 
 ## Related
 - [Keyboard concept](../concepts/keyboard.md)
