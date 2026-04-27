@@ -1,15 +1,26 @@
 import type React from 'react'
-import { type PropsWithChildren, useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+import {
+  type PropsWithChildren,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../../dom.js'
 import type { KeyboardEvent } from '../../events/keyboard-event.js'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
 import type { PasteEvent } from '../../events/paste-event.js'
 import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
+import { LayoutEdge } from '../../layout/node.js'
 import type { Color } from '../../styles.js'
 import Box, { type Props as BoxProps } from '../Box.js'
 import Text from '../Text.js'
 import { cellColumnAt, splitLines } from './caret-math.js'
+import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
 import {
   type Action,
   type ReducerOptions,
@@ -178,17 +189,79 @@ export default function TextInput({
     return { line: lines.length - 1, col: cellColumnAt(lines[lines.length - 1]!, 0) }
   }, [state.value, state.caret])
 
-  // Declare the terminal cursor at the caret. The hook only renders
+  // ── Scroll: keep caret visible inside the visible window ───────────
+  //
+  // Two axes; only one applies per mode. Single-line: horizontal,
+  // measured in cells across the inner content area. Multiline:
+  // vertical, measured in rows across the inner content area.
+  //
+  // Inner content size is read from yoga via measureInnerSize() each
+  // commit. Read in useLayoutEffect so the value is fresh enough to
+  // matter for the next render — yoga's value is one frame stale
+  // (calculateLayout runs after this effect), but for typing the lag
+  // is invisible because each keystroke triggers another render that
+  // catches up.
+  const [inner, setInner] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const node = ref.current
+    if (!node?.yogaNode) return
+    const measured = measureInnerSize(node)
+    if (measured.width !== inner.width || measured.height !== inner.height) {
+      setInner(measured)
+    }
+  })
+
+  const [scrollX, setScrollX] = useState(0)
+  const [scrollY, setScrollY] = useState(0)
+  const allLines = useMemo(() => splitLines(state.value), [state.value])
+  // Total content size. Single-line: cells of the only line.
+  // Multiline: row count.
+  const contentWidth = multiline ? 0 : cellColumnAt(allLines[0]!, allLines[0]!.length)
+  const contentHeight = allLines.length
+
+  // Adjust scroll on every state/size change so the caret stays in
+  // view. useEffect (not useLayoutEffect) so the next paint reflects
+  // both the new caret AND the new scroll in the same render — React
+  // batches the setState here with the original cause.
+  useEffect(() => {
+    if (!multiline && inner.width > 0) {
+      const next = scrollToKeepCaretVisible({
+        scroll: scrollX,
+        caretPos: caretLineCol.col,
+        windowSize: inner.width,
+        contentSize: Math.max(contentWidth, caretLineCol.col + 1),
+      })
+      if (next !== scrollX) setScrollX(next)
+    }
+    if (multiline && inner.height > 0) {
+      const next = scrollToKeepCaretVisible({
+        scroll: scrollY,
+        caretPos: caretLineCol.line,
+        windowSize: inner.height,
+        contentSize: Math.max(contentHeight, caretLineCol.line + 1),
+      })
+      if (next !== scrollY) setScrollY(next)
+    }
+  }, [
+    multiline,
+    inner.width,
+    inner.height,
+    caretLineCol.col,
+    caretLineCol.line,
+    contentWidth,
+    contentHeight,
+    scrollX,
+    scrollY,
+  ])
+
+  // Declare the terminal cursor at the caret, adjusted for scroll
+  // offsets so it lands on the visible cell. The hook only renders
   // the cursor when `active` is true — we're active iff this is the
-  // focused element. We detect focus via DOM-node attribute checked
-  // each render (focus changes trigger a re-render via FocusContext
-  // already, since we'll wrap with autoFocus / tabIndex below).
-  // Position is element-relative; the renderer adds the box's screen
-  // origin.
+  // focused element.
   const isFocused = ref.current?.focusManager?.activeElement === ref.current
   const cursorRef = useDeclaredCursor({
-    line: caretLineCol.line,
-    column: caretLineCol.col,
+    line: caretLineCol.line - scrollY,
+    column: caretLineCol.col - scrollX,
     active: isFocused,
   })
 
@@ -258,14 +331,29 @@ export default function TextInput({
   const handleMouseDown = useCallback(
     (e: MouseDownEvent) => {
       if (disabled) return
-      const idx = clickToCharIndex(state.value, e.localCol, e.localRow, password, passwordChar)
+      // Click coords are local to the Box (0-indexed from its top-left
+      // INCLUDING padding/border). The visible content starts at
+      // (scrollX, scrollY) within the buffer, so add the scroll
+      // offsets to land on the right buffer position. We don't try
+      // to subtract padding/border here — the renderer's hit-test
+      // already accounts for box layout, so localCol/Row are
+      // relative to the OUTER box. If the user adds padding, click
+      // accuracy near the edges will be off by the padding amount;
+      // documented limitation.
+      const idx = clickToCharIndex(
+        state.value,
+        e.localCol + scrollX,
+        e.localRow + scrollY,
+        password,
+        passwordChar,
+      )
       dispatch({ type: 'setCaret', charIdx: idx, extend: e.shiftKey })
       e.captureGesture({
         onMove(m) {
           const newIdx = clickToCharIndex(
             state.value,
-            m.col - (e.col - e.localCol),
-            m.row - (e.row - e.localRow),
+            m.col - (e.col - e.localCol) + scrollX,
+            m.row - (e.row - e.localRow) + scrollY,
             password,
             passwordChar,
           )
@@ -273,15 +361,40 @@ export default function TextInput({
         },
       })
     },
-    [disabled, state.value, password, passwordChar],
+    [disabled, state.value, password, passwordChar, scrollX, scrollY],
   )
 
   // ── Rendering ─────────────────────────────────────────────────────
 
-  // Compute lines-with-selection-highlights for rendering.
+  // Compute lines-with-selection-highlights for rendering. Pass
+  // scroll offsets so the rendered slice matches the cursor's
+  // declared position (single-line: skip `scrollX` cells of the only
+  // line; multiline: skip `scrollY` rows).
   const renderedLines = useMemo(
-    () => renderLines(state, { password, passwordChar, selectionColor, placeholder }),
-    [state, password, passwordChar, selectionColor, placeholder],
+    () =>
+      renderLines(state, {
+        password,
+        passwordChar,
+        selectionColor,
+        placeholder,
+        scrollX,
+        scrollY,
+        innerWidth: inner.width,
+        innerHeight: inner.height,
+        multiline,
+      }),
+    [
+      state,
+      password,
+      passwordChar,
+      selectionColor,
+      placeholder,
+      scrollX,
+      scrollY,
+      inner.width,
+      inner.height,
+      multiline,
+    ],
   )
 
   return (
@@ -377,6 +490,11 @@ type RenderOpts = {
   passwordChar: string
   selectionColor: Color
   placeholder: string | undefined
+  scrollX: number
+  scrollY: number
+  innerWidth: number
+  innerHeight: number
+  multiline: boolean
 }
 
 function maskValue(value: string, password: boolean, passwordChar: string): string {
@@ -393,7 +511,17 @@ function maskValue(value: string, password: boolean, passwordChar: string): stri
  *  selection highlight is visible. Empty buffer renders the
  *  placeholder dimmed. */
 function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
-  const { password, passwordChar, selectionColor, placeholder } = opts
+  const {
+    password,
+    passwordChar,
+    selectionColor,
+    placeholder,
+    scrollX,
+    scrollY,
+    innerWidth,
+    innerHeight,
+    multiline,
+  } = opts
 
   if (state.value === '' && placeholder) {
     return (
@@ -407,39 +535,59 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
   const lines = splitLines(display)
   const [selStart, selEnd] = selectionOrCaretRange(state)
 
-  // Walk lines, emitting per-line segments. Convert flat selection
-  // indices into per-line indices so each line's highlight is rendered
-  // correctly. Index-as-key is correct here: lines have no stable
-  // identity, the buffer re-renders on every keystroke, and a stable
-  // key per slot avoids unmount-on-edit.
-  let offset = 0
-  return lines.map((line, lineIdx) => {
-    const lineLen = line.length
-    const localStart = clamp(selStart - offset, 0, lineLen)
-    const localEnd = clamp(selEnd - offset, 0, lineLen)
-    offset += lineLen + 1 // +1 for the consumed '\n'
+  // Multiline: window the line array vertically. Single-line: window
+  // the only line horizontally. Both fall back to the full buffer when
+  // measurements aren't available yet (first render).
+  const visibleLines =
+    multiline && innerHeight > 0 ? lines.slice(scrollY, scrollY + innerHeight) : lines
+  const lineOffset = multiline && innerHeight > 0 ? scrollY : 0
 
-    if (localStart === localEnd) {
-      // No selection on this line — render plain.
+  // Walk lines, emitting per-line segments. Convert flat selection
+  // indices into per-line indices. Index-as-key is correct here: lines
+  // have no stable identity, the buffer re-renders on every keystroke,
+  // and a stable key per slot avoids unmount-on-edit.
+  let charOffset = 0
+  for (let i = 0; i < lineOffset; i++) {
+    charOffset += (lines[i]?.length ?? 0) + 1 // +1 for '\n'
+  }
+  return visibleLines.map((line, lineIdx) => {
+    // For single-line, slice horizontally by cells.
+    const visibleLine =
+      !multiline && innerWidth > 0 ? sliceRowByCells(line, scrollX, innerWidth) : line
+    const lineLen = line.length
+    const localStart = clamp(selStart - charOffset, 0, lineLen)
+    const localEnd = clamp(selEnd - charOffset, 0, lineLen)
+    charOffset += lineLen + 1
+
+    // Selection range in the SLICED visible line. Convert by walking
+    // cells; for the simple no-wide-char path this is just char-index
+    // math after subtracting scrollX. For correctness with wide chars
+    // we'd compute via the same cell math sliceRowByCells uses, but
+    // for v1 the simple path is correct enough — selection rendering
+    // on a horizontally-scrolled wide char is a v2 nice-to-have.
+    const visStart = !multiline && innerWidth > 0 ? Math.max(0, localStart - scrollX) : localStart
+    const visEnd = !multiline && innerWidth > 0 ? Math.max(0, localEnd - scrollX) : localEnd
+
+    if (visStart === visEnd) {
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
           key={lineIdx}
-          wrap="wrap"
+          wrap="truncate-end"
         >
-          {line || ' '}
+          {visibleLine || ' '}
         </Text>
       )
     }
 
-    const before = line.slice(0, localStart)
-    const sel = line.slice(localStart, localEnd) || ' '
-    const after = line.slice(localEnd)
+    const before = visibleLine.slice(0, visStart)
+    const sel = visibleLine.slice(visStart, visEnd) || ' '
+    const after = visibleLine.slice(visEnd)
     return (
       <Text
         // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
         key={lineIdx}
-        wrap="wrap"
+        wrap="truncate-end"
       >
         {before}
         <Text backgroundColor={selectionColor}>{sel}</Text>
@@ -447,6 +595,32 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
       </Text>
     )
   })
+}
+
+/**
+ * Read the inner content area (width × height) from a Box's yoga
+ * node, subtracting border + padding insets. Returns 0/0 when the
+ * yoga layout isn't available yet (first render before
+ * calculateLayout, or detached node).
+ */
+function measureInnerSize(node: DOMElement): { width: number; height: number } {
+  const yoga = node.yogaNode
+  if (!yoga) return { width: 0, height: 0 }
+  const w = yoga.getComputedWidth()
+  const h = yoga.getComputedHeight()
+  if (!w || !h) return { width: 0, height: 0 }
+  const padL = yoga.getComputedPadding(LayoutEdge.Left) ?? 0
+  const padR = yoga.getComputedPadding(LayoutEdge.Right) ?? 0
+  const padT = yoga.getComputedPadding(LayoutEdge.Top) ?? 0
+  const padB = yoga.getComputedPadding(LayoutEdge.Bottom) ?? 0
+  const brL = yoga.getComputedBorder(LayoutEdge.Left) ?? 0
+  const brR = yoga.getComputedBorder(LayoutEdge.Right) ?? 0
+  const brT = yoga.getComputedBorder(LayoutEdge.Top) ?? 0
+  const brB = yoga.getComputedBorder(LayoutEdge.Bottom) ?? 0
+  return {
+    width: Math.max(0, Math.floor(w - padL - padR - brL - brR)),
+    height: Math.max(0, Math.floor(h - padT - padB - brT - brB)),
+  }
 }
 
 function clamp(v: number, lo: number, hi: number): number {

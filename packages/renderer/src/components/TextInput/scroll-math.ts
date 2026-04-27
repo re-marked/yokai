@@ -50,7 +50,7 @@ export function scrollToKeepCaretVisible(opts: {
 }
 
 /**
- * Slice a row by cell column range `[fromCol, fromCol + windowSize)`,
+ * Slice a row by cell column range `[startCol, startCol + windowSize)`,
  * preserving wide-char boundaries. If a wide character straddles the
  * leading edge, render a space in its place (since the right half
  * would visually misalign). Same for trailing edge.
@@ -60,7 +60,7 @@ export function scrollToKeepCaretVisible(opts: {
  */
 export function sliceRowByCells(row: string, fromCol: number, windowSize: number): string {
   if (windowSize <= 0) return ''
-  if (fromCol < 0) fromCol = 0
+  const startCol = Math.max(0, fromCol)
   let out = ''
   let cellAcc = 0
   let visibleCells = 0
@@ -70,16 +70,16 @@ export function sliceRowByCells(row: string, fromCol: number, windowSize: number
     if (w === 0) {
       // Combining mark — attach to whatever was last emitted (or drop
       // if before the visible range and the base char was clipped).
-      if (cellAcc > fromCol || (cellAcc === fromCol && out.length > 0)) {
+      if (cellAcc > startCol || (cellAcc === startCol && out.length > 0)) {
         out += ch
       }
       continue
     }
-    if (cellAcc + w <= fromCol) {
+    if (cellAcc + w <= startCol) {
       cellAcc += w
       continue
     }
-    if (cellAcc < fromCol) {
+    if (cellAcc < startCol) {
       // Wide char straddles leading edge → render a space for the
       // visible half so layout doesn't shift.
       out += ' '
