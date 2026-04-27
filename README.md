@@ -198,6 +198,10 @@ pnpm lint           # biome
 pnpm test           # vitest
 ```
 
+## Documentation
+
+Full reference under [`docs/`](./docs/) — getting started, conceptual guides, per-component and per-hook reference, real-world patterns, migration from Ink, and an [AGENTS.md](./docs/AGENTS.md) for AI assistants writing code that uses yokai.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the rules of the road — branching, granular commits, co-authorship, quality bar, and release workflow.
