@@ -6,6 +6,7 @@ import type { ClickEvent } from '../events/click-event.js'
 import type { FocusEvent } from '../events/focus-event.js'
 import type { KeyboardEvent } from '../events/keyboard-event.js'
 import type { MouseDownEvent } from '../events/mouse-event.js'
+import type { PasteEvent } from '../events/paste-event.js'
 import type { Styles } from '../styles.js'
 import * as warn from '../warn.js'
 
@@ -54,6 +55,17 @@ export type Props = Except<Styles, 'textWrap'> & {
   onMouseEnter?: () => void
   /** Fired when the mouse moves out of this Box's rendered rect. */
   onMouseLeave?: () => void
+  /**
+   * Fired when the user pastes text into the focused subtree AND the
+   * pasted text exceeds the smart-paste threshold (configured via
+   * `<AlternateScreen pasteThreshold>`, default 32 chars). Below the
+   * threshold, paste content arrives as a stream of regular keypresses
+   * — `onKeyDown` / `useInput` see normal typing. Above, it fires once
+   * here with the full pasted text on `event.text`. Bubbles like
+   * `onClick` / `onKeyDown`.
+   */
+  onPaste?: (event: PasteEvent) => void
+  onPasteCapture?: (event: PasteEvent) => void
 }
 
 /**
@@ -78,6 +90,8 @@ function Box({
   onMouseLeave,
   onKeyDown,
   onKeyDownCapture,
+  onPaste,
+  onPasteCapture,
   ...style
 }: PropsWithChildren<Props>): React.ReactNode {
   // Warn if spacing values are not integers to prevent fractional layout dimensions
@@ -110,6 +124,8 @@ function Box({
       onBlur={onBlur}
       onBlurCapture={onBlurCapture}
       onMouseDown={onMouseDown}
+      onPaste={onPaste}
+      onPasteCapture={onPasteCapture}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onKeyDown={onKeyDown}

@@ -4,6 +4,7 @@ import type { ClickEvent } from '../events/click-event'
 import type { FocusEvent } from '../events/focus-event'
 import type { KeyboardEvent } from '../events/keyboard-event'
 import type { MouseDownEvent } from '../events/mouse-event'
+import type { PasteEvent } from '../events/paste-event'
 import type { Styles, TextStyles } from '../styles'
 
 type InkBoxProps = {
@@ -21,6 +22,8 @@ type InkBoxProps = {
   onMouseDown?: (event: MouseDownEvent) => void
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  onPaste?: (event: PasteEvent) => void
+  onPasteCapture?: (event: PasteEvent) => void
   stickyScroll?: boolean
   children?: ReactNode
 }
