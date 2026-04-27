@@ -7,6 +7,8 @@ docs/
 ├── README.md
 ├── AGENTS.md
 ├── troubleshooting.md
+├── faq.md
+├── changelog.md
 ├── getting-started/
 │   ├── install.md
 │   ├── your-first-app.md
@@ -61,14 +63,33 @@ docs/
 │   ├── kanban-board.md
 │   ├── modal.md
 │   ├── resizable-panes.md
-│   └── autocomplete.md
+│   ├── autocomplete.md
+│   ├── table.md
+│   ├── file-tree.md
+│   ├── log-viewer.md
+│   ├── chat-ui.md
+│   ├── confirmation-dialog.md
+│   └── indicators.md
 ├── guides/
 │   ├── migration-from-ink.md
 │   ├── testing.md
-│   └── debugging.md
-└── reference/
-    ├── types.md
-    └── styles.md
+│   ├── debugging.md
+│   ├── accessibility.md
+│   ├── streaming-content.md
+│   └── error-handling.md
+├── reference/
+│   ├── types.md
+│   ├── styles.md
+│   ├── events.md
+│   └── cli.md
+└── internals/
+    ├── architecture.md
+    ├── reconciler.md
+    ├── yoga-port.md
+    ├── render-pipeline.md
+    ├── selection-state-machine.md
+    ├── drag-registry.md
+    └── focus-manager.md
 ```
 
 ### Getting Started
@@ -135,19 +156,44 @@ docs/
 - [Modal](patterns/modal.md)
 - [Resizable panes](patterns/resizable-panes.md)
 - [Autocomplete](patterns/autocomplete.md)
+- [Table](patterns/table.md)
+- [File tree](patterns/file-tree.md)
+- [Log viewer](patterns/log-viewer.md)
+- [Chat UI](patterns/chat-ui.md)
+- [Confirmation dialog](patterns/confirmation-dialog.md)
+- [Indicators (spinners + progress bars)](patterns/indicators.md)
 
 ### Guides
 
 - [Migration from Ink](guides/migration-from-ink.md)
 - [Testing](guides/testing.md)
 - [Debugging](guides/debugging.md)
+- [Accessibility](guides/accessibility.md)
+- [Streaming content](guides/streaming-content.md)
+- [Error handling](guides/error-handling.md)
 
 ### Reference
 
 - [Types](reference/types.md)
 - [Styles](reference/styles.md)
+- [Events](reference/events.md)
+- [CLI / render APIs](reference/cli.md)
 
-### AI Agents
+### Internals
+
+For contributors to yokai itself, and consumers reasoning about renderer behavior.
+
+- [Architecture](internals/architecture.md)
+- [Reconciler](internals/reconciler.md)
+- [Yoga port](internals/yoga-port.md)
+- [Render pipeline](internals/render-pipeline.md)
+- [Selection state machine](internals/selection-state-machine.md)
+- [Drag registry](internals/drag-registry.md)
+- [Focus manager](internals/focus-manager.md)
+
+### Meta
 
 - [AGENTS.md](AGENTS.md) — guide for AI assistants writing code that uses yokai
 - [Troubleshooting](troubleshooting.md) — runtime failures and fixes
+- [FAQ](faq.md) — frequently asked questions
+- [Changelog](changelog.md) — versioned release notes
