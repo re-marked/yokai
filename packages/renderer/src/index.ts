@@ -26,6 +26,8 @@ export type {
   ResizeHandleDirection,
   ResizeInfo,
 } from './components/Resizable'
+export { default as FocusGroup } from './components/FocusGroup'
+export type { FocusGroupProps, FocusGroupDirection } from './components/FocusGroup'
 export { default as ScrollBox } from './components/ScrollBox'
 export type { ScrollBoxHandle } from './components/ScrollBox'
 export { AlternateScreen } from './components/AlternateScreen'
