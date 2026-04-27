@@ -1,6 +1,6 @@
 {
   "name": "yokai",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "React terminal renderer — pure TypeScript Yoga layout, diff-based rendering, ScrollBox",
   "license": "MIT",

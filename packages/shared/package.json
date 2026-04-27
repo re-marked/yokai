@@ -1,6 +1,6 @@
 {
   "name": "@yokai/shared",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Shared utilities — Yoga layout TS port, logger, env helpers",
   "license": "MIT",
   "main": "./dist/index.js",

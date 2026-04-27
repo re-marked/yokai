@@ -169,7 +169,7 @@ Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bo
 ```jsonc
 // package.json
 "dependencies": {
-  "@yokai/renderer": "github:re-marked/yokai#v0.5.0"
+  "@yokai/renderer": "github:re-marked/yokai#v0.5.1"
 }
 ```
 

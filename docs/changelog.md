@@ -2,6 +2,16 @@
 
 Tagged releases of `@yokai/renderer` and `@yokai/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 
+## v0.5.1 — 2026-04-27
+
+Documentation. No code changes.
+
+**Added**
+
+- `docs/` build-out: 78 pages covering install, concepts, components, hooks, patterns, guides, internals, reference, plus `AGENTS.md`, `troubleshooting.md`, `faq.md`, this changelog.
+- README gains a Keyboard navigation section with `<FocusGroup>` + `<FocusRing>` example and pointers at `useFocus` / `useFocusManager`.
+- Main README links to `docs/` for full reference.
+
 ## v0.5.0 — 2026-04-27
 
 Keyboard focus and arrow navigation. [GitHub release](https://github.com/re-marked/yokai/releases/tag/v0.5.0).
