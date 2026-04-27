@@ -1,12 +1,5 @@
 import type React from 'react'
-import {
-  type PropsWithChildren,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-} from 'react'
+import { type PropsWithChildren, useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { Except } from 'type-fest'
 import type { DOMElement } from '../../dom.js'
 import type { KeyboardEvent } from '../../events/keyboard-event.js'
@@ -23,7 +16,6 @@ import {
   type TextInputState,
   initialState,
   reduce,
-  selectedText,
   selectionOrCaretRange,
 } from './state.js'
 
@@ -313,10 +305,7 @@ export default function TextInput({
 /** Map a KeyboardEvent into a reducer action, or 'submit' / 'cancel'
  *  for non-action signals, or null for unhandled. Pure function so the
  *  binding table is auditable in one place. */
-function keyToAction(
-  e: KeyboardEvent,
-  multiline: boolean,
-): Action | 'submit' | 'cancel' | null {
+function keyToAction(e: KeyboardEvent, multiline: boolean): Action | 'submit' | 'cancel' | null {
   const k = e.key
   // Submit / cancel
   if (k === 'return') {
@@ -420,7 +409,9 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
 
   // Walk lines, emitting per-line segments. Convert flat selection
   // indices into per-line indices so each line's highlight is rendered
-  // correctly.
+  // correctly. Index-as-key is correct here: lines have no stable
+  // identity, the buffer re-renders on every keystroke, and a stable
+  // key per slot avoids unmount-on-edit.
   let offset = 0
   return lines.map((line, lineIdx) => {
     const lineLen = line.length
@@ -431,7 +422,11 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
     if (localStart === localEnd) {
       // No selection on this line — render plain.
       return (
-        <Text key={lineIdx} wrap="wrap">
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
+          key={lineIdx}
+          wrap="wrap"
+        >
           {line || ' '}
         </Text>
       )
@@ -441,7 +436,11 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
     const sel = line.slice(localStart, localEnd) || ' '
     const after = line.slice(localEnd)
     return (
-      <Text key={lineIdx} wrap="wrap">
+      <Text
+        // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
+        key={lineIdx}
+        wrap="wrap"
+      >
         {before}
         <Text backgroundColor={selectionColor}>{sel}</Text>
         {after}

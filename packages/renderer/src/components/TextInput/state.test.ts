@@ -7,13 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  type Action,
-  type ReducerOptions,
-  initialState,
-  reduce,
-  selectedText,
-} from './state.js'
+import { type Action, type ReducerOptions, initialState, reduce, selectedText } from './state.js'
 
 const SINGLE: ReducerOptions = { multiline: false, maxLength: undefined }
 const MULTI: ReducerOptions = { multiline: true, maxLength: undefined }

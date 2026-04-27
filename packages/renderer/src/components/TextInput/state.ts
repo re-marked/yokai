@@ -104,12 +104,8 @@ function pushHistory(
   // step so the user doesn't have to Ctrl+Z 30 times to undo a typed
   // word. Paste and caret-only changes always create a new entry.
   const mergeable =
-    last !== undefined &&
-    (kind === 'insert' || kind === 'delete') &&
-    last.kind === kind
-  const newHistory = mergeable
-    ? [...truncated.slice(0, -1), entry]
-    : [...truncated, entry]
+    last !== undefined && (kind === 'insert' || kind === 'delete') && last.kind === kind
+  const newHistory = mergeable ? [...truncated.slice(0, -1), entry] : [...truncated, entry]
 
   // Cap.
   const overflow = newHistory.length - cap
@@ -150,11 +146,7 @@ export type Action =
 
 // ── Caret movement ───────────────────────────────────────────────────
 
-function moveCaretIndex(
-  buffer: string,
-  current: number,
-  direction: CaretMove,
-): number {
+function moveCaretIndex(buffer: string, current: number, direction: CaretMove): number {
   switch (direction) {
     case 'left':
       return Math.max(0, current - 1)

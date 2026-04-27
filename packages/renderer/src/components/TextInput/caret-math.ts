@@ -90,11 +90,7 @@ export function lineColAt(buffer: string, charIdx: number): { line: number; col:
  * index. col is char-index within the line. Out-of-range line clamps
  * to the last line; out-of-range col clamps to the line's length.
  */
-export function charIndexAtLineCol(
-  buffer: string,
-  line: number,
-  col: number,
-): number {
+export function charIndexAtLineCol(buffer: string, line: number, col: number): number {
   const lines = splitLines(buffer)
   const targetLine = Math.max(0, Math.min(line, lines.length - 1))
   let acc = 0
