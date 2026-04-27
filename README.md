@@ -115,6 +115,43 @@ Inside `onMouseDown`, call `event.captureGesture({ onMove, onUp })` to claim sub
 
 `<Draggable>`, `<DropTarget>`, and `<Resizable>` are all built on top of this primitive. Reach for them first; reach for raw `captureGesture` when none of the components fit your interaction.
 
+## Keyboard navigation
+
+Tab / Shift+Tab cycle through every `tabIndex >= 0` element in the tree (built into the renderer — no setup needed). Arrow-key navigation is opt-in via `<FocusGroup>`, scoped to its descendants — Tab still cycles globally, arrows are bounded.
+
+```tsx
+import { FocusGroup, FocusRing, Text, useFocusManager } from '@yokai/renderer'
+
+function Menu({ items }) {
+  return (
+    <FocusGroup direction="column" wrap>
+      {items.map((item) => (
+        <FocusRing key={item.id} paddingX={1}>
+          <Text>{item.label}</Text>
+        </FocusRing>
+      ))}
+    </FocusGroup>
+  )
+}
+```
+
+`<FocusRing>` adds a focus-visible border (default cyan) to the focused item — a thin Box wrapper around `useFocus` that you can replace with custom chrome by inlining `useFocus()` directly.
+
+For programmatic focus (modal pulling focus on open, status bar showing the focused element), use `useFocusManager()`:
+
+```tsx
+const { focused, focus, focusNext, focusPrevious, blur } = useFocusManager()
+```
+
+For per-element tracking, `useFocus()`:
+
+```tsx
+const { ref, isFocused, focus } = useFocus({ autoFocus: true })
+return <Box ref={ref} tabIndex={0} ...>...</Box>
+```
+
+See `pnpm demo:focus-nav` for a live example with two `<FocusGroup>`s side-by-side, one column-direction and one row-direction.
+
 ## Demos
 
 ```bash
@@ -132,7 +169,7 @@ Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bo
 ```jsonc
 // package.json
 "dependencies": {
-  "@yokai/renderer": "github:re-marked/yokai#v0.4.0"
+  "@yokai/renderer": "github:re-marked/yokai#v0.5.0"
 }
 ```
 
