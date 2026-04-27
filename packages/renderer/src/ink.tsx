@@ -17,6 +17,7 @@ import type {
 import { FRAME_INTERVAL_MS } from './constants'
 import * as dom from './dom'
 import { KeyboardEvent } from './events/keyboard-event'
+import { PasteEvent } from './events/paste-event'
 import type { GestureHandlers } from './events/mouse-event'
 import { FocusManager } from './focus'
 import { type Frame, type FrameEvent, emptyFrame } from './frame'
@@ -1470,6 +1471,19 @@ export default class Ink {
     }
   }
   /**
+   * Dispatch a long-form paste through the DOM tree. Routed to the
+   * focused element (or root if nothing focused) and bubbles like
+   * keyboard events. Fired by `App.handleParsedInput` when the parsed
+   * paste key's content exceeds the configured threshold; below the
+   * threshold the content is dispatched as per-character keypresses
+   * via `dispatchKeyboardEvent` so short pastes feel like typing.
+   */
+  dispatchPasteEvent(text: string): void {
+    const target = this.focusManager.activeElement ?? this.rootNode
+    const event = new PasteEvent(text)
+    dispatcher.dispatchDiscrete(target, event)
+  }
+  /**
    * Look up the URL at (col, row) in the current front frame. Checks for
    * an OSC 8 hyperlink first, then falls back to scanning the row for a
    * plain-text URL (mouse tracking intercepts the terminal's native
@@ -1663,6 +1677,7 @@ export default class Ink {
         onStdinResume={this.reassertTerminalModes}
         onCursorDeclaration={this.setCursorDeclaration}
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
+        dispatchPasteEvent={this.dispatchPasteEvent}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >

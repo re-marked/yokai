@@ -32,6 +32,7 @@ import { ClockProvider } from './ClockContext'
 import CursorDeclarationContext, { type CursorDeclarationSetter } from './CursorDeclarationContext'
 import ErrorOverview from './ErrorOverview'
 import FocusContext from './FocusContext'
+import PasteContext from './PasteContext'
 import StdinContext from './StdinContext'
 import { TerminalFocusProvider } from './TerminalFocusContext'
 import { TerminalSizeContext } from './TerminalSizeContext'
@@ -102,12 +103,31 @@ type Props = {
   // Dispatch a keyboard event through the DOM tree. Called for each
   // parsed key alongside the legacy EventEmitter path.
   readonly dispatchKeyboardEvent: (parsedKey: ParsedKey) => void
+  // Dispatch a long-form paste through the DOM tree as a PasteEvent.
+  // Called by handleParsedInput when a parsed paste exceeds the
+  // configured threshold; below the threshold the content is dispatched
+  // as per-character keypresses via dispatchKeyboardEvent so short
+  // pastes feel like typing.
+  readonly dispatchPasteEvent: (text: string) => void
   // Focus subsystem references — exposed to React land via FocusContext
   // so useFocus / useFocusManager / FocusGroup can subscribe / dispatch
   // without walking the DOM each call.
   readonly focusManager: FocusManager
   readonly rootNode: DOMElement
 }
+
+/**
+ * Default smart-paste threshold in characters. Bracketed pastes at or
+ * below this length are dispatched as per-character keypresses so short
+ * pastes feel like typing (the user gets normal keystroke handling,
+ * undo grouping, etc.). Pastes above the threshold fire a single
+ * `PasteEvent` so consumers can treat them as one atomic edit.
+ *
+ * Configurable per-app via `<AlternateScreen pasteThreshold>`. Default
+ * 32 picks a number larger than any single token (URL prefix, short
+ * identifier, command name) but smaller than typical multi-line copy.
+ */
+export const DEFAULT_PASTE_THRESHOLD = 32
 
 // Multi-click detection thresholds. 500ms is the macOS default; a small
 // position tolerance allows for trackpad jitter between clicks.
@@ -141,6 +161,16 @@ export default class App extends PureComponent<Props, State> {
   // Timeout durations for incomplete sequences (ms)
   readonly NORMAL_TIMEOUT = 50 // Short timeout for regular esc sequences
   readonly PASTE_TIMEOUT = 500 // Longer timeout for paste operations
+
+  // Smart-paste threshold. Bracketed pastes <= this length get split
+  // into per-character keypresses; pastes above fire a single
+  // PasteEvent. Set by <AlternateScreen pasteThreshold> via
+  // PasteContext. Mutable instance field so the value is read fresh
+  // at dispatch time without React re-rendering the input loop.
+  pasteThreshold = DEFAULT_PASTE_THRESHOLD
+  setPasteThreshold = (threshold: number): void => {
+    this.pasteThreshold = threshold
+  }
 
   // Terminal query/response dispatch. Responses arrive on stdin (parsed
   // out by parse-keypress) and are routed to pending promise resolvers.
@@ -219,11 +249,15 @@ export default class App extends PureComponent<Props, State> {
                       root: this.props.rootNode,
                     }}
                   >
-                    {this.state.error ? (
-                      <ErrorOverview error={this.state.error as Error} />
-                    ) : (
-                      this.props.children
-                    )}
+                    <PasteContext.Provider
+                      value={{ setPasteThreshold: this.setPasteThreshold }}
+                    >
+                      {this.state.error ? (
+                        <ErrorOverview error={this.state.error as Error} />
+                      ) : (
+                        this.props.children
+                      )}
+                    </PasteContext.Provider>
                   </FocusContext.Provider>
                 </CursorDeclarationContext.Provider>
               </ClockProvider>
@@ -574,6 +608,48 @@ function processKeysInBatch(
     // CSI u format (\x1b[122;5u) from Kitty keyboard protocol terminals
     if (item.name === 'z' && item.ctrl && SUPPORTS_SUSPEND) {
       app.handleSuspend()
+      continue
+    }
+    // Smart-paste split. Bracketed pastes that fit in the threshold get
+    // expanded into per-character keypresses so short pastes feel like
+    // typing — useInput sees a normal stream, undo grouping in TextInput
+    // works per-char. Above the threshold, the paste fires once as a
+    // PasteEvent through the DOM (focused element + bubble) AND as a
+    // single useInput event (backwards compat for consumers that want
+    // the raw paste string). See PasteEvent docstring for the rationale.
+    if (item.isPasted) {
+      // Pasted keys always carry the content in `sequence` per
+      // createPasteKey in parse-keypress.ts; the union-side undefined
+      // is for non-paste keys. Default to '' for total safety.
+      const text = item.sequence ?? ''
+      if (text.length <= app.pasteThreshold) {
+        for (const char of text) {
+          // Each char becomes a regular keypress with isPasted=false so
+          // downstream code can't tell it apart from typed input.
+          const charKey: ParsedKey = {
+            kind: 'key',
+            name: '',
+            fn: false,
+            ctrl: false,
+            meta: false,
+            shift: false,
+            option: false,
+            super: false,
+            sequence: char,
+            raw: char,
+            isPasted: false,
+          }
+          app.handleInput(char)
+          app.internal_eventEmitter.emit('input', new InputEvent(charKey))
+          app.props.dispatchKeyboardEvent(charKey)
+        }
+        continue
+      }
+      app.props.dispatchPasteEvent(text)
+      // Backwards compat: useInput consumers still see the full paste
+      // string in one shot, with `key.isPasted` set so they can branch.
+      app.handleInput(sequence)
+      app.internal_eventEmitter.emit('input', new InputEvent(item))
       continue
     }
     app.handleInput(sequence)
