@@ -293,13 +293,20 @@ export default function TextInput({
     return focusCtx.manager.subscribeToFocus(node, setIsFocused)
   }, [focusCtx])
 
-  // Declare the terminal cursor at the caret, adjusted for scroll
-  // offsets so it lands on the visible cell. The hook only renders
-  // the cursor when `active` is true — we're active iff this is the
-  // focused element.
+  // Declare the terminal cursor at the caret, adjusted for the active
+  // axis's scroll offset so it lands on the visible cell. The hook
+  // only renders the cursor when `active` is true — we're active iff
+  // this is the focused element.
+  //
+  // Only one axis is maintained per mode (scrollX in single-line,
+  // scrollY in multiline) — the inactive axis stays at zero. But if
+  // `multiline` is toggled at runtime AFTER scrolling, the previously
+  // active axis still holds its last offset. Subtracting unconditionally
+  // would push the cursor declaration to the wrong (sometimes negative)
+  // coordinate. Gate by mode so the inactive axis is never applied.
   const cursorRef = useDeclaredCursor({
-    line: caretLineCol.line - scrollY,
-    column: caretLineCol.col - scrollX,
+    line: caretLineCol.line - (multiline ? scrollY : 0),
+    column: caretLineCol.col - (multiline ? 0 : scrollX),
     active: isFocused,
   })
 
