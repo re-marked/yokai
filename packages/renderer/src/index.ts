@@ -64,6 +64,8 @@ export { useTerminalTitle } from './hooks/use-terminal-title'
 export { useTabStatus } from './hooks/use-tab-status'
 export type { TabStatusKind } from './hooks/use-tab-status'
 export { useDeclaredCursor } from './hooks/use-declared-cursor'
+export type { UseDeclaredCursorOptions } from './hooks/use-declared-cursor'
+export type { CursorStyle } from './termio/dec'
 export { useSearchHighlight } from './hooks/use-search-highlight'
 export { useSelection, useHasSelection } from './hooks/use-selection'
 
