@@ -95,7 +95,10 @@ import {
   ENTER_ALT_SCREEN,
   EXIT_ALT_SCREEN,
   HIDE_CURSOR,
+  RESET_CURSOR_STYLE,
   SHOW_CURSOR,
+  decscusr,
+  decscusrCode,
 } from './termio/dec'
 import {
   CLEAR_ITERM2_PROGRESS,
@@ -244,6 +247,13 @@ export default class Ink {
   // — repeated emits add bytes but no visual change, and on slow terminals
   // can cause real cursor flicker.
   private cursorVisible = false
+  // Last DECSCUSR code we wrote (1-6 per cursor style + blink combo).
+  // null = no override applied (terminal default in effect). Tracked so
+  // we only emit DECSCUSR on transition AND so we know to emit
+  // RESET_CURSOR_STYLE when a declaration with a style is replaced by
+  // one without — without the reset, an input that sets `style: 'bar'`
+  // and then unmounts leaves the user's shell prompt as a bar cursor.
+  private cursorStyleApplied: number | null = null
   // Main-screen: physical cursor position after the declared-cursor move,
   // tracked separately from frame.cursor (which must stay at content-bottom
   // for log-update's relative-move invariants). Alt-screen doesn't need
@@ -828,11 +838,28 @@ export default class Ink {
         : null
     const parked = this.displayCursor
 
+    // DECSCUSR style + blink override. `desiredStyleCode` is null when
+    // the declaration doesn't request any override (no DECSCUSR write
+    // needed) OR when there's no declaration at all. When non-null
+    // it's the 1-6 code for the configured style+blink pair.
+    //
+    // The transition cases:
+    //   null → code   : write DECSCUSR(code)              (apply override)
+    //   code → other  : write DECSCUSR(other)             (change style)
+    //   code → null   : write RESET_CURSOR_STYLE          (restore default)
+    //   same → same   : skip                              (no-op fast path)
+    const desiredStyleCode =
+      decl !== null && (decl.style !== undefined || decl.blink !== undefined)
+        ? decscusrCode(decl.style ?? 'block', decl.blink ?? true)
+        : null
+    const styleChanged = desiredStyleCode !== this.cursorStyleApplied
+
     // Preserve the empty-diff zero-write fast path: skip all cursor writes
-    // when nothing rendered AND the park target is unchanged.
+    // when nothing rendered AND the park target is unchanged AND no
+    // style override transition is pending.
     const targetMoved =
       target !== null && (parked === null || parked.x !== target.x || parked.y !== target.y)
-    if (hasDiff || targetMoved || (target === null && parked !== null)) {
+    if (hasDiff || targetMoved || styleChanged || (target === null && parked !== null)) {
       // Main-screen preamble: log-update's relative moves assume the
       // physical cursor is at prevFrame.cursor. If last frame parked it
       // elsewhere, move back before the diff runs. Alt-screen's CSI H
@@ -914,6 +941,20 @@ export default class Ink {
           }
         }
         this.displayCursor = null
+      }
+
+      // DECSCUSR style/blink override — fires after position + visibility
+      // so the cursor is at its final cell when the shape change applies.
+      // Cleared declarations (desiredStyleCode === null) emit
+      // RESET_CURSOR_STYLE so the user's terminal config wins again
+      // post-input — the difference between "yokai is a good citizen"
+      // and "yokai poisons your shell with a bar cursor."
+      if (styleChanged) {
+        optimized.push({
+          type: 'stdout',
+          content: desiredStyleCode !== null ? decscusr(desiredStyleCode) : RESET_CURSOR_STYLE,
+        })
+        this.cursorStyleApplied = desiredStyleCode
       }
     }
     const tWrite = performance.now()
