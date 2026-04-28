@@ -15,3 +15,5 @@ yarn.lock
 .turbo/
 .env
 .env.*
+
+/roadmap.md

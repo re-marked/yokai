@@ -2,6 +2,28 @@
 
 Tagged releases of `@yokai/renderer` and `@yokai/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 
+## v0.6.0 — 2026-04-27
+
+`<TextInput>` and smart bracketed paste — closes the largest missing primitive in yokai. [GitHub release](https://github.com/re-marked/yokai/releases/tag/v0.6.0).
+
+**Added**
+
+- **`<TextInput>`** — editable text. Single-line and multiline modes; controlled and uncontrolled value; placeholder, password, maxLength, disabled, autoFocus, selectionColor, historyCap props. Caret positioned via `useDeclaredCursor` (real terminal cursor — IME / a11y correct). Editing keybindings: type / Backspace / Delete / arrows / Home/End / Ctrl+arrows (word nav) / Ctrl+W / Ctrl+U / Ctrl+K / Ctrl+A / Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z. Selection via Shift+arrows or mouse drag. `onSubmit` (Enter / Ctrl+Enter), `onCancel` (Escape).
+- **`PasteEvent`** — bubbling, cancelable terminal event upgraded from a stub `Event` subclass to full `TerminalEvent` shape. `onPaste` / `onPasteCapture` props on `<Box>`.
+- **Smart bracketed-paste split** — `App.handleParsedInput` splits pastes by length: ≤ threshold dispatches per-character keypresses (short pastes feel like typing); > threshold fires once as `PasteEvent` plus once via `useInput` (backwards compat).
+- **`<AlternateScreen pasteThreshold>`** — configurable threshold, default 32 characters.
+- **`scrollToKeepCaretVisible` + `sliceRowByCells`** — pure scroll helpers used by TextInput's horizontal/vertical scroll.
+
+**Changed**
+
+- `<FocusGroup>` switched from `useInput` to `onKeyDown` so a focused descendant (e.g. `<TextInput>`) can `preventDefault()` arrow keys to consume them for caret movement instead of focus navigation.
+- `<TextInput>` (within v0.6.0): horizontal scroll for single-line content longer than the box width; vertical scroll for multiline content taller than the box height. Caret stays visible after every edit.
+
+**Internal**
+
+- New module structure under `packages/renderer/src/components/TextInput/` — pure state machine (`state.ts`), pure caret math (`caret-math.ts`), pure scroll math (`scroll-math.ts`), thin React shell (`TextInput.tsx`).
+- `PasteContext` lets `<AlternateScreen>` push the paste threshold into App's instance field outside React's render flow.
+
 ## v0.5.1 — 2026-04-27
 
 Documentation. No code changes.

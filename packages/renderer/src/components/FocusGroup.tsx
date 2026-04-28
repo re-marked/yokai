@@ -80,8 +80,20 @@ export default function FocusGroup({
   const ref = useRef<DOMElement>(null)
   const { focused, focus } = useFocusManager()
 
+  // Extract the user's onKeyDown so we can chain it. The previous
+  // version spread `{...boxProps}` and then unconditionally set
+  // `onKeyDown={onKeyDown}`, silently dropping any user-supplied
+  // handler. That broke shortcut handlers, analytics, etc. that
+  // expected Box's full prop surface to pass through.
+  const { onKeyDown: userOnKeyDown, ...restBoxProps } = boxProps
+
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // User handler runs first so a shortcut can preventDefault and
+      // suppress nav (mirrors how a focused descendant preempts us
+      // via preventDefault — same convention).
+      userOnKeyDown?.(e)
+
       if (!isActive) return
       if (e.defaultPrevented) return // a focused descendant claimed the key
       const node = ref.current
@@ -119,11 +131,11 @@ export default function FocusGroup({
         focus(target)
       }
     },
-    [direction, wrap, isActive, focused, focus],
+    [direction, wrap, isActive, focused, focus, userOnKeyDown],
   )
 
   return (
-    <Box ref={ref} {...boxProps} onKeyDown={onKeyDown}>
+    <Box ref={ref} {...restBoxProps} onKeyDown={onKeyDown}>
       {children}
     </Box>
   )
