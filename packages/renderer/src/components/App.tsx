@@ -607,12 +607,6 @@ function processKeysInBatch(
       setTerminalFocused(true)
     }
 
-    // Handle Ctrl+Z (suspend) using parsed key to support both raw (\x1a) and
-    // CSI u format (\x1b[122;5u) from Kitty keyboard protocol terminals
-    if (item.name === 'z' && item.ctrl && SUPPORTS_SUSPEND) {
-      app.handleSuspend()
-      continue
-    }
     // Smart-paste split. Bracketed pastes that fit in the threshold get
     // expanded into per-character keypresses so short pastes feel like
     // typing — useInput sees a normal stream, undo grouping in TextInput
@@ -662,12 +656,38 @@ function processKeysInBatch(
       app.internal_eventEmitter.emit('input', new InputEvent(item))
       continue
     }
-    app.handleInput(sequence)
-    const event = new InputEvent(item)
-    app.internal_eventEmitter.emit('input', event)
+    // Emit the legacy InputEvent (useInput hook subscribers) and dispatch
+    // through the DOM tree (onKeyDown handlers) BEFORE running App-level
+    // shortcuts. The reorder lets a focused descendant claim a key via
+    // `event.preventDefault()` and suppress the App-level default action
+    // — same pattern Tab cycling uses inside `dispatchKeyboardEvent`.
+    //
+    // Without this gate:
+    //   - Ctrl+C in a TextInput with a selection would exit instead of
+    //     copying (TextInput never sees the key).
+    //   - Ctrl+Z in a TextInput would suspend the process on Unix
+    //     instead of triggering undo (handled at the top of the loop
+    //     before dispatch, never reached the focused descendant).
+    //
+    // useInput consumers run before dispatch so they're unaffected by
+    // descendant preventDefault — they're a global subscription, not a
+    // targeted handler. App-level shortcuts (Ctrl+C exit, Ctrl+Z
+    // suspend) DO defer.
+    const inputEvent = new InputEvent(item)
+    app.internal_eventEmitter.emit('input', inputEvent)
+    const keyboardEvent = app.props.dispatchKeyboardEvent(item)
 
-    // Also dispatch through the DOM tree so onKeyDown handlers fire.
-    app.props.dispatchKeyboardEvent(item)
+    if (!keyboardEvent.defaultPrevented) {
+      // Ctrl+Z (suspend) — parsed key form supports both raw (\x1a)
+      // and CSI u format (\x1b[122;5u) from Kitty keyboard protocol
+      // terminals.
+      if (item.name === 'z' && item.ctrl && SUPPORTS_SUSPEND) {
+        app.handleSuspend()
+      } else {
+        // Ctrl+C exit lives in handleInput (input === '\x03').
+        app.handleInput(sequence)
+      }
+    }
   }
 }
 
