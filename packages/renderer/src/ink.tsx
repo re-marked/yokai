@@ -1455,7 +1455,7 @@ export default class Ink {
     if (!this.altScreenActive) return
     dispatchHover(this.rootNode, col, row, this.hoveredNodes)
   }
-  dispatchKeyboardEvent(parsedKey: ParsedKey): void {
+  dispatchKeyboardEvent(parsedKey: ParsedKey): KeyboardEvent {
     const target = this.focusManager.activeElement ?? this.rootNode
     const event = new KeyboardEvent(parsedKey)
     dispatcher.dispatchDiscrete(target, event)
@@ -1469,6 +1469,12 @@ export default class Ink {
         this.focusManager.focusNext(this.rootNode)
       }
     }
+
+    // Return the dispatched event so callers can branch on
+    // `defaultPrevented`. The App-level loop uses this to gate Ctrl+C
+    // exit and Ctrl+Z suspend on whether a focused descendant claimed
+    // the key — same default-action pattern Tab cycling above uses.
+    return event
   }
   /**
    * Dispatch a long-form paste through the DOM tree. Routed to the
@@ -1482,6 +1488,25 @@ export default class Ink {
     const target = this.focusManager.activeElement ?? this.rootNode
     const event = new PasteEvent(text)
     dispatcher.dispatchDiscrete(target, event)
+  }
+  /**
+   * Write text to the system clipboard via the renderer's three-path
+   * clipboard helper (native utility, tmux load-buffer, OSC 52 to the
+   * terminal). Fire-and-forget — returns immediately while the writes
+   * proceed asynchronously. The native path fires synchronously inside
+   * `setClipboard` so local clipboards usually update before this call
+   * returns; the OSC 52 sequence is written to stdout once tmux probing
+   * completes.
+   *
+   * Same shape as `copySelectionNoClear` above; consolidated here so
+   * components (TextInput's Ctrl+X / Ctrl+C, future `<CopyButton>` etc.)
+   * can write the clipboard without reaching into termio internals.
+   */
+  copyToClipboard(text: string): void {
+    if (!text) return
+    void setClipboard(text).then((raw) => {
+      if (raw) this.options.stdout.write(raw)
+    })
   }
   /**
    * Look up the URL at (col, row) in the current front frame. Checks for
@@ -1678,6 +1703,7 @@ export default class Ink {
         onCursorDeclaration={this.setCursorDeclaration}
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
         dispatchPasteEvent={this.dispatchPasteEvent}
+        copyToClipboard={this.copyToClipboard}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >

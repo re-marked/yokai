@@ -15,6 +15,7 @@ import type { DOMElement } from '../../dom.js'
 import type { KeyboardEvent } from '../../events/keyboard-event.js'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
 import type { PasteEvent } from '../../events/paste-event.js'
+import { useClipboard } from '../../hooks/use-clipboard.js'
 import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
 import { LayoutEdge } from '../../layout/node.js'
 import type { Color } from '../../styles.js'
@@ -22,6 +23,7 @@ import Box, { type Props as BoxProps } from '../Box.js'
 import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
 import { cellColumnAt, splitLines } from './caret-math.js'
+import { clipboardKeyAction } from './clipboard-action.js'
 import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
 import {
   type Action,
@@ -307,6 +309,11 @@ export default function TextInput({
     return focusCtx.manager.subscribeToFocus(node, setIsFocused)
   }, [focusCtx])
 
+  // Clipboard access for Ctrl+C / Ctrl+X. Falls back to a no-op when
+  // rendered outside `<App>` (unit-test paths) per useClipboard's
+  // contract — copy still "succeeds" silently in that case.
+  const { copy } = useClipboard()
+
   // Declare the terminal cursor at the caret, adjusted for the active
   // axis's scroll offset so it lands on the visible cell. The hook
   // only renders the cursor when `active` is true — we're active iff
@@ -340,6 +347,38 @@ export default function TextInput({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (disabled) return
+
+      // Clipboard ops (Ctrl+C / Ctrl+X) handled before keyToAction so
+      // we can branch on selection state + password mode without
+      // bloating the action union with copy/cut variants. The pure
+      // `clipboardKeyAction` helper owns the matrix; we just dispatch
+      // its decision. Critical "fall through" branches (no-selection
+      // Ctrl+C, no-selection Ctrl+X, password-mode Ctrl+C) explicitly
+      // do NOT preventDefault — App-level Ctrl+C exit and any future
+      // global "cut focused" binding deserve to see the keystroke.
+      const clipboardAction = clipboardKeyAction(e, state, password)
+      if (clipboardAction) {
+        switch (clipboardAction.kind) {
+          case 'copy':
+            e.preventDefault()
+            copy(clipboardAction.text)
+            return
+          case 'cut':
+            e.preventDefault()
+            copy(clipboardAction.text)
+            dispatch({ type: 'deleteBackward' })
+            return
+          case 'cut-no-copy':
+            e.preventDefault()
+            dispatch({ type: 'deleteBackward' })
+            return
+          case 'fallthrough':
+            // No preventDefault — the event continues to App's handler
+            // (Ctrl+C exit) or any future global binding.
+            return
+        }
+      }
+
       const action = keyToAction(e, multiline)
       if (action === 'submit') {
         e.preventDefault()
@@ -380,7 +419,10 @@ export default function TextInput({
       e.preventDefault()
       dispatch({ type: 'insertText', text: ch })
     },
-    [disabled, multiline, onSubmit, onCancel, state.value],
+    // state in deps (not state.value alone) so the closure sees the
+    // current selection inside clipboardKeyAction. password + copy
+    // gate the new clipboard branch above.
+    [disabled, multiline, password, onSubmit, onCancel, state, copy],
   )
 
   const handlePaste = useCallback(
