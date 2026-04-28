@@ -12,6 +12,7 @@ type InkBoxProps = {
   style?: Styles
   tabIndex?: number
   autoFocus?: boolean
+  claimFocusOnClick?: boolean
   onClick?: (event: ClickEvent) => void
   onFocus?: (event: FocusEvent) => void
   onFocusCapture?: (event: FocusEvent) => void
