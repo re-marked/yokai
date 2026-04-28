@@ -1,6 +1,6 @@
 import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'node:fs'
 import { format } from 'node:util'
-import { logForDebugging } from '@yokai/shared'
+import { isEnvTruthy, logForDebugging } from '@yokai/shared'
 import { logError } from '@yokai/shared'
 import { getYogaCounters } from '@yokai/shared/yoga-layout'
 import autoBind from 'auto-bind'
@@ -94,12 +94,18 @@ import {
   ENABLE_MOUSE_TRACKING,
   ENTER_ALT_SCREEN,
   EXIT_ALT_SCREEN,
+  HIDE_CURSOR,
+  RESET_CURSOR_STYLE,
   SHOW_CURSOR,
+  decscusr,
+  decscusrCode,
 } from './termio/dec'
 import {
   CLEAR_ITERM2_PROGRESS,
   CLEAR_TAB_STATUS,
+  RESET_CURSOR_COLOR,
   setClipboard,
+  setCursorColor,
   supportsTabStatus,
   wrapForMultiplexer,
 } from './termio/osc'
@@ -235,6 +241,29 @@ export default class Ink {
   // screen readers / screen magnifiers track it — so parking at the text
   // input's caret makes CJK input appear inline and lets a11y tools follow.
   private cursorDeclaration: CursorDeclaration | null = null
+  // Whether the physical terminal cursor is currently visible. App.componentDidMount
+  // hides it on mount (HIDE_CURSOR) so the diff-renderer doesn't show flicker
+  // between frames; useDeclaredCursor consumers (TextInput's caret) rely on
+  // it being shown again at their declared position. Track current visibility
+  // so we only emit SHOW_CURSOR / HIDE_CURSOR on transitions, never per-frame
+  // — repeated emits add bytes but no visual change, and on slow terminals
+  // can cause real cursor flicker.
+  private cursorVisible = false
+  // Last DECSCUSR code we wrote (1-6 per cursor style + blink combo).
+  // null = no override applied (terminal default in effect). Tracked so
+  // we only emit DECSCUSR on transition AND so we know to emit
+  // RESET_CURSOR_STYLE when a declaration with a style is replaced by
+  // one without — without the reset, an input that sets `style: 'bar'`
+  // and then unmounts leaves the user's shell prompt as a bar cursor.
+  private cursorStyleApplied: number | null = null
+  // Last cursor color we wrote (raw user-provided string — we track
+  // the input rather than the formatted OSC 12 payload so equality
+  // checks don't false-positive on equivalent inputs that format
+  // differently). null = no override (terminal default in effect).
+  // Same restoration semantics as cursorStyleApplied — when cleared,
+  // we emit RESET_CURSOR_COLOR (OSC 112) so the shell prompt isn't
+  // left magenta after our input unmounts.
+  private cursorColorApplied: string | null = null
   // Main-screen: physical cursor position after the declared-cursor move,
   // tracked separately from frame.cursor (which must stay at content-bottom
   // for log-update's relative-move invariants). Alt-screen doesn't need
@@ -819,11 +848,36 @@ export default class Ink {
         : null
     const parked = this.displayCursor
 
+    // DECSCUSR style + blink override. `desiredStyleCode` is null when
+    // the declaration doesn't request any override (no DECSCUSR write
+    // needed) OR when there's no declaration at all. When non-null
+    // it's the 1-6 code for the configured style+blink pair.
+    //
+    // The transition cases (apply identically to color below):
+    //   null → value : write apply sequence              (override on)
+    //   value → other: write apply sequence              (override change)
+    //   value → null : write reset sequence              (restore default)
+    //   same → same  : skip                              (fast path)
+    const desiredStyleCode =
+      decl !== null && (decl.style !== undefined || decl.blink !== undefined)
+        ? decscusrCode(decl.style ?? 'block', decl.blink ?? true)
+        : null
+    const styleChanged = desiredStyleCode !== this.cursorStyleApplied
+    const desiredColor = decl?.color !== undefined ? String(decl.color) : null
+    const colorChanged = desiredColor !== this.cursorColorApplied
+
     // Preserve the empty-diff zero-write fast path: skip all cursor writes
-    // when nothing rendered AND the park target is unchanged.
+    // when nothing rendered AND the park target is unchanged AND no
+    // style/color override transition is pending.
     const targetMoved =
       target !== null && (parked === null || parked.x !== target.x || parked.y !== target.y)
-    if (hasDiff || targetMoved || (target === null && parked !== null)) {
+    if (
+      hasDiff ||
+      targetMoved ||
+      styleChanged ||
+      colorChanged ||
+      (target === null && parked !== null)
+    ) {
       // Main-screen preamble: log-update's relative moves assume the
       // physical cursor is at prevFrame.cursor. If last frame parked it
       // elsewhere, move back before the diff runs. Alt-screen's CSI H
@@ -868,15 +922,32 @@ export default class Ink {
             })
           }
         }
+        // Show the cursor at the declared position. Position write goes
+        // first so the cursor moves invisibly to the right cell, THEN
+        // appears — avoids a one-frame flash at the previous position.
+        // Only on transition; per-frame SHOW_CURSOR adds bytes for no
+        // visual change AND can cause real flicker on slow terminals.
+        if (!this.cursorVisible) {
+          optimized.push({ type: 'stdout', content: SHOW_CURSOR })
+          this.cursorVisible = true
+        }
         this.displayCursor = target
       } else {
-        // Declaration cleared (input blur, unmount). Restore physical cursor
-        // to frame.cursor before forgetting the park position — otherwise
-        // displayCursor=null lies about where the cursor is, and the NEXT
-        // frame's preamble (or log-update's relative moves) computes from a
-        // wrong spot. The preamble above handles hasDiff; this handles
-        // !hasDiff (e.g. accessibility mode where blur doesn't change
-        // renderedValue since invert is identity).
+        // Declaration cleared (input blur, unmount). Hide the cursor
+        // FIRST so the subsequent restore-move doesn't flash a visible
+        // cursor across the screen. App.componentDidMount established
+        // hidden-by-default; we're returning the visibility state to
+        // its baseline.
+        if (this.cursorVisible) {
+          optimized.push({ type: 'stdout', content: HIDE_CURSOR })
+          this.cursorVisible = false
+        }
+        // Restore physical cursor to frame.cursor before forgetting the
+        // park position — otherwise displayCursor=null lies about where
+        // the cursor is, and the NEXT frame's preamble (or log-update's
+        // relative moves) computes from a wrong spot. The preamble above
+        // handles hasDiff; this handles !hasDiff (e.g. accessibility mode
+        // where blur doesn't change renderedValue since invert is identity).
         if (parked !== null && !this.altScreenActive && !hasDiff) {
           const rdx = frame.cursor.x - parked.x
           const rdy = frame.cursor.y - parked.y
@@ -888,6 +959,32 @@ export default class Ink {
           }
         }
         this.displayCursor = null
+      }
+
+      // DECSCUSR style/blink override — fires after position + visibility
+      // so the cursor is at its final cell when the shape change applies.
+      // Cleared declarations (desiredStyleCode === null) emit
+      // RESET_CURSOR_STYLE so the user's terminal config wins again
+      // post-input — the difference between "yokai is a good citizen"
+      // and "yokai poisons your shell with a bar cursor."
+      if (styleChanged) {
+        optimized.push({
+          type: 'stdout',
+          content: desiredStyleCode !== null ? decscusr(desiredStyleCode) : RESET_CURSOR_STYLE,
+        })
+        this.cursorStyleApplied = desiredStyleCode
+      }
+
+      // OSC 12 cursor color override — same transition semantics as
+      // style. Terminals that don't support it ignore the sequence
+      // (no harm). RESET_CURSOR_COLOR (OSC 112) restores the user's
+      // configured color when our override clears.
+      if (colorChanged) {
+        optimized.push({
+          type: 'stdout',
+          content: desiredColor !== null ? setCursorColor(desiredColor) : RESET_CURSOR_COLOR,
+        })
+        this.cursorColorApplied = desiredColor
       }
     }
     const tWrite = performance.now()
@@ -1509,6 +1606,49 @@ export default class Ink {
     })
   }
   /**
+   * Hide the physical terminal cursor and update internal visibility
+   * tracking. App calls this on mount + on resume-from-suspend so the
+   * diff renderer doesn't show cursor flicker between frames; the
+   * render-path SHOW_CURSOR write later in the same tick re-enables
+   * the cursor at the declared position when a TextInput is focused.
+   *
+   * Goes through this method (rather than App writing HIDE_CURSOR
+   * directly) so `cursorVisible` state stays consistent — without it,
+   * a TextInput-focused → suspend → resume sequence leaves the
+   * terminal cursor hidden but ink thinks it's visible, so subsequent
+   * renders never re-emit SHOW.
+   *
+   * Honors `CLAUDE_CODE_ACCESSIBILITY` — in accessibility mode the
+   * native cursor stays visible for screen magnifiers and other tools.
+   */
+  hideCursor(): void {
+    if (!this.options.stdout.isTTY) return
+    if (isEnvTruthy(process.env.CLAUDE_CODE_ACCESSIBILITY)) return
+    this.options.stdout.write(HIDE_CURSOR)
+    this.cursorVisible = false
+  }
+  /**
+   * Restore the terminal's configured cursor shape + color, flushing
+   * any active DECSCUSR / OSC 12 overrides. Called by App when
+   * suspending (so the user's shell prompt isn't left with a
+   * yokai-styled cursor) and by the unmount path.
+   *
+   * Updates the tracking fields to null so the next render after a
+   * resume re-applies the override if a declaration with style/color
+   * is still active. Idempotent — no writes if nothing was applied.
+   */
+  restoreCursorDefaults(): void {
+    if (!this.options.stdout.isTTY) return
+    if (this.cursorStyleApplied !== null) {
+      this.options.stdout.write(RESET_CURSOR_STYLE)
+      this.cursorStyleApplied = null
+    }
+    if (this.cursorColorApplied !== null) {
+      this.options.stdout.write(RESET_CURSOR_COLOR)
+      this.cursorColorApplied = null
+    }
+  }
+  /**
    * Look up the URL at (col, row) in the current front frame. Checks for
    * an OSC 8 hyperlink first, then falls back to scanning the row for a
    * plain-text URL (mouse tracking intercepts the terminal's native
@@ -1704,6 +1844,8 @@ export default class Ink {
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
         dispatchPasteEvent={this.dispatchPasteEvent}
         copyToClipboard={this.copyToClipboard}
+        hideCursor={this.hideCursor}
+        restoreCursorDefaults={this.restoreCursorDefaults}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >
@@ -1763,6 +1905,18 @@ export default class Ink {
       writeSync(1, DFE)
       // Disable bracketed paste mode
       writeSync(1, DBP)
+      // Restore cursor shape + color to terminal defaults BEFORE the
+      // SHOW_CURSOR below — otherwise an input that styled itself as a
+      // green bar cursor leaves the user's shell with that config
+      // forever. Idempotent: a no-op when we never set them.
+      if (this.cursorStyleApplied !== null) {
+        writeSync(1, RESET_CURSOR_STYLE)
+        this.cursorStyleApplied = null
+      }
+      if (this.cursorColorApplied !== null) {
+        writeSync(1, RESET_CURSOR_COLOR)
+        this.cursorColorApplied = null
+      }
       // Show cursor
       writeSync(1, SHOW_CURSOR)
       // Clear iTerm2 progress bar

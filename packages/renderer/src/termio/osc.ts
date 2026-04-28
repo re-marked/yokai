@@ -239,6 +239,55 @@ export const OSC = {
 } as const
 
 /**
+ * Translate a yokai `Color`-shaped string into an OSC 12-compatible
+ * value. xterm and friends accept:
+ *
+ *   - `#rrggbb` hex
+ *   - `rgb:rrrr/gggg/bbbb` 16-bit-component xterm syntax
+ *   - X11 / CSS named colors (`red`, `cyan`, `dodgerblue`, …)
+ *
+ * Conversions:
+ *   - `'#rrggbb'`            → as-is
+ *   - `'rgb(r,g,b)'`         → `'#rrggbb'` (8-bit per channel)
+ *   - `'ansi:cyan'`          → `'cyan'`   (drop the yokai prefix)
+ *   - `'ansi256(N)'`         → as-is (terminals will likely ignore;
+ *                               OSC 12 has no ansi256 syntax —
+ *                               documented as unsupported)
+ *   - anything else (named color, theme key, raw string) → as-is
+ *
+ * Pure helper, no I/O.
+ */
+export function formatCursorColor(color: string): string {
+  const rgbMatch = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color)
+  if (rgbMatch) {
+    const r = Number.parseInt(rgbMatch[1]!, 10) & 0xff
+    const g = Number.parseInt(rgbMatch[2]!, 10) & 0xff
+    const b = Number.parseInt(rgbMatch[3]!, 10) & 0xff
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+  }
+  if (color.startsWith('ansi:')) return color.slice(5)
+  return color
+}
+
+/**
+ * Build the OSC 12 sequence that sets the terminal cursor color.
+ * Terminator follows the osc() helper convention (ST for kitty, BEL
+ * everywhere else). Returns the full sequence ready to write to
+ * stdout.
+ */
+export function setCursorColor(color: string): string {
+  return osc(OSC.SET_CURSOR_COLOR, formatCursorColor(color))
+}
+
+/**
+ * OSC 112 — reset the cursor color to the terminal's configured value.
+ * No payload. Used by ink when a declaration with a `color` is
+ * replaced by one without (or cleared) so the user's shell prompt
+ * doesn't keep our color override after the input unmounts.
+ */
+export const RESET_CURSOR_COLOR = osc(OSC.RESET_CURSOR_COLOR)
+
+/**
  * Parse an OSC sequence into an action
  *
  * @param content - The sequence content (without ESC ] and terminator)

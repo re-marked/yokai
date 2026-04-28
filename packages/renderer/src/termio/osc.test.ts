@@ -25,7 +25,13 @@ vi.mock('@yokai/shared', async () => {
   }
 })
 
-import { _resetLinuxCopyCache, setClipboard } from './osc.js'
+import {
+  RESET_CURSOR_COLOR,
+  _resetLinuxCopyCache,
+  formatCursorColor,
+  setClipboard,
+  setCursorColor,
+} from './osc.js'
 
 const ESC = '\x1b'
 const BEL = '\x07'
@@ -194,5 +200,62 @@ describe('setClipboard', () => {
         )
       })
     })
+  })
+})
+
+describe('formatCursorColor', () => {
+  it('passes hex colors through unchanged', () => {
+    expect(formatCursorColor('#00ff00')).toBe('#00ff00')
+    expect(formatCursorColor('#abc123')).toBe('#abc123')
+  })
+
+  it('converts rgb(...) to #rrggbb', () => {
+    expect(formatCursorColor('rgb(0,255,0)')).toBe('#00ff00')
+    expect(formatCursorColor('rgb(255, 128, 64)')).toBe('#ff8040')
+  })
+
+  it('clamps rgb components to a byte (defensive — should never be > 255)', () => {
+    // & 0xff truncates rather than throws; verifies the formatter
+    // doesn't silently emit malformed hex if someone passes 300.
+    expect(formatCursorColor('rgb(300,0,0)')).toBe('#2c0000') // 300 & 0xff = 44 = 0x2c
+  })
+
+  it('strips the ansi: prefix from yokai-style named colors', () => {
+    expect(formatCursorColor('ansi:cyan')).toBe('cyan')
+    expect(formatCursorColor('ansi:redBright')).toBe('redBright')
+  })
+
+  it('passes named colors / theme keys / arbitrary strings through', () => {
+    // The terminal interprets these (or doesn't); not our problem.
+    expect(formatCursorColor('red')).toBe('red')
+    expect(formatCursorColor('dodgerblue')).toBe('dodgerblue')
+    expect(formatCursorColor('some-theme-key')).toBe('some-theme-key')
+  })
+
+  it('passes ansi256 through (documented unsupported by OSC 12)', () => {
+    // Terminals will probably ignore — there's no OSC 12 ansi256
+    // syntax. Documented behavior; tested so a future "convert to RGB"
+    // change is intentional, not accidental.
+    expect(formatCursorColor('ansi256(15)')).toBe('ansi256(15)')
+  })
+})
+
+describe('setCursorColor', () => {
+  it('wraps the formatted color in OSC 12', () => {
+    expect(setCursorColor('#00ff00')).toBe(`${ESC}]12;#00ff00${BEL}`)
+  })
+
+  it('formats rgb(...) before wrapping', () => {
+    expect(setCursorColor('rgb(255,0,128)')).toBe(`${ESC}]12;#ff0080${BEL}`)
+  })
+
+  it('strips ansi: prefix before wrapping', () => {
+    expect(setCursorColor('ansi:magenta')).toBe(`${ESC}]12;magenta${BEL}`)
+  })
+})
+
+describe('RESET_CURSOR_COLOR', () => {
+  it('is the OSC 112 sequence with no payload', () => {
+    expect(RESET_CURSOR_COLOR).toBe(`${ESC}]112${BEL}`)
   })
 })

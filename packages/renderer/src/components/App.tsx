@@ -1,4 +1,4 @@
-import { isEnvTruthy, logError, logForDebugging } from '@yokai/shared'
+import { logError, logForDebugging } from '@yokai/shared'
 import { PureComponent, type ReactNode } from 'react'
 import type { DOMElement } from '../dom'
 import { EventEmitter } from '../events/emitter'
@@ -27,7 +27,7 @@ import {
   FOCUS_IN,
   FOCUS_OUT,
 } from '../termio/csi'
-import { DBP, DFE, DISABLE_MOUSE_TRACKING, EBP, EFE, HIDE_CURSOR, SHOW_CURSOR } from '../termio/dec'
+import { DBP, DFE, DISABLE_MOUSE_TRACKING, EBP, EFE, SHOW_CURSOR } from '../termio/dec'
 import AppContext from './AppContext'
 import ClipboardContext from './ClipboardContext'
 import { ClockProvider } from './ClockContext'
@@ -119,6 +119,17 @@ type Props = {
   // helper (native utility, tmux load-buffer, OSC 52). Fire-and-forget;
   // exposed to React land via ClipboardContext + useClipboard().
   readonly copyToClipboard: (text: string) => void
+  // Hide the physical terminal cursor and update ink's visibility
+  // tracking. Goes through this method (not a direct stdout write of
+  // HIDE_CURSOR) so ink's `cursorVisible` state stays consistent —
+  // the diff renderer's SHOW_CURSOR / HIDE_CURSOR transitions read
+  // that field to avoid spam writes, and an out-of-band hide would
+  // make it lie. Honors `CLAUDE_CODE_ACCESSIBILITY` internally.
+  readonly hideCursor: () => void
+  // Flush any active DECSCUSR / OSC 12 cursor overrides back to
+  // terminal defaults. Called by App on suspend so the user's shell
+  // prompt doesn't inherit an in-app cursor style.
+  readonly restoreCursorDefaults: () => void
   // Focus subsystem references — exposed to React land via FocusContext
   // so useFocus / useFocusManager / FocusGroup can subscribe / dispatch
   // without walking the DOM each call.
@@ -278,10 +289,12 @@ export default class App extends PureComponent<Props, State> {
     )
   }
   override componentDidMount() {
-    // In accessibility mode, keep the native cursor visible for screen magnifiers and other tools
-    if (this.props.stdout.isTTY && !isEnvTruthy(process.env.CLAUDE_CODE_ACCESSIBILITY)) {
-      this.props.stdout.write(HIDE_CURSOR)
-    }
+    // Hide the cursor by default — diff renders happen between frames
+    // and a visible cursor flickers across the screen during paint. The
+    // render-path SHOW_CURSOR re-enables it at the declared position
+    // when a focusable consumer (TextInput etc.) takes the cursor.
+    // hideCursor honors CLAUDE_CODE_ACCESSIBILITY internally.
+    this.props.hideCursor()
   }
   override componentWillUnmount() {
     if (this.props.stdout.isTTY) {
@@ -507,6 +520,14 @@ export default class App extends PureComponent<Props, State> {
       this.handleSetRawMode(false)
     }
 
+    // Restore cursor shape + color to terminal defaults before
+    // showing the cursor — without this, the shell prompt inherits
+    // any DECSCUSR / OSC 12 we applied while a TextInput was focused.
+    // No-op if no overrides were applied. Goes through ink so the
+    // tracking fields clear; on resume, the next render re-applies
+    // the override if the declaration is still active.
+    this.props.restoreCursorDefaults()
+
     // Show cursor, disable focus reporting, and disable mouse tracking
     // before suspending. DISABLE_MOUSE_TRACKING is a no-op if tracking
     // wasn't enabled, so it's safe to emit unconditionally — without
@@ -528,12 +549,10 @@ export default class App extends PureComponent<Props, State> {
         }
       }
 
-      // Hide cursor (unless in accessibility mode) and re-enable focus reporting after resuming
+      // Hide cursor (via ink so visibility tracking stays consistent)
+      // and re-enable focus reporting after resuming.
+      this.props.hideCursor()
       if (this.props.stdout.isTTY) {
-        if (!isEnvTruthy(process.env.CLAUDE_CODE_ACCESSIBILITY)) {
-          this.props.stdout.write(HIDE_CURSOR)
-        }
-        // Re-enable focus reporting to restore terminal state
         this.props.stdout.write(EFE)
       }
 

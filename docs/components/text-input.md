@@ -26,6 +26,9 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `disabled` | `boolean` | `false` | Ignore keystrokes. The input still claims focus. |
 | `selectionColor` | `Color` | `'cyan'` | Background of the selection highlight. |
 | `borderColorFocus` | `Color` | `'cyan'` | Border color while focused. Swaps `borderColor` on focus, reverts on blur. No-op when no `borderStyle` is set. To opt out, pass the same value as `borderColor`. |
+| `cursorStyle` | `'block' \| 'underline' \| 'bar'` | terminal default | Cursor shape while focused. DECSCUSR; restored to terminal default on blur. |
+| `cursorBlink` | `boolean` | terminal default | Cursor blink while focused. Pairs with `cursorStyle`. |
+| `cursorColor` | `Color` | terminal default | Cursor color while focused. OSC 12; supported by xterm/iTerm2/kitty/alacritty/Windows Terminal/VS Code. `ansi256(N)` not supported. |
 | `autoFocus` | `boolean` | `false` | Focus on mount. |
 | `historyCap` | `number` | `100` | Max undo entries. Older entries drop. |
 

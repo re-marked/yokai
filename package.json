@@ -19,7 +19,8 @@
     "demo:drag-and-drop": "pnpm --filter @yokai-example/drag-and-drop start",
     "demo:resizable": "pnpm --filter @yokai-example/resizable start",
     "demo:focus-nav": "pnpm --filter @yokai-example/focus-nav start",
-    "demo:text-input": "pnpm --filter @yokai-example/text-input start"
+    "demo:text-input": "pnpm --filter @yokai-example/text-input start",
+    "demo:cursor-styles": "pnpm --filter @yokai-example/cursor-styles start"
   },
   "engines": {
     "node": ">=22.0.0"

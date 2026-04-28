@@ -58,3 +58,41 @@ export const DISABLE_MOUSE_TRACKING =
   decreset(DEC.MOUSE_ANY) +
   decreset(DEC.MOUSE_BUTTON) +
   decreset(DEC.MOUSE_NORMAL)
+
+/**
+ * Cursor shape.
+ *
+ * - `'block'`     — full-cell rectangle; DEC's default cursor
+ * - `'underline'` — single-row line at the cell's bottom (vt220 underscore cursor)
+ * - `'bar'`       — single-column line at the cell's left edge (modern editor caret)
+ *
+ * Combined with `blink` and emitted via DECSCUSR (`CSI Ps SP q`).
+ */
+export type CursorStyle = 'block' | 'underline' | 'bar'
+
+// DECSCUSR code matrix: rows = style, cols = [steady, blinking].
+// 0 is reserved for "reset to terminal default" (RESET_CURSOR_STYLE).
+const CURSOR_STYLE_CODES: Record<CursorStyle, readonly [number, number]> = {
+  block: [2, 1],
+  underline: [4, 3],
+  bar: [6, 5],
+}
+
+/** DECSCUSR code (1-6) for a given (style, blink) pair. */
+export function decscusrCode(style: CursorStyle, blink: boolean): number {
+  const [steady, blinking] = CURSOR_STYLE_CODES[style]
+  return blink ? blinking : steady
+}
+
+/**
+ * DECSCUSR sequence: `CSI Ps SP q` (literal space before `q`). Most
+ * modern terminals (xterm, iTerm2, kitty, Windows Terminal, alacritty,
+ * VS Code) honor codes 0-6. Others ignore the sequence — safe to emit
+ * unconditionally.
+ */
+export function decscusr(code: number): string {
+  return csi(`${code} q`)
+}
+
+/** `CSI 0 SP q` — restore terminal-configured cursor shape + blink. */
+export const RESET_CURSOR_STYLE = decscusr(0)
