@@ -1628,6 +1628,27 @@ export default class Ink {
     this.cursorVisible = false
   }
   /**
+   * Restore the terminal's configured cursor shape + color, flushing
+   * any active DECSCUSR / OSC 12 overrides. Called by App when
+   * suspending (so the user's shell prompt isn't left with a
+   * yokai-styled cursor) and by the unmount path.
+   *
+   * Updates the tracking fields to null so the next render after a
+   * resume re-applies the override if a declaration with style/color
+   * is still active. Idempotent — no writes if nothing was applied.
+   */
+  restoreCursorDefaults(): void {
+    if (!this.options.stdout.isTTY) return
+    if (this.cursorStyleApplied !== null) {
+      this.options.stdout.write(RESET_CURSOR_STYLE)
+      this.cursorStyleApplied = null
+    }
+    if (this.cursorColorApplied !== null) {
+      this.options.stdout.write(RESET_CURSOR_COLOR)
+      this.cursorColorApplied = null
+    }
+  }
+  /**
    * Look up the URL at (col, row) in the current front frame. Checks for
    * an OSC 8 hyperlink first, then falls back to scanning the row for a
    * plain-text URL (mouse tracking intercepts the terminal's native
@@ -1824,6 +1845,7 @@ export default class Ink {
         dispatchPasteEvent={this.dispatchPasteEvent}
         copyToClipboard={this.copyToClipboard}
         hideCursor={this.hideCursor}
+        restoreCursorDefaults={this.restoreCursorDefaults}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >
@@ -1883,6 +1905,18 @@ export default class Ink {
       writeSync(1, DFE)
       // Disable bracketed paste mode
       writeSync(1, DBP)
+      // Restore cursor shape + color to terminal defaults BEFORE the
+      // SHOW_CURSOR below — otherwise an input that styled itself as a
+      // green bar cursor leaves the user's shell with that config
+      // forever. Idempotent: a no-op when we never set them.
+      if (this.cursorStyleApplied !== null) {
+        writeSync(1, RESET_CURSOR_STYLE)
+        this.cursorStyleApplied = null
+      }
+      if (this.cursorColorApplied !== null) {
+        writeSync(1, RESET_CURSOR_COLOR)
+        this.cursorColorApplied = null
+      }
       // Show cursor
       writeSync(1, SHOW_CURSOR)
       // Clear iTerm2 progress bar

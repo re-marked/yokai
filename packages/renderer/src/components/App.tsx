@@ -126,6 +126,10 @@ type Props = {
   // that field to avoid spam writes, and an out-of-band hide would
   // make it lie. Honors `CLAUDE_CODE_ACCESSIBILITY` internally.
   readonly hideCursor: () => void
+  // Flush any active DECSCUSR / OSC 12 cursor overrides back to
+  // terminal defaults. Called by App on suspend so the user's shell
+  // prompt doesn't inherit an in-app cursor style.
+  readonly restoreCursorDefaults: () => void
   // Focus subsystem references — exposed to React land via FocusContext
   // so useFocus / useFocusManager / FocusGroup can subscribe / dispatch
   // without walking the DOM each call.
@@ -515,6 +519,14 @@ export default class App extends PureComponent<Props, State> {
     while (this.rawModeEnabledCount > 0) {
       this.handleSetRawMode(false)
     }
+
+    // Restore cursor shape + color to terminal defaults before
+    // showing the cursor — without this, the shell prompt inherits
+    // any DECSCUSR / OSC 12 we applied while a TextInput was focused.
+    // No-op if no overrides were applied. Goes through ink so the
+    // tracking fields clear; on resume, the next render re-applies
+    // the override if the declaration is still active.
+    this.props.restoreCursorDefaults()
 
     // Show cursor, disable focus reporting, and disable mouse tracking
     // before suspending. DISABLE_MOUSE_TRACKING is a no-op if tracking
