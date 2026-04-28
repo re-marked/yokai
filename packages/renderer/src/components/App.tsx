@@ -3,6 +3,7 @@ import { PureComponent, type ReactNode } from 'react'
 import type { DOMElement } from '../dom'
 import { EventEmitter } from '../events/emitter'
 import { InputEvent } from '../events/input-event'
+import type { KeyboardEvent } from '../events/keyboard-event'
 import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
 import type { FocusManager } from '../focus'
@@ -101,8 +102,12 @@ type Props = {
   // magnifiers track the input. Optional so testing.tsx doesn't stub it.
   readonly onCursorDeclaration?: CursorDeclarationSetter
   // Dispatch a keyboard event through the DOM tree. Called for each
-  // parsed key alongside the legacy EventEmitter path.
-  readonly dispatchKeyboardEvent: (parsedKey: ParsedKey) => void
+  // parsed key alongside the legacy EventEmitter path. Returns the
+  // dispatched event so callers (the App's processKeysInBatch) can
+  // gate App-level shortcuts (Ctrl+C exit, Ctrl+Z suspend) on
+  // `defaultPrevented` — same default-action pattern Tab cycling
+  // uses inside `dispatchKeyboardEvent` itself.
+  readonly dispatchKeyboardEvent: (parsedKey: ParsedKey) => KeyboardEvent
   // Dispatch a long-form paste through the DOM tree as a PasteEvent.
   // Called by handleParsedInput when a parsed paste exceeds the
   // configured threshold; below the threshold the content is dispatched

@@ -1455,7 +1455,7 @@ export default class Ink {
     if (!this.altScreenActive) return
     dispatchHover(this.rootNode, col, row, this.hoveredNodes)
   }
-  dispatchKeyboardEvent(parsedKey: ParsedKey): void {
+  dispatchKeyboardEvent(parsedKey: ParsedKey): KeyboardEvent {
     const target = this.focusManager.activeElement ?? this.rootNode
     const event = new KeyboardEvent(parsedKey)
     dispatcher.dispatchDiscrete(target, event)
@@ -1469,6 +1469,12 @@ export default class Ink {
         this.focusManager.focusNext(this.rootNode)
       }
     }
+
+    // Return the dispatched event so callers can branch on
+    // `defaultPrevented`. The App-level loop uses this to gate Ctrl+C
+    // exit and Ctrl+Z suspend on whether a focused descendant claimed
+    // the key — same default-action pattern Tab cycling above uses.
+    return event
   }
   /**
    * Dispatch a long-form paste through the DOM tree. Routed to the
