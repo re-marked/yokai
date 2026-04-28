@@ -276,12 +276,17 @@ export default function TextInput({
   // (calculateLayout runs after this effect), but for typing the lag
   // is invisible because each keystroke triggers another render that
   // catches up.
-  const [inner, setInner] = useState({ width: 0, height: 0 })
+  const [inner, setInner] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 })
   useLayoutEffect(() => {
     const node = ref.current
     if (!node?.yogaNode) return
     const measured = measureInnerSize(node)
-    if (measured.width !== inner.width || measured.height !== inner.height) {
+    if (
+      measured.width !== inner.width ||
+      measured.height !== inner.height ||
+      measured.offsetX !== inner.offsetX ||
+      measured.offsetY !== inner.offsetY
+    ) {
       setInner(measured)
     }
   })
@@ -361,9 +366,16 @@ export default function TextInput({
   // active axis still holds its last offset. Subtracting unconditionally
   // would push the cursor declaration to the wrong (sometimes negative)
   // coordinate. Gate by mode so the inactive axis is never applied.
+  // Cursor declaration coords are interpreted relative to the OUTER
+  // box rect (per useDeclaredCursor's contract), but the rendered
+  // text starts at (offsetX, offsetY) inside that — past the border
+  // and padding. Without the offset, a TextInput with `borderStyle`
+  // or `paddingX/Y` lands the visible cursor at the box's outer
+  // top-left corner instead of at the caret's actual cell. Visible
+  // immediately as a cursor "above" or "to the left of" the text.
   const cursorRef = useDeclaredCursor({
-    line: caretLineCol.line - (multiline ? scrollY : 0),
-    column: caretLineCol.col - (multiline ? 0 : scrollX),
+    line: inner.offsetY + caretLineCol.line - (multiline ? scrollY : 0),
+    column: inner.offsetX + caretLineCol.col - (multiline ? 0 : scrollX),
     active: isFocused,
     style: cursorStyle,
     blink: cursorBlink,
@@ -771,12 +783,23 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
  * yoga layout isn't available yet (first render before
  * calculateLayout, or detached node).
  */
-function measureInnerSize(node: DOMElement): { width: number; height: number } {
+function measureInnerSize(node: DOMElement): {
+  width: number
+  height: number
+  /** Cell columns from outer-box left edge to where content starts
+   *  (border + padding). Used to align the cursor declaration with
+   *  the rendered text — without this offset, the declared cursor
+   *  lands at the box's outer top-left corner rather than at the
+   *  caret's actual cell. */
+  offsetX: number
+  /** Cell rows from outer-box top edge to where content starts. */
+  offsetY: number
+} {
   const yoga = node.yogaNode
-  if (!yoga) return { width: 0, height: 0 }
+  if (!yoga) return { width: 0, height: 0, offsetX: 0, offsetY: 0 }
   const w = yoga.getComputedWidth()
   const h = yoga.getComputedHeight()
-  if (!w || !h) return { width: 0, height: 0 }
+  if (!w || !h) return { width: 0, height: 0, offsetX: 0, offsetY: 0 }
   const padL = yoga.getComputedPadding(LayoutEdge.Left) ?? 0
   const padR = yoga.getComputedPadding(LayoutEdge.Right) ?? 0
   const padT = yoga.getComputedPadding(LayoutEdge.Top) ?? 0
@@ -788,6 +811,8 @@ function measureInnerSize(node: DOMElement): { width: number; height: number } {
   return {
     width: Math.max(0, Math.floor(w - padL - padR - brL - brR)),
     height: Math.max(0, Math.floor(h - padT - padB - brT - brB)),
+    offsetX: Math.floor(brL + padL),
+    offsetY: Math.floor(brT + padT),
   }
 }
 
