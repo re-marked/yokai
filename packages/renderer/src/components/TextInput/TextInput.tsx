@@ -144,28 +144,46 @@ export default function TextInput({
     initialState,
   )
 
-  // Controlled mode: when external `value` differs from internal,
-  // reset state to the new value. Clearing history is intentional —
-  // arbitrary external sets shouldn't be undoable as if they were
-  // user edits. Skip when undefined (uncontrolled).
+  // Controlled-mode loop avoidance: track the last value we reported
+  // (or were initialized with). The two effects below use this single
+  // ref to avoid the classic ping-pong where:
+  //   - user types → state updates → onChange fires
+  //   - parent setState updates the prop
+  //   - sync sees prop !== state, resets state to prop
+  //   - onChange fires again with the reset value
+  //   - parent setState again → infinite loop at 60Hz.
+  //
+  // The ref records "what the parent's value prop should be after
+  // they echo our last report." Sync only fires when the prop differs
+  // from THAT — meaning the parent set value externally, not just
+  // hasn't echoed yet. onChange skips if state matches the ref —
+  // meaning the change came FROM a sync, not a user edit.
+  const lastReportedValue = useRef<string>(
+    isControlled ? value! : (defaultValue ?? ''),
+  )
+
+  // Sync internal state when the parent SETS value to something we
+  // didn't just report. Deps are [value] only — state.value would
+  // re-fire this effect on every keystroke, defeating the loop guard.
+  // The closure-captured state.value is fine for the no-op skip
+  // because if state.value already matches the new prop value, we
+  // don't need to dispatch.
   useEffect(() => {
     if (!isControlled) return
-    if (value === state.value) return
-    dispatch({ type: 'setCaret', charIdx: value!.length, extend: false })
-    // Resetting the buffer requires bypassing the reducer because
-    // the reducer doesn't have a "set value" action (intentionally —
-    // we want all edits to flow through actions). Reset by replacing
-    // through a synthetic insertText action that selects-all-then-
-    // inserts. Simpler: dispatch select-all then insert.
-    // Actually: do this via a one-shot init reset.
+    if (value === lastReportedValue.current) return // we reported this
+    if (value === state.value) return // already in sync somehow
+    lastReportedValue.current = value!
+    // Replace selection-all with insert; clears history because an
+    // external set isn't a user-undoable edit.
     dispatch({ type: 'selectAll' })
     dispatch({ type: 'insertText', text: value!, isPaste: false })
-  }, [isControlled, value, state.value])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isControlled, value])
 
-  // Fire onChange when internal value changes from a user action. Skip
-  // when value matches the controlled prop (echo). useRef avoids
-  // re-firing during the controlled-sync above.
-  const lastReportedValue = useRef(state.value)
+  // Fire onChange when internal state diverges from the last reported
+  // value (i.e. user-initiated change). Skip if the change came from
+  // the controlled-sync effect above — that path updates
+  // lastReportedValue first, so this comparison short-circuits.
   useEffect(() => {
     if (state.value === lastReportedValue.current) return
     lastReportedValue.current = state.value
