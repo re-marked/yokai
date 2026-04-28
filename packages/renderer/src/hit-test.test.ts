@@ -10,12 +10,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import {
-  type DOMElement,
-  appendChildNode,
-  createNode,
-  setAttribute,
-} from './dom.js'
+import { type DOMElement, appendChildNode, createNode, setAttribute } from './dom.js'
 import { FocusManager } from './focus.js'
 import { dispatchClick } from './hit-test.js'
 import { nodeCache } from './node-cache.js'
