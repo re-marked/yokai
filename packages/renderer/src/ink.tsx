@@ -1,6 +1,6 @@
 import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'node:fs'
 import { format } from 'node:util'
-import { logForDebugging } from '@yokai/shared'
+import { isEnvTruthy, logForDebugging } from '@yokai/shared'
 import { logError } from '@yokai/shared'
 import { getYogaCounters } from '@yokai/shared/yoga-layout'
 import autoBind from 'auto-bind'
@@ -94,6 +94,7 @@ import {
   ENABLE_MOUSE_TRACKING,
   ENTER_ALT_SCREEN,
   EXIT_ALT_SCREEN,
+  HIDE_CURSOR,
   SHOW_CURSOR,
 } from './termio/dec'
 import {
@@ -235,6 +236,14 @@ export default class Ink {
   // screen readers / screen magnifiers track it — so parking at the text
   // input's caret makes CJK input appear inline and lets a11y tools follow.
   private cursorDeclaration: CursorDeclaration | null = null
+  // Whether the physical terminal cursor is currently visible. App.componentDidMount
+  // hides it on mount (HIDE_CURSOR) so the diff-renderer doesn't show flicker
+  // between frames; useDeclaredCursor consumers (TextInput's caret) rely on
+  // it being shown again at their declared position. Track current visibility
+  // so we only emit SHOW_CURSOR / HIDE_CURSOR on transitions, never per-frame
+  // — repeated emits add bytes but no visual change, and on slow terminals
+  // can cause real cursor flicker.
+  private cursorVisible = false
   // Main-screen: physical cursor position after the declared-cursor move,
   // tracked separately from frame.cursor (which must stay at content-bottom
   // for log-update's relative-move invariants). Alt-screen doesn't need
@@ -868,15 +877,32 @@ export default class Ink {
             })
           }
         }
+        // Show the cursor at the declared position. Position write goes
+        // first so the cursor moves invisibly to the right cell, THEN
+        // appears — avoids a one-frame flash at the previous position.
+        // Only on transition; per-frame SHOW_CURSOR adds bytes for no
+        // visual change AND can cause real flicker on slow terminals.
+        if (!this.cursorVisible) {
+          optimized.push({ type: 'stdout', content: SHOW_CURSOR })
+          this.cursorVisible = true
+        }
         this.displayCursor = target
       } else {
-        // Declaration cleared (input blur, unmount). Restore physical cursor
-        // to frame.cursor before forgetting the park position — otherwise
-        // displayCursor=null lies about where the cursor is, and the NEXT
-        // frame's preamble (or log-update's relative moves) computes from a
-        // wrong spot. The preamble above handles hasDiff; this handles
-        // !hasDiff (e.g. accessibility mode where blur doesn't change
-        // renderedValue since invert is identity).
+        // Declaration cleared (input blur, unmount). Hide the cursor
+        // FIRST so the subsequent restore-move doesn't flash a visible
+        // cursor across the screen. App.componentDidMount established
+        // hidden-by-default; we're returning the visibility state to
+        // its baseline.
+        if (this.cursorVisible) {
+          optimized.push({ type: 'stdout', content: HIDE_CURSOR })
+          this.cursorVisible = false
+        }
+        // Restore physical cursor to frame.cursor before forgetting the
+        // park position — otherwise displayCursor=null lies about where
+        // the cursor is, and the NEXT frame's preamble (or log-update's
+        // relative moves) computes from a wrong spot. The preamble above
+        // handles hasDiff; this handles !hasDiff (e.g. accessibility mode
+        // where blur doesn't change renderedValue since invert is identity).
         if (parked !== null && !this.altScreenActive && !hasDiff) {
           const rdx = frame.cursor.x - parked.x
           const rdy = frame.cursor.y - parked.y
@@ -1509,6 +1535,28 @@ export default class Ink {
     })
   }
   /**
+   * Hide the physical terminal cursor and update internal visibility
+   * tracking. App calls this on mount + on resume-from-suspend so the
+   * diff renderer doesn't show cursor flicker between frames; the
+   * render-path SHOW_CURSOR write later in the same tick re-enables
+   * the cursor at the declared position when a TextInput is focused.
+   *
+   * Goes through this method (rather than App writing HIDE_CURSOR
+   * directly) so `cursorVisible` state stays consistent — without it,
+   * a TextInput-focused → suspend → resume sequence leaves the
+   * terminal cursor hidden but ink thinks it's visible, so subsequent
+   * renders never re-emit SHOW.
+   *
+   * Honors `CLAUDE_CODE_ACCESSIBILITY` — in accessibility mode the
+   * native cursor stays visible for screen magnifiers and other tools.
+   */
+  hideCursor(): void {
+    if (!this.options.stdout.isTTY) return
+    if (isEnvTruthy(process.env.CLAUDE_CODE_ACCESSIBILITY)) return
+    this.options.stdout.write(HIDE_CURSOR)
+    this.cursorVisible = false
+  }
+  /**
    * Look up the URL at (col, row) in the current front frame. Checks for
    * an OSC 8 hyperlink first, then falls back to scanning the row for a
    * plain-text URL (mouse tracking intercepts the terminal's native
@@ -1704,6 +1752,7 @@ export default class Ink {
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
         dispatchPasteEvent={this.dispatchPasteEvent}
         copyToClipboard={this.copyToClipboard}
+        hideCursor={this.hideCursor}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >
