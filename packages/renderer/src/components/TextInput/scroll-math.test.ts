@@ -138,4 +138,29 @@ describe('sliceRowByCells', () => {
   it('handles empty row gracefully', () => {
     expect(sliceRowByCells('', 0, 10)).toBe('')
   })
+
+  it('keeps non-BMP emoji intact (no surrogate-pair split)', () => {
+    // '😀' is U+1F600 (one code point, two UTF-16 units). With the
+    // old row[i] walk, scrolling into the middle of the emoji's cell
+    // pair would emit lone surrogates and produce replacement glyphs.
+    // With code-point iteration the emoji always rendered or fully
+    // skipped.
+    expect(sliceRowByCells('a😀b', 0, 5)).toBe('a😀b')
+    // Skip the leading 'a' (1 cell). Emoji starts at cell 1, width 2.
+    expect(sliceRowByCells('a😀b', 1, 5)).toBe('😀b')
+  })
+
+  it('renders space when an emoji straddles the leading edge', () => {
+    // 'a😀b': 'a' (1 cell) + '😀' (2 cells) + 'b' (1 cell). Slice
+    // [2, 6) would land mid-emoji on cell 2 — emit a space placeholder
+    // for the clipped half so layout doesn't drift, then resume with 'b'.
+    expect(sliceRowByCells('a😀b', 2, 4)).toBe(' b')
+  })
+
+  it('renders spaces when an emoji straddles the trailing edge', () => {
+    // 'ab😀': cells 0,1 are 'a','b'; emoji starts at cell 2 (width 2).
+    // Slice [0, 3) fits 'ab' but only one cell of the emoji — emit a
+    // space placeholder rather than a half-emoji.
+    expect(sliceRowByCells('ab😀', 0, 3)).toBe('ab ')
+  })
 })

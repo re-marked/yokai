@@ -57,6 +57,12 @@ export function scrollToKeepCaretVisible(opts: {
  *
  * Returns the visible substring suitable for a single `<Text>`. Used
  * by single-line horizontal scroll.
+ *
+ * Iteration is by code point, not UTF-16 unit — necessary so non-BMP
+ * characters (most emoji, e.g. 😀 = U+1F600) aren't split into lone
+ * surrogate halves at the boundaries. A `row[i]` walk would emit a
+ * lone high-surrogate when scrollX lands mid-emoji and the terminal
+ * would render a replacement glyph.
  */
 export function sliceRowByCells(row: string, fromCol: number, windowSize: number): string {
   if (windowSize <= 0) return ''
@@ -64,8 +70,10 @@ export function sliceRowByCells(row: string, fromCol: number, windowSize: number
   let out = ''
   let cellAcc = 0
   let visibleCells = 0
-  for (let i = 0; i < row.length; i++) {
-    const ch = row[i]!
+  // for..of walks code points, so `ch` is always one full code point
+  // (1 or 2 UTF-16 units); `cellWidthOfChar` then reads the full
+  // codePointAt(0) and classifies wide ranges correctly.
+  for (const ch of row) {
     const w = cellWidthOfChar(ch)
     if (w === 0) {
       // Combining mark — attach to whatever was last emitted (or drop
