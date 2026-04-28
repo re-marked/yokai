@@ -343,17 +343,25 @@ export default function TextInput({
         return
       }
       // Plain printable keystroke: insert. KeyboardEvent.key is the
-      // literal char for printables; multi-char `key` means a special
-      // key we already handled above. Skip ctrl/meta combos (consumer
-      // may bind them at a higher level).
+      // literal char for printables; multi-character special keys
+      // (e.g. 'left', 'backspace') would have been handled above by
+      // keyToAction. Skip ctrl/meta combos — consumer may bind them
+      // at a higher level.
       if (e.ctrl || e.meta) return
       const ch = e.key
-      if (!ch || ch.length !== 1) return
+      if (!ch) return
+      // Single-grapheme guard. Counted in CODE POINTS, not UTF-16
+      // units, so non-BMP printables (most emoji — '😀'.length is 2
+      // because of the surrogate pair, but [...'😀'].length is 1)
+      // pass through. Multi-grapheme `key` strings (the named special
+      // keys above) are filtered out here.
+      if ([...ch].length !== 1) return
       // Drop non-printable (control) chars silently. Anything < 0x20
-      // except \t we treat as non-text. (Newlines come through as
-      // `key === 'return'` and are handled in keyToAction's submit
-      // branch above.)
-      const code = ch.charCodeAt(0)
+      // except \t we treat as non-text. Surrogate-pair emoji land far
+      // above 0x20 in their full code point, so this gate doesn't
+      // affect them. (Newlines come through as `key === 'return'`
+      // and are handled in keyToAction's submit branch above.)
+      const code = ch.codePointAt(0) ?? 0
       if (code < 0x20 && ch !== '\t') return
       e.preventDefault()
       dispatch({ type: 'insertText', text: ch })
