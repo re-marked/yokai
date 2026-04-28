@@ -160,9 +160,7 @@ export default function TextInput({
   // from THAT — meaning the parent set value externally, not just
   // hasn't echoed yet. onChange skips if state matches the ref —
   // meaning the change came FROM a sync, not a user edit.
-  const lastReportedValue = useRef<string>(
-    isControlled ? value! : (defaultValue ?? ''),
-  )
+  const lastReportedValue = useRef<string>(isControlled ? value! : (defaultValue ?? ''))
 
   // Sync internal state when the parent SETS value to something we
   // didn't just report. Deps are [value] only — state.value would
@@ -170,6 +168,7 @@ export default function TextInput({
   // The closure-captured state.value is fine for the no-op skip
   // because if state.value already matches the new prop value, we
   // don't need to dispatch.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state.value is read for an idempotency check only — including it would re-fire the sync on every keystroke and break the controlled-mode loop guard above.
   useEffect(() => {
     if (!isControlled) return
     if (value === lastReportedValue.current) return // we reported this
@@ -179,7 +178,6 @@ export default function TextInput({
     // external set isn't a user-undoable edit.
     dispatch({ type: 'selectAll' })
     dispatch({ type: 'insertText', text: value!, isPaste: false })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isControlled, value])
 
   // Fire onChange when internal state diverges from the last reported
