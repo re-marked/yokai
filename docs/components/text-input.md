@@ -25,6 +25,7 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `passwordChar` | `string` | `'•'` | Mask character for `password` mode. |
 | `disabled` | `boolean` | `false` | Ignore keystrokes. The input still claims focus. |
 | `selectionColor` | `Color` | `'cyan'` | Background of the selection highlight. |
+| `borderColorFocus` | `Color` | `'cyan'` | Border color while focused. Swaps `borderColor` on focus, reverts on blur. No-op when no `borderStyle` is set. To opt out, pass the same value as `borderColor`. |
 | `autoFocus` | `boolean` | `false` | Focus on mount. |
 | `historyCap` | `number` | `100` | Max undo entries. Older entries drop. |
 
@@ -54,6 +55,28 @@ const [name, setName] = useState('')
 ### Password
 ```tsx
 <TextInput value={pw} onChange={setPw} password />
+```
+
+### Custom focus color
+```tsx
+<TextInput
+  value={query}
+  onChange={setQuery}
+  borderStyle="round"
+  borderColor="gray"      // idle
+  borderColorFocus="green" // focused
+/>
+```
+
+### Disable focus chrome (use a sibling indicator instead)
+```tsx
+<TextInput
+  value={x}
+  onChange={setX}
+  borderStyle="round"
+  borderColor="gray"
+  borderColorFocus="gray" // same as idle → no swap
+/>
 ```
 
 ## Key bindings

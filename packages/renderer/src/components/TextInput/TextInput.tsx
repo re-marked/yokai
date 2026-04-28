@@ -71,6 +71,21 @@ export type TextInputProps = Except<
   /** Selection background color. Default the renderer's terminal-default
    *  selection background (typically inverse). */
   selectionColor?: Color
+  /**
+   * Border color when the input is focused. Default `'cyan'`.
+   *
+   * The input swaps its `borderColor` for this value while focused,
+   * and reverts to the idle color (whatever was passed via
+   * `borderColor`, or the terminal default) on blur. Requires a
+   * `borderStyle` to be set — without a border there's nothing to
+   * color, so the swap is a no-op.
+   *
+   * To opt out of the focus-color swap (e.g. when focus is indicated
+   * elsewhere — a status bar, a sibling chrome element), pass the
+   * same value as `borderColor`. Setting both to the same value
+   * keeps the border static across focus transitions.
+   */
+  borderColorFocus?: Color
   /** Auto-focus on mount. */
   autoFocus?: boolean
   /** Maximum history entries kept for undo/redo. Default 100. */
@@ -116,6 +131,7 @@ export default function TextInput({
   passwordChar = '•',
   disabled = false,
   selectionColor = 'cyan',
+  borderColorFocus = 'cyan',
   autoFocus = false,
   historyCap,
   ...boxProps
@@ -458,16 +474,26 @@ export default function TextInput({
     ],
   )
 
+  // Focus-aware border color. Extract idle borderColor from boxProps so
+  // we can compute the swapped value cleanly (avoids passing both via
+  // spread + override). When focused, paint with `borderColorFocus`;
+  // otherwise fall through to whatever the consumer provided as the
+  // idle `borderColor` (or terminal default if undefined). The swap is
+  // a no-op when no `borderStyle` is set — there's no border to color.
+  const { borderColor: idleBorderColor, ...restBoxProps } = boxProps
+  const renderedBorderColor = isFocused ? borderColorFocus : idleBorderColor
+
   return (
     <Box
-      {...boxProps}
+      {...restBoxProps}
       ref={setRef}
-      tabIndex={boxProps.tabIndex ?? 0}
+      tabIndex={restBoxProps.tabIndex ?? 0}
       autoFocus={autoFocus}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       onMouseDown={handleMouseDown}
       flexDirection="column"
+      borderColor={renderedBorderColor}
     >
       {renderedLines}
     </Box>
