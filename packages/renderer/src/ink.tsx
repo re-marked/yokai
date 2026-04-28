@@ -103,7 +103,9 @@ import {
 import {
   CLEAR_ITERM2_PROGRESS,
   CLEAR_TAB_STATUS,
+  RESET_CURSOR_COLOR,
   setClipboard,
+  setCursorColor,
   supportsTabStatus,
   wrapForMultiplexer,
 } from './termio/osc'
@@ -254,6 +256,14 @@ export default class Ink {
   // one without — without the reset, an input that sets `style: 'bar'`
   // and then unmounts leaves the user's shell prompt as a bar cursor.
   private cursorStyleApplied: number | null = null
+  // Last cursor color we wrote (raw user-provided string — we track
+  // the input rather than the formatted OSC 12 payload so equality
+  // checks don't false-positive on equivalent inputs that format
+  // differently). null = no override (terminal default in effect).
+  // Same restoration semantics as cursorStyleApplied — when cleared,
+  // we emit RESET_CURSOR_COLOR (OSC 112) so the shell prompt isn't
+  // left magenta after our input unmounts.
+  private cursorColorApplied: string | null = null
   // Main-screen: physical cursor position after the declared-cursor move,
   // tracked separately from frame.cursor (which must stay at content-bottom
   // for log-update's relative-move invariants). Alt-screen doesn't need
@@ -843,23 +853,31 @@ export default class Ink {
     // needed) OR when there's no declaration at all. When non-null
     // it's the 1-6 code for the configured style+blink pair.
     //
-    // The transition cases:
-    //   null → code   : write DECSCUSR(code)              (apply override)
-    //   code → other  : write DECSCUSR(other)             (change style)
-    //   code → null   : write RESET_CURSOR_STYLE          (restore default)
-    //   same → same   : skip                              (no-op fast path)
+    // The transition cases (apply identically to color below):
+    //   null → value : write apply sequence              (override on)
+    //   value → other: write apply sequence              (override change)
+    //   value → null : write reset sequence              (restore default)
+    //   same → same  : skip                              (fast path)
     const desiredStyleCode =
       decl !== null && (decl.style !== undefined || decl.blink !== undefined)
         ? decscusrCode(decl.style ?? 'block', decl.blink ?? true)
         : null
     const styleChanged = desiredStyleCode !== this.cursorStyleApplied
+    const desiredColor = decl?.color !== undefined ? String(decl.color) : null
+    const colorChanged = desiredColor !== this.cursorColorApplied
 
     // Preserve the empty-diff zero-write fast path: skip all cursor writes
     // when nothing rendered AND the park target is unchanged AND no
-    // style override transition is pending.
+    // style/color override transition is pending.
     const targetMoved =
       target !== null && (parked === null || parked.x !== target.x || parked.y !== target.y)
-    if (hasDiff || targetMoved || styleChanged || (target === null && parked !== null)) {
+    if (
+      hasDiff ||
+      targetMoved ||
+      styleChanged ||
+      colorChanged ||
+      (target === null && parked !== null)
+    ) {
       // Main-screen preamble: log-update's relative moves assume the
       // physical cursor is at prevFrame.cursor. If last frame parked it
       // elsewhere, move back before the diff runs. Alt-screen's CSI H
@@ -955,6 +973,18 @@ export default class Ink {
           content: desiredStyleCode !== null ? decscusr(desiredStyleCode) : RESET_CURSOR_STYLE,
         })
         this.cursorStyleApplied = desiredStyleCode
+      }
+
+      // OSC 12 cursor color override — same transition semantics as
+      // style. Terminals that don't support it ignore the sequence
+      // (no harm). RESET_CURSOR_COLOR (OSC 112) restores the user's
+      // configured color when our override clears.
+      if (colorChanged) {
+        optimized.push({
+          type: 'stdout',
+          content: desiredColor !== null ? setCursorColor(desiredColor) : RESET_CURSOR_COLOR,
+        })
+        this.cursorColorApplied = desiredColor
       }
     }
     const tWrite = performance.now()
