@@ -19,6 +19,7 @@ import { useClipboard } from '../../hooks/use-clipboard.js'
 import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
 import { LayoutEdge } from '../../layout/node.js'
 import type { Color } from '../../styles.js'
+import type { CursorStyle } from '../../termio/dec.js'
 import Box, { type Props as BoxProps } from '../Box.js'
 import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
@@ -88,6 +89,38 @@ export type TextInputProps = Except<
    * keeps the border static across focus transitions.
    */
   borderColorFocus?: Color
+  /**
+   * Terminal cursor shape while this input is focused. Default
+   * undefined — the user's terminal-configured cursor wins.
+   *
+   * 'block' is the classic full-cell rectangle, 'underline' is the
+   * vt220 underscore, 'bar' is the modern editor caret. Emitted via
+   * DECSCUSR (`CSI Ps SP q`); ink restores the terminal default
+   * automatically when the input blurs / unmounts so the user's
+   * shell isn't left with our shape.
+   */
+  cursorStyle?: CursorStyle
+  /**
+   * Whether the cursor blinks while this input is focused. Default
+   * undefined — the user's terminal-configured blink wins.
+   *
+   * Pairs with `cursorStyle` in the DECSCUSR sequence — DECSCUSR
+   * can't set just one half. Setting `cursorBlink` alone defaults
+   * `cursorStyle` to `'block'`; setting `cursorStyle` alone defaults
+   * `cursorBlink` to `true`.
+   */
+  cursorBlink?: boolean
+  /**
+   * Cursor color while this input is focused. Default undefined —
+   * the user's terminal-configured cursor color wins. Emitted via
+   * OSC 12; ink restores the default automatically on blur / unmount.
+   *
+   * Most modern terminals (xterm, iTerm2, kitty, alacritty, Windows
+   * Terminal, VS Code) honor it. `ansi256(N)` colors aren't supported
+   * by the OSC 12 syntax — use hex (`'#00ff00'`), `rgb(...)`, or
+   * named colors.
+   */
+  cursorColor?: Color
   /** Auto-focus on mount. */
   autoFocus?: boolean
   /** Maximum history entries kept for undo/redo. Default 100. */
@@ -134,6 +167,9 @@ export default function TextInput({
   disabled = false,
   selectionColor = 'cyan',
   borderColorFocus = 'cyan',
+  cursorStyle,
+  cursorBlink,
+  cursorColor,
   autoFocus = false,
   historyCap,
   ...boxProps
@@ -329,6 +365,9 @@ export default function TextInput({
     line: caretLineCol.line - (multiline ? scrollY : 0),
     column: caretLineCol.col - (multiline ? 0 : scrollX),
     active: isFocused,
+    style: cursorStyle,
+    blink: cursorBlink,
+    color: cursorColor,
   })
 
   // Merge cursorRef into our element ref. The hook's ref is for the
