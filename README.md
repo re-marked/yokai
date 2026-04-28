@@ -68,7 +68,7 @@ render(<App />)
 
 **`<FocusRing>`** — focusable Box with built-in focus-visible border indicator (default `cyan` border on focus). Pair with `<FocusGroup>` for keyboard-navigable lists / menus.
 
-**`<TextInput>`** — editable text. Single-line or multiline. Caret via the real terminal cursor (IME / a11y correct). Smart bracketed paste, undo/redo, word nav, selection, password masking. See [docs/components/text-input.md](./docs/components/text-input.md).
+**`<TextInput>`** — editable text. Single-line or multiline. Caret via the real terminal cursor (IME / a11y correct). Smart bracketed paste, undo/redo, word nav, selection, password masking. Focus-color border by default (configurable via `borderColorFocus`). See [docs/components/text-input.md](./docs/components/text-input.md).
 
 ## ScrollBox API
 
@@ -172,7 +172,7 @@ Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bo
 ```jsonc
 // package.json
 "dependencies": {
-  "@yokai/renderer": "github:re-marked/yokai#v0.5.1"
+  "@yokai/renderer": "github:re-marked/yokai#v0.6.0"
 }
 ```
 

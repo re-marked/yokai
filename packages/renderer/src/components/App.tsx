@@ -620,7 +620,12 @@ function processKeysInBatch(
       // createPasteKey in parse-keypress.ts; the union-side undefined
       // is for non-paste keys. Default to '' for total safety.
       const text = item.sequence ?? ''
-      if (text.length <= app.pasteThreshold) {
+      // Short pastes (1..threshold cells) split into per-char keypresses
+      // so they feel like typing. Empty pastes (text === '') skip this
+      // branch — a zero-iteration for-loop would emit no events at all,
+      // and a parser-emitted explicit empty paste should still surface
+      // through the paste pipeline so consumers can detect it.
+      if (text.length > 0 && text.length <= app.pasteThreshold) {
         for (const char of text) {
           // Each char becomes a regular keypress with isPasted=false so
           // downstream code can't tell it apart from typed input.
@@ -643,9 +648,11 @@ function processKeysInBatch(
         }
         continue
       }
+      // Long-paste branch (also taken by empty pastes): one PasteEvent
+      // through the DOM and one InputEvent for useInput backwards
+      // compat. PasteEvent.text is '' on empty so subscribers can
+      // observe the paste action without receiving spurious content.
       app.props.dispatchPasteEvent(text)
-      // Backwards compat: useInput consumers still see the full paste
-      // string in one shot, with `key.isPasted` set so they can branch.
       app.handleInput(sequence)
       app.internal_eventEmitter.emit('input', new InputEvent(item))
       continue
