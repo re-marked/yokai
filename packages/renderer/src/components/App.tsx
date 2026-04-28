@@ -29,6 +29,7 @@ import {
 } from '../termio/csi'
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, EBP, EFE, HIDE_CURSOR, SHOW_CURSOR } from '../termio/dec'
 import AppContext from './AppContext'
+import ClipboardContext from './ClipboardContext'
 import { ClockProvider } from './ClockContext'
 import CursorDeclarationContext, { type CursorDeclarationSetter } from './CursorDeclarationContext'
 import ErrorOverview from './ErrorOverview'
@@ -114,6 +115,10 @@ type Props = {
   // as per-character keypresses via dispatchKeyboardEvent so short
   // pastes feel like typing.
   readonly dispatchPasteEvent: (text: string) => void
+  // Write text to the system clipboard via the renderer's three-path
+  // helper (native utility, tmux load-buffer, OSC 52). Fire-and-forget;
+  // exposed to React land via ClipboardContext + useClipboard().
+  readonly copyToClipboard: (text: string) => void
   // Focus subsystem references — exposed to React land via FocusContext
   // so useFocus / useFocusManager / FocusGroup can subscribe / dispatch
   // without walking the DOM each call.
@@ -255,11 +260,13 @@ export default class App extends PureComponent<Props, State> {
                     }}
                   >
                     <PasteContext.Provider value={{ setPasteThreshold: this.setPasteThreshold }}>
-                      {this.state.error ? (
-                        <ErrorOverview error={this.state.error as Error} />
-                      ) : (
-                        this.props.children
-                      )}
+                      <ClipboardContext.Provider value={{ copy: this.props.copyToClipboard }}>
+                        {this.state.error ? (
+                          <ErrorOverview error={this.state.error as Error} />
+                        ) : (
+                          this.props.children
+                        )}
+                      </ClipboardContext.Provider>
                     </PasteContext.Provider>
                   </FocusContext.Provider>
                 </CursorDeclarationContext.Provider>

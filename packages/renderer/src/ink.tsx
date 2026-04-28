@@ -1490,6 +1490,25 @@ export default class Ink {
     dispatcher.dispatchDiscrete(target, event)
   }
   /**
+   * Write text to the system clipboard via the renderer's three-path
+   * clipboard helper (native utility, tmux load-buffer, OSC 52 to the
+   * terminal). Fire-and-forget — returns immediately while the writes
+   * proceed asynchronously. The native path fires synchronously inside
+   * `setClipboard` so local clipboards usually update before this call
+   * returns; the OSC 52 sequence is written to stdout once tmux probing
+   * completes.
+   *
+   * Same shape as `copySelectionNoClear` above; consolidated here so
+   * components (TextInput's Ctrl+X / Ctrl+C, future `<CopyButton>` etc.)
+   * can write the clipboard without reaching into termio internals.
+   */
+  copyToClipboard(text: string): void {
+    if (!text) return
+    void setClipboard(text).then((raw) => {
+      if (raw) this.options.stdout.write(raw)
+    })
+  }
+  /**
    * Look up the URL at (col, row) in the current front frame. Checks for
    * an OSC 8 hyperlink first, then falls back to scanning the row for a
    * plain-text URL (mouse tracking intercepts the terminal's native
@@ -1684,6 +1703,7 @@ export default class Ink {
         onCursorDeclaration={this.setCursorDeclaration}
         dispatchKeyboardEvent={this.dispatchKeyboardEvent}
         dispatchPasteEvent={this.dispatchPasteEvent}
+        copyToClipboard={this.copyToClipboard}
         focusManager={this.focusManager}
         rootNode={this.rootNode}
       >
