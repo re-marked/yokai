@@ -2,6 +2,7 @@ import type React from 'react'
 import {
   type PropsWithChildren,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -18,6 +19,7 @@ import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
 import { LayoutEdge } from '../../layout/node.js'
 import type { Color } from '../../styles.js'
 import Box, { type Props as BoxProps } from '../Box.js'
+import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
 import { cellColumnAt, splitLines } from './caret-math.js'
 import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
@@ -275,11 +277,26 @@ export default function TextInput({
     scrollY,
   ])
 
+  // Subscribe to focus state via FocusContext. The earlier shortcut
+  // `ref.current.focusManager?.activeElement === ref.current` was
+  // always false because `focusManager` lives only on the root node
+  // (per `dom.ts` — "any node can reach it by walking parentNode").
+  // That left `isFocused` permanently false, so the terminal cursor
+  // never declared as active and the user saw no caret. Subscribe via
+  // the manager so we re-render when this element gains/loses focus.
+  const focusCtx = useContext(FocusContext)
+  const [isFocused, setIsFocused] = useState(false)
+  useEffect(() => {
+    const node = ref.current
+    if (!node || !focusCtx) return
+    setIsFocused(focusCtx.manager.activeElement === node)
+    return focusCtx.manager.subscribeToFocus(node, setIsFocused)
+  }, [focusCtx])
+
   // Declare the terminal cursor at the caret, adjusted for scroll
   // offsets so it lands on the visible cell. The hook only renders
   // the cursor when `active` is true — we're active iff this is the
   // focused element.
-  const isFocused = ref.current?.focusManager?.activeElement === ref.current
   const cursorRef = useDeclaredCursor({
     line: caretLineCol.line - scrollY,
     column: caretLineCol.col - scrollX,
@@ -352,6 +369,16 @@ export default function TextInput({
   const handleMouseDown = useCallback(
     (e: MouseDownEvent) => {
       if (disabled) return
+      // Manually focus on press. The default click-to-focus path lives
+      // in `dispatchClick` (hit-test.ts) — but capturing a gesture in
+      // onMouseDown short-circuits the release-side dispatchClick (see
+      // App.handleMouseEvent's release branch: when `activeGesture` is
+      // set it fires onUp and returns early, never calling onClickAt).
+      // Without this manual call, clicking a TextInput would never
+      // focus it, and Tab would be the only way to land in.
+      const node = ref.current
+      if (focusCtx && node) focusCtx.manager.focus(node)
+
       // Click coords are local to the Box (0-indexed from its top-left
       // INCLUDING padding/border). The visible content starts at
       // (scrollX, scrollY) within the buffer, so add the scroll
@@ -382,7 +409,7 @@ export default function TextInput({
         },
       })
     },
-    [disabled, state.value, password, passwordChar, scrollX, scrollY],
+    [disabled, state.value, password, passwordChar, scrollX, scrollY, focusCtx],
   )
 
   // ── Rendering ─────────────────────────────────────────────────────
