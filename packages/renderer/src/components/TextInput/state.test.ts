@@ -7,7 +7,14 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { type Action, type ReducerOptions, initialState, reduce, selectedText } from './state.js'
+import {
+  type Action,
+  type ReducerOptions,
+  type TextInputState,
+  initialState,
+  reduce,
+  selectedText,
+} from './state.js'
 
 // Width is required by ReducerOptions because visual-row navigation
 // (`up` / `down` post-C4) needs to know where lines wrap. The value
@@ -506,5 +513,179 @@ describe('reduce: visual-row nav (up / down)', () => {
     s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
     expect(s.caret).toBe(8)
     expect(s.preferredCol).toBe(2)
+  })
+})
+
+// ── visual-row nav: preferredCol regression coverage ─────────────────
+
+describe('reduce: preferredCol resets across non-vertical actions', () => {
+  // Catches "I added a new action and forgot to clear preferredCol"
+  // regressions. Each test seeds a state where preferredCol is non-null
+  // (set by a prior Down), dispatches the action under test, and
+  // asserts preferredCol returned to null. The outer `reduce` wrapper
+  // is the single source of truth here — every action EXCEPT vertical
+  // move-caret should land on the reset path.
+
+  function withPreferredCol(): TextInputState {
+    // Standard fixture: 3 wide logical lines, caret at row 0 col 5,
+    // then Down — preferredCol captured as 5. Wide enough that EVERY
+    // delete variant has something to delete (Ctrl+K and Ctrl+U
+    // would no-op at line ends, and the outer `reduce` wrapper
+    // preserves preferredCol on no-ops by referential identity for
+    // React memoization — so a fixture parked at line-end would
+    // produce false negatives on those branches).
+    let s = init('aaaaaaaaaa\nbbbbbbbbbb\ncccccccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.preferredCol).toBe(5)
+    expect(s.caret).toBe(16) // line 1 'bbbbbbbbbb' col 5
+    return s
+  }
+
+  // Every horizontal / jump caret direction. Table-driven so adding a
+  // new direction without clearing preferredCol gets caught here.
+  const horizontalDirections = [
+    'left',
+    'right',
+    'home',
+    'end',
+    'wordLeft',
+    'wordRight',
+    'docStart',
+    'docEnd',
+  ] as const
+
+  for (const direction of horizontalDirections) {
+    it(`resets after moveCaret(${direction})`, () => {
+      let s = withPreferredCol()
+      s = reduce(s, { type: 'moveCaret', direction, extend: false }, MULTI)
+      expect(s.preferredCol).toBeNull()
+    })
+  }
+
+  // Every delete variant.
+  const deleteActions: Action[] = [
+    { type: 'deleteBackward' },
+    { type: 'deleteForward' },
+    { type: 'deleteWordBackward' },
+    { type: 'deleteLineBackward' },
+    { type: 'deleteLineForward' },
+  ]
+
+  for (const action of deleteActions) {
+    it(`resets after ${action.type}`, () => {
+      let s = withPreferredCol()
+      s = reduce(s, action, MULTI)
+      expect(s.preferredCol).toBeNull()
+    })
+  }
+
+  it('resets after setCaret (click / programmatic positioning)', () => {
+    let s = withPreferredCol()
+    s = reduce(s, { type: 'setCaret', charIdx: 0, extend: false }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+
+  it('resets after selectAll', () => {
+    let s = withPreferredCol()
+    s = reduce(s, { type: 'selectAll' }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+
+  it('resets after redo (symmetric to undo)', () => {
+    // Build a state where redo is meaningful: edit, undo, then enter
+    // a vertical chain, then redo. preferredCol should clear.
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'insertText', text: 'X' }, MULTI)
+    s = reduce(s, { type: 'undo' }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.preferredCol).not.toBeNull()
+    s = reduce(s, { type: 'redo' }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+})
+
+describe('reduce: preferredCol persistence across mixed-row layouts', () => {
+  // Width 10 wraps long lines; multi-line content layered on top
+  // exercises the interaction between visual-row nav and \n boundaries.
+  const W10: ReducerOptions = { multiline: true, maxLength: undefined, width: 10 }
+
+  it('Up through a SHORT intermediate visual row preserves preferredCol (mirror of Down test)', () => {
+    // 3 logical lines of decreasing width: 'aaaaaaa' (7) / 'bb' (2) /
+    // 'cccccc' (6). Width 80 keeps each as one visual row. Start
+    // caret at row 2 col 5, press Up twice — clamps on row 1, then
+    // returns to col 5 on row 0 because preferredCol stuck.
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 16, extend: false }, MULTI) // col 5 of 'cccccc'
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, MULTI)
+    expect(s.caret).toBe(10) // end of 'bb'
+    expect(s.preferredCol).toBe(5)
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, MULTI)
+    expect(s.caret).toBe(5) // 'aaaaaaa' col 5
+    expect(s.preferredCol).toBe(5)
+  })
+
+  it('preferredCol persists across a hard \\n boundary mid-vertical-chain', () => {
+    // Logical line 0 wraps to 2 visual rows, logical line 1 is one
+    // row. Chain Down across the wrap continuation AND the \n; the
+    // captured col carries through both transitions.
+    //
+    //   buffer: 'aaaaaaaaaaaaa\nbbbbbbbbbb' (24 chars)
+    //   width 10:
+    //     row 0: 'aaaaaaaaaa' (idx 0-10)   ← logical line 0, first visual row
+    //     row 1: 'aaa'        (idx 10-13)  ← logical line 0, continuation
+    //     row 2: 'bbbbbbbbbb' (idx 14-24)  ← logical line 1
+    //
+    // Start at row 0 col 5 (idx 5). Down once → row 1 col 3 (clamped,
+    // row 1 is only 3 cells); preferredCol still 5. Down again → row 2
+    // col 5 (idx 19), back to preferred col after crossing \n.
+    let s = init('aaaaaaaaaaaaa\nbbbbbbbbbb')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, W10)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, W10)
+    expect(s.caret).toBe(13) // end of row 1 (clamped)
+    expect(s.preferredCol).toBe(5)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, W10)
+    expect(s.caret).toBe(19) // 'bbbbbbbbbb' col 5
+    expect(s.preferredCol).toBe(5)
+  })
+
+  it('indentedWrap=true: preferredCol captured from DISPLAY col (not text-internal col)', () => {
+    // '    apple banana' (16 chars, 4 leading spaces). Width 12 with
+    // indentedWrap → row 0 'apple' starts at display col 4 (first row
+    // includes the indent in its text), continuation 'banana' has 4
+    // indent decoration cells + 'banana'. Caret at idx 6 (the second
+    // 'p' in 'apple') — display col 6. Press Down → preferredCol 6.
+    const opts: ReducerOptions = {
+      ...W10,
+      width: 12,
+      indentedWrap: true,
+    }
+    let s = init('    apple banana')
+    s = reduce(s, { type: 'setCaret', charIdx: 6, extend: false }, opts)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, opts)
+    // preferredCol is the DISPLAY col (4 indent + 2 content = 6 on
+    // row 0), captured before the move. Continuation row 1 has 4
+    // indent decoration; visualToLogical at display col 6 = text col 2
+    // within 'banana' = idx 12.
+    expect(s.preferredCol).toBe(6)
+    expect(s.caret).toBe(12)
+  })
+
+  it('vertical move that lands at the same caret (no-op edge) leaves a captured preferredCol set', () => {
+    // Caret at row 0 col 0 (idx 0). Up at row 0 returns to start of
+    // buffer (caret 0) — no actual movement. The reducer still treats
+    // this as a vertical action and captures the visual col (0).
+    // Verify the no-movement case doesn't accidentally null the col.
+    let s = init('hello\nworld')
+    s = reduce(s, { type: 'setCaret', charIdx: 0, extend: false }, MULTI)
+    expect(s.preferredCol).toBeNull()
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, MULTI)
+    expect(s.caret).toBe(0)
+    expect(s.preferredCol).toBe(0)
+    // A SECOND Up still respects the captured col (which is 0 here).
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, MULTI)
+    expect(s.caret).toBe(0)
+    expect(s.preferredCol).toBe(0)
   })
 })
