@@ -556,9 +556,20 @@ export default function TextInput({
   // cursor at the box's outer top-left corner instead of at the
   // caret's actual cell. Visible immediately as a cursor "above" or
   // "to the left of" the text.
+  // Clamp visual.col to the rightmost in-box cell when the buffer
+  // position is past the rendered content (e.g. trailing whitespace
+  // beyond the row's nominal width). Trailing whitespace is invisible
+  // and clipped by the renderer; the cursor would otherwise land past
+  // the box's right border. Logical position stays in state.caret;
+  // this only affects visual placement. Wrap='none' uses scrollX to
+  // keep the caret in view, so the clamp only fires for soft-wrap.
+  const clampedVisualCol =
+    effectiveWrap === 'soft' && inner.width > 0 && visual.col >= inner.width
+      ? Math.max(0, inner.width - 1)
+      : visual.col
   const cursorRef = useDeclaredCursor({
     line: inner.offsetY + visual.row - scrollY,
-    column: inner.offsetX + visual.col - scrollX,
+    column: inner.offsetX + clampedVisualCol - scrollX,
     active: isFocused,
     style: cursorStyle,
     blink: cursorBlink,
@@ -1006,6 +1017,12 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
     if (row.text === '') {
       const P = row.startCharIdx
       const touchesSelection = selStart < selEnd && selStart <= P && P < selEnd
+      // Pad empty rows to the full inner width so every cell inside
+      // the box is explicitly written. Otherwise cells past the single
+      // placeholder space stay at terminal background, which can look
+      // visually inconsistent inside the box. Falls back to a single
+      // space when innerWidth isn't measured yet (first render).
+      const fillCells = innerWidth > 0 ? Math.max(1, innerWidth) : 1
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
@@ -1013,7 +1030,7 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
           wrap="truncate-end"
           backgroundColor={touchesSelection ? selectionColor : undefined}
         >
-          {' '}
+          {' '.repeat(fillCells)}
         </Text>
       )
     }
@@ -1026,47 +1043,78 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
     // row.text already.
     const indent = row.indentCells > 0 ? ' '.repeat(row.indentCells) : ''
 
+    // Clip the masked text to fit available content cells (innerWidth
+    // minus indent decoration). Wrap-math allows trailing whitespace
+    // to overflow the row's nominal width (HTML/CSS pre-wrap convention
+    // — spaces are visual nothing and shouldn't reflow surrounding
+    // content as the user types more chars). Clipping here prevents
+    // the rendering Text's truncate-end from triggering on what's
+    // actually invisible whitespace; without it, every row that ends
+    // with a trailing space at the wrap boundary shows an ellipsis on
+    // an otherwise clean wrap.
+    const maxContentCells =
+      innerWidth > 0 ? Math.max(0, innerWidth - row.indentCells) : Number.MAX_SAFE_INTEGER
+    const visibleMaskedText =
+      innerWidth > 0 && stringWidth(maskedText) > maxContentCells
+        ? sliceRowByCells(maskedText, 0, maxContentCells)
+        : maskedText
+    // Trailing pad: always render full-width rows so every cell inside
+    // the box is explicitly written (as a space char). Without this,
+    // cells past row content stay at terminal background — visually
+    // can look like inconsistent "random spaces" against the box's
+    // interior, especially when the box is much wider than the row's
+    // content. Padding makes the rendered area visually uniform.
+    const trailingPad =
+      innerWidth > 0 ? Math.max(0, maxContentCells - stringWidth(visibleMaskedText)) : 0
+    const trailingPadStr = trailingPad > 0 ? ' '.repeat(trailingPad) : ''
+
     // Selection slice in unmasked-row-text indices.
     const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
     const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
     const hasInRowSelection = localStart < localEnd
 
     if (!hasInRowSelection) {
-      // No selection on this row — render plain.
+      // No selection on this row — render plain. Padded to full width.
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
           key={rowIdx}
           wrap="truncate-end"
         >
-          {indent + maskedText}
+          {indent + visibleMaskedText + trailingPadStr}
         </Text>
       )
     }
 
-    // Multi-row selection decoration. Each row in a stripe-spanning
-    // selection paints as: [indent (maybe bg)][before][sel + slack
-    // (bg)][after]. The indent gets bg only when selection extended
-    // from the row above (selStart strictly less than this row's
-    // start); the right-slack gets bg only when selection continues
-    // to the row below (selEnd strictly greater than this row's end).
+    // Selection decoration. Each row paints as: [indent (maybe bg)]
+    // [before][sel + slack (bg)][after][pad]. The indent gets bg only
+    // when selection extended from the row above (selStart strictly
+    // less than this row's start); the right-slack gets bg when
+    // selection reaches OR extends past this row's end position. The
+    // `>=` (vs `>`) handles the case where the user dragged through
+    // empty cells past content end — selection clamps to
+    // row.endCharIdx (per layout.visualToLogical), but visually the
+    // highlight should still fill the slack so it's clear what the
+    // user dragged over. Matches VS Code / Sublime behavior.
+    //
+    // The trailing pad goes EITHER inside the bg slack (when selection
+    // extends to row end → trailingPadStr fills with bg as part of
+    // slack) OR after the after segment (when selection is contained
+    // within content → trailingPadStr fills with no bg as final pad).
+    // Either way the rendered row is full-width.
     const indentBg = selStart < row.startCharIdx
-    const rightSlackBg = selEnd > row.endCharIdx
-    // Right-slack cell count: how many cells between this row's content
-    // end and the box's right edge. Only filled (with bg) when slack
-    // exists AND selection continues past row's end. innerWidth === 0
-    // (first render) gives slack=0 — no fill, defer until measured.
-    const usedCells = row.indentCells + stringWidth(maskedText)
-    const rightSlack = rightSlackBg ? Math.max(0, innerWidth - usedCells) : 0
-    const slackChars = rightSlack > 0 ? ' '.repeat(rightSlack) : ''
+    const rightSlackBg = selEnd >= row.endCharIdx
+    const slackChars = rightSlackBg ? trailingPadStr : ''
+    const trailingNoBg = rightSlackBg ? '' : trailingPadStr
 
-    // Defensive clamp for the password+non-ASCII edge: mask length can
-    // be < row.text length when the buffer has multi-UTF-16-unit graphemes.
-    const sliceStart = Math.min(localStart, maskedText.length)
-    const sliceEnd = Math.min(localEnd, maskedText.length)
-    const before = maskedText.slice(0, sliceStart)
-    const sel = maskedText.slice(sliceStart, sliceEnd) || ' '
-    const after = maskedText.slice(sliceEnd)
+    // Defensive clamp for the password+non-ASCII edge AND for the
+    // trailing-whitespace clip above: visibleMaskedText length can be
+    // < unmasked-row length, so localStart/localEnd may overshoot.
+    const sliceStart = Math.min(localStart, visibleMaskedText.length)
+    const sliceEnd = Math.min(localEnd, visibleMaskedText.length)
+    const before = visibleMaskedText.slice(0, sliceStart)
+    const sel = visibleMaskedText.slice(sliceStart, sliceEnd) || ' '
+    const after = visibleMaskedText.slice(sliceEnd)
     return (
       <Text
         // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
@@ -1080,6 +1128,7 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
           {slackChars}
         </Text>
         {after}
+        {trailingNoBg}
       </Text>
     )
   })
