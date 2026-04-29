@@ -129,6 +129,110 @@ function isBreakableWhitespace(grapheme: string): boolean {
 }
 
 /**
+ * Word-boundary detection mode for `wrapByWords` and `buildWrapLayout`.
+ *
+ * - `'whitespace'` (default): break only at standard whitespace
+ *   (space, tab). No identifier-awareness, no URL detection. The
+ *   simplest, fastest mode — ~all consumer text inputs are fine
+ *   with this.
+ * - `'identifier'`: ALSO break at `_` / `-` boundaries (snake_case,
+ *   kebab-case) and at lowercase→uppercase transitions (camelCase,
+ *   PascalCase). Treats URLs (`http(s)://...`) as atomic — never
+ *   breaks inside them. Tuned for code-like + CLI command content
+ *   (slash commands with flags, identifiers, file paths).
+ */
+export type WordBoundaryMode = 'whitespace' | 'identifier'
+
+// URL detection regex — scans a logical line for spans that should
+// be treated as atomic (never broken inside). `\S+` captures up to
+// the next whitespace; conservative but matches what users mean by
+// "a URL." Hash fragments and query strings are included via \S+.
+//
+// Not exported — only the identifier-aware classifier uses it.
+const URL_REGEX = /https?:\/\/\S+/g
+
+function findUrlRanges(line: string): Array<readonly [number, number]> {
+  const ranges: Array<readonly [number, number]> = []
+  URL_REGEX.lastIndex = 0
+  for (const match of line.matchAll(URL_REGEX)) {
+    const start = match.index
+    if (start === undefined) continue
+    ranges.push([start, start + match[0].length] as const)
+  }
+  return ranges
+}
+
+function isInsideRange(ranges: ReadonlyArray<readonly [number, number]>, charIdx: number): boolean {
+  // Linear scan — URL ranges per line are typically 0-2, fast enough.
+  for (const [start, end] of ranges) {
+    if (charIdx > start && charIdx < end) return true
+  }
+  return false
+}
+
+/**
+ * In identifier-aware mode, classify a candidate break position
+ * (BETWEEN two graphemes) as one of:
+ *   - 'break' — whitespace; always preferred
+ *   - 'preferred' — after `_` / `-` or at a camelCase / PascalCase
+ *     transition; second-tier break candidate
+ *   - 'avoid' — inside a URL atomic span; never used as a break
+ *   - null — neutral position; not a candidate
+ *
+ * `prevChar` is the character immediately before the position;
+ * `nextChar` is the character immediately after. Both are single
+ * code-units (not graphemes — sufficient for ASCII identifier
+ * detection). Either may be undefined at line edges.
+ */
+function classifyIdentifierBoundary(
+  prevChar: string | undefined,
+  nextChar: string | undefined,
+  posInLine: number,
+  urlRanges: ReadonlyArray<readonly [number, number]>,
+): 'break' | 'preferred' | 'avoid' | null {
+  // URL atomicity overrides everything — even whitespace inside a URL
+  // would be unbreakable, but URLs typically don't contain whitespace.
+  if (isInsideRange(urlRanges, posInLine)) return 'avoid'
+
+  // Whitespace at the next position → standard break candidate.
+  // The position is BETWEEN prevChar and nextChar; if nextChar is
+  // whitespace, the wrap loop's existing "isBreakableWhitespace"
+  // path already records it. We classify as 'break' so the
+  // higher-level merger doesn't need a separate code path.
+  if (nextChar !== undefined && isBreakableWhitespace(nextChar)) return 'break'
+
+  // After _ / - (snake_case, kebab-case): position right after the
+  // separator is a preferred break point. Land the next word on the
+  // following row.
+  if (prevChar === '_' || prevChar === '-') return 'preferred'
+
+  // camelCase / PascalCase transition: lowercase → uppercase. Break
+  // BEFORE the uppercase letter.
+  if (
+    prevChar !== undefined &&
+    nextChar !== undefined &&
+    isLowercaseAscii(prevChar) &&
+    isUppercaseAscii(nextChar)
+  ) {
+    return 'preferred'
+  }
+
+  return null
+}
+
+function isLowercaseAscii(ch: string): boolean {
+  if (ch.length === 0) return false
+  const cp = ch.codePointAt(0) ?? 0
+  return cp >= 0x61 && cp <= 0x7a
+}
+
+function isUppercaseAscii(ch: string): boolean {
+  if (ch.length === 0) return false
+  const cp = ch.codePointAt(0) ?? 0
+  return cp >= 0x41 && cp <= 0x5a
+}
+
+/**
  * Word-aware wrap: prefer to break at whitespace; fall back to the
  * char-wrap (`wrapByCells`) when a token has no breakable whitespace
  * within a row's cell budget.
@@ -153,67 +257,106 @@ function isBreakableWhitespace(grapheme: string): boolean {
  *   - Empty input → `[]` (same as `wrapByCells`).
  *   - `width <= 0` → `[]`.
  */
-export function wrapByWords(text: string, width: number): string[] {
+export function wrapByWords(
+  text: string,
+  width: number,
+  boundaries: WordBoundaryMode = 'whitespace',
+): string[] {
   if (width <= 0) return []
   if (text.length === 0) return []
+
+  // Identifier mode: precompute URL atomic spans up front. Cheaper
+  // than a regex.test per grapheme, and most lines have zero URLs.
+  const urlRanges = boundaries === 'identifier' ? findUrlRanges(text) : []
 
   const rows: string[] = []
   let row = ''
   let rowWidth = 0
-  // Char-index within `row` where we last saw a "good" break point
-  // (immediately AFTER a whitespace that came AFTER non-whitespace).
-  // -1 = no break candidate. Reset on every emit.
+  // Best-known break point in the current row, prioritizing 'break'
+  // over 'preferred' (and over no candidate). When the row needs to
+  // break, this is where we cut.
   let lastBreakIdx = -1
+  // Quality of the lastBreakIdx — true if it's a 'break' (whitespace),
+  // false if 'preferred' (identifier transition). A later 'break' wins
+  // over an earlier 'preferred'; a later 'preferred' does NOT replace
+  // an existing 'break' (because breaks are higher priority).
+  let lastBreakIsHard = false
   // Whether `row` contains at least one non-whitespace grapheme.
   // Without this, leading whitespace would set up a break candidate
   // BETWEEN the leading whitespace and the first word — splitting
   // `'  hello'` into `['  ', 'hello']`. Tracking this prevents that.
   let hasContent = false
+  // Track the previous char (single code unit) for boundary detection
+  // — identifier mode needs to look at the prev char to decide if the
+  // current position is a snake/kebab/camel transition.
+  let prevChar: string | undefined
+
+  // Position in the input string where the current row started — used
+  // to map row-relative break positions to URL-range checks (which
+  // are absolute in `text`).
+  let rowAbsStart = 0
 
   for (const { segment } of getGraphemeSegmenter().segment(text)) {
     const w = stringWidth(segment)
     const breakable = isBreakableWhitespace(segment)
+    const absPosBefore = rowAbsStart + row.length
 
     if (breakable) {
-      // Whitespace always fits — even past width, since it's
-      // visually invisible at the boundary. Append to current row;
-      // record a candidate break IF we already have non-ws content
-      // (so leading whitespace isn't a break point).
+      // Whitespace always fits past width (invisible at boundary).
       row += segment
       rowWidth += w
-      if (hasContent) lastBreakIdx = row.length
+      if (hasContent) {
+        // Whitespace gives us a HARD break candidate — overrides any
+        // earlier soft 'preferred' candidate.
+        lastBreakIdx = row.length
+        lastBreakIsHard = true
+      }
+      prevChar = segment[0]
       continue
+    }
+
+    // Identifier-mode soft break check: is the position BEFORE the
+    // current grapheme a preferred break? If so, record it (but only
+    // if no harder break is already known later in the row).
+    if (boundaries === 'identifier' && hasContent && prevChar !== undefined) {
+      const kind = classifyIdentifierBoundary(prevChar, segment[0], absPosBefore, urlRanges)
+      // 'break' is handled by the whitespace branch above; here we
+      // only care about 'preferred'. 'avoid' explicitly suppresses
+      // any candidate — but since we only RECORD candidates here
+      // (not overwrite), we just skip without resetting.
+      if (kind === 'preferred' && !lastBreakIsHard) {
+        lastBreakIdx = row.length
+      }
     }
 
     // Non-whitespace grapheme.
     if (rowWidth + w > width) {
       if (lastBreakIdx > 0) {
-        // Break at the last whitespace boundary. The overhang
-        // (anything between lastBreakIdx and end of row) carries to
-        // the next row before the current grapheme — usually empty
-        // because we haven't appended the current grapheme yet.
         rows.push(row.slice(0, lastBreakIdx))
         const overhang = row.slice(lastBreakIdx)
+        rowAbsStart += lastBreakIdx
         row = overhang + segment
         rowWidth = stringWidth(row)
       } else {
-        // No whitespace break in current row. Fall back to char-wrap
-        // behavior: push what we have, start fresh with the current
-        // grapheme. If the grapheme itself is wider than width, it
-        // overflows on its own row — same as wrapByCells.
-        if (row.length > 0) rows.push(row)
+        // No break candidate — char-wrap fallback.
+        if (row.length > 0) {
+          rows.push(row)
+          rowAbsStart += row.length
+        }
         row = segment
         rowWidth = w
       }
       lastBreakIdx = -1
+      lastBreakIsHard = false
       hasContent = true
+      prevChar = segment[segment.length - 1]
       continue
     }
 
-    // Fits in the current row.
     row += segment
     rowWidth += w
     hasContent = true
+    prevChar = segment[segment.length - 1]
   }
 
   if (row.length > 0) rows.push(row)
@@ -269,6 +412,9 @@ export type WrapOptions = {
    *  detection entirely — useful when the consumer wants packed
    *  density (e.g. a hex dump or a no-prose token list). */
   wrap?: 'word' | 'char'
+  /** Word boundary detection mode. Only used when `wrap === 'word'`.
+   *  Default `'whitespace'`. See `WordBoundaryMode` for details. */
+  wordBoundaries?: WordBoundaryMode
 }
 
 /**
@@ -288,7 +434,7 @@ export type WrapOptions = {
  * crash.
  */
 export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
-  const { width, wrap = 'word' } = opts
+  const { width, wrap = 'word', wordBoundaries = 'whitespace' } = opts
   if (width <= 0) {
     return {
       rows: [],
@@ -297,7 +443,10 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
     }
   }
 
-  const wrapper = wrap === 'char' ? wrapByCells : wrapByWords
+  const wrapper =
+    wrap === 'char'
+      ? (line: string, w: number) => wrapByCells(line, w)
+      : (line: string, w: number) => wrapByWords(line, w, wordBoundaries)
   const logicalLines = value.split('\n')
   const rows: VisualRow[] = []
   // Walking pointer into the buffer. Advances by row.text.length per

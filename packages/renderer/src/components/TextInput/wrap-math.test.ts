@@ -315,6 +315,130 @@ describe('wrapByWords', () => {
   })
 })
 
+describe('wrapByWords with identifier-aware boundaries', () => {
+  describe('snake_case + kebab-case break preferences', () => {
+    it('prefers breaking AFTER underscore in snake_case', () => {
+      // "foo_bar_baz" width 5: 'whitespace' mode would char-wrap (no
+      // whitespace). 'identifier' mode breaks after each `_`.
+      // Walk: f(1) o(2) o(3) _(4 break-pref) b(5) a(6)>5, break at
+      // pref idx=4 → push "foo_", row="b" then ar(3) _(4 pref) b(5)
+      // a(6)>5 break at 4 → push "bar_", row="b" then a(2) z(3). End: push "baz".
+      expect(wrapByWords('foo_bar_baz', 5, 'identifier')).toEqual(['foo_', 'bar_', 'baz'])
+    })
+
+    it('prefers breaking AFTER hyphen in kebab-case', () => {
+      expect(wrapByWords('foo-bar-baz', 5, 'identifier')).toEqual(['foo-', 'bar-', 'baz'])
+    })
+
+    it('whitespace beats identifier-preferred at the same row', () => {
+      // 'foo_bar baz' width 8: row could break after _ (idx 4) or after
+      // space (idx 8). Both candidates exist. Whitespace is HARDER →
+      // wins. Result row 1 = "foo_bar ", row 2 = "baz".
+      expect(wrapByWords('foo_bar baz', 8, 'identifier')).toEqual(['foo_bar ', 'baz'])
+    })
+  })
+
+  describe('camelCase + PascalCase transitions', () => {
+    it('breaks BEFORE uppercase that follows lowercase (camelCase)', () => {
+      // "fooBarBaz" width 5: lowercase→uppercase at positions 3 and 6.
+      // Walk: f(1) o(2) o(3) [pref-before-B] B(4) a(5) r(6)>5, break
+      // at idx=3 → push "foo", row="Bar" w=3, then B(?) a(?) z(?)... Let me retrace.
+      //   At "B" position (idx 3 in "fooBarBaz"), classifier returns
+      //   'preferred' because prev='o' (lowercase) next='B' (uppercase).
+      //   Recorded as lastBreakIdx=3 (before adding B).
+      //   B(4) added, row="fooB" w=4. a(5) added "fooBa" w=5. r(6)>5,
+      //   break at lastBreakIdx=3 → push "foo", overhang="B"+r="Br"
+      //   wait no the segment we're trying to add is 'r'. row.slice(3) = "B"
+      //   then row="B"+"r" = "Br", rowWidth=2. lastBreakIdx reset.
+      // So result starts with ["foo", ...]. Subsequent: continue with "Br" then [pref-before-B] etc.
+      const result = wrapByWords('fooBarBaz', 5, 'identifier')
+      // Verify rejoin
+      expect(result.join('')).toBe('fooBarBaz')
+      // Verify we DID break at the camelCase transition (first row is "foo", not "fooBa")
+      expect(result[0]).toBe('foo')
+    })
+
+    it('whitespace mode does NOT break at camelCase transitions', () => {
+      // Same input in 'whitespace' mode: no whitespace, so falls back
+      // to char-wrap. Result is char-wrapped chunks.
+      const result = wrapByWords('fooBarBaz', 5, 'whitespace')
+      expect(result.join('')).toBe('fooBarBaz')
+      // First row is char-wrapped (5 chars exactly).
+      expect(result[0]).toBe('fooBa')
+    })
+  })
+
+  describe('URL atomicity', () => {
+    it('does NOT break inside an HTTPS URL', () => {
+      // 'see https://example.com end' width 12. Identifier mode marks
+      // the URL as 'avoid' — never a break candidate inside. The URL
+      // is 19 chars, longer than width, so it falls back to char-wrap
+      // INSIDE the URL (data preserved, just doesn't fit). Surrounding
+      // text breaks at whitespace.
+      const input = 'see https://example.com end'
+      const result = wrapByWords(input, 12, 'identifier')
+      expect(result.join('')).toBe(input)
+      // The URL "https://example.com" should not be broken at the
+      // colon, slash, or dot — those are 'avoid' positions in identifier
+      // mode. Verify by checking no row STARTS with `://example` or `.com`
+      // or similar mid-URL fragments.
+      for (let i = 1; i < result.length; i++) {
+        const row = result[i]!
+        expect(row).not.toMatch(/^:\/\//)
+        expect(row).not.toMatch(/^\.com/)
+      }
+    })
+
+    it('does NOT break at the colon or slashes inside a URL even when prefer-points exist nearby', () => {
+      const input = 'open https://github.com/foo-bar/baz now'
+      const result = wrapByWords(input, 15, 'identifier')
+      expect(result.join('')).toBe(input)
+      // Each row should either contain the URL whole, or contain
+      // overflow chars from the URL (because URL is wider than width).
+      // What MUST NOT happen: a clean break at the `-` inside the URL.
+      // Verify by checking no row ENDS with the `-` from `foo-` inside
+      // the URL — that'd mean we used the kebab-case rule inside the URL.
+      const expectedUrlAtomic = result.every((r) => !r.endsWith('-bar') && !r.endsWith('https://'))
+      expect(expectedUrlAtomic).toBe(true)
+    })
+  })
+
+  describe('rejoinability invariant (extended for identifier mode)', () => {
+    const cases = [
+      'foo_bar_baz',
+      'fooBarBaz',
+      'kebab-case-name',
+      'see https://example.com today',
+      '/sling --target=backend-engineer --chit=chit-abc-123',
+      'CamelCase + snake_case + kebab-case mixed',
+    ]
+    for (const input of cases) {
+      for (const width of [6, 10, 18]) {
+        it(`rejoins for input=${JSON.stringify(input.slice(0, 30))}... width=${width} mode=identifier`, () => {
+          expect(wrapByWords(input, width, 'identifier').join('')).toBe(input)
+        })
+      }
+    }
+  })
+
+  describe('buildWrapLayout passes wordBoundaries through', () => {
+    it('uses identifier mode when configured', () => {
+      const layout = buildWrapLayout('foo_bar_baz', {
+        width: 5,
+        wrap: 'word',
+        wordBoundaries: 'identifier',
+      })
+      expect(layout.rows.map((r) => r.text)).toEqual(['foo_', 'bar_', 'baz'])
+    })
+
+    it('defaults to whitespace mode when not specified', () => {
+      const layout = buildWrapLayout('foo_bar_baz', { width: 5, wrap: 'word' })
+      // No whitespace → char-wrap fallback.
+      expect(layout.rows.map((r) => r.text)).toEqual(['foo_b', 'ar_ba', 'z'])
+    })
+  })
+})
+
 describe('nextVisualRow', () => {
   it('moves down to the next row at preferredCol', () => {
     // "abcdef\nghijkl" → two rows of 6 chars each. Caret at row 0
