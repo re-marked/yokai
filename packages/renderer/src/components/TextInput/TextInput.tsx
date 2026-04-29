@@ -25,7 +25,7 @@ import Box, { type Props as BoxProps } from '../Box.js'
 import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
 import { clipboardKeyAction } from './clipboard-action.js'
-import { scrollToKeepCaretVisible } from './scroll-math.js'
+import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
 import {
   type Action,
   type ReducerOptions,
@@ -60,6 +60,26 @@ export type TextInputProps = Except<
   /** Allow newlines in the buffer. Enter inserts a newline; Ctrl+Enter
    *  submits. Default false (single-line). */
   multiline?: boolean
+  /**
+   * Wrap mode.
+   *
+   * - `'soft'` — long lines wrap onto continuation rows. Word boundaries
+   *   used by default; tunable via `wordBoundaries` and `wrapHints`.
+   *   Hanging indent on wraps via `indentedWrap` (default on).
+   * - `'none'` — long lines DON'T wrap. Single-line scrolls horizontally
+   *   to keep the caret visible; multiline truncates each logical line
+   *   at the box's right edge AND scrolls horizontally as the caret
+   *   moves past the visible window.
+   *
+   * Default depends on `multiline`: `'soft'` when multiline (matches
+   * `<textarea>`'s wrap default); `'none'` when single-line (matches
+   * `<input>`, vim's default, every modern editor's "Name field"-style
+   * input). Pass `wrap` explicitly to override either way — for instance
+   * a single-line code-snippet field that should grow vertically can
+   * set `wrap='soft'`, and a multiline address field that should never
+   * wrap can set `wrap='none'`.
+   */
+  wrap?: 'soft' | 'none'
   /** Cap on buffer length in characters. Default unlimited. */
   maxLength?: number
   /** Render placeholder text dimmed when the buffer is empty. */
@@ -161,6 +181,7 @@ export default function TextInput({
   onSubmit,
   onCancel,
   multiline = false,
+  wrap,
   maxLength,
   placeholder,
   password = false,
@@ -176,6 +197,11 @@ export default function TextInput({
   ...boxProps
 }: PropsWithChildren<TextInputProps>): React.ReactNode {
   const isControlled = value !== undefined
+  // Wrap mode default depends on multiline: 'soft' for textarea-style,
+  // 'none' for input-style. Single-line consumers who want vertical
+  // wrap can opt in via wrap='soft'; multiline consumers who want a
+  // single visible logical line per row can opt out via wrap='none'.
+  const effectiveWrap = wrap ?? (multiline ? 'soft' : 'none')
 
   // optsRef MUST be declared before useReducer. On a render that has
   // queued dispatches, useReducer drains them by calling the reducer
@@ -276,22 +302,34 @@ export default function TextInput({
     }
   })
   // Push the latest measured width into optsRef so the next dispatch's
-  // reducer call (visual-row navigation, post-C4) operates on the
-  // current layout. Lags by one frame on the very first render (yoga
-  // hasn't measured yet); the wrap-math primitive treats width=0 as
-  // "no layout, no rows" and visual-row nav falls back gracefully.
-  optsRef.current = { ...optsRef.current, width: inner.width }
+  // reducer call (visual-row navigation, C4) operates on the current
+  // layout. Use the same width regime as the render-side layout above
+  // — MAX_SAFE_INTEGER for wrap='none' (so the reducer's nextVisualRow
+  // sees one row per logical line and Up/Down behave as
+  // logical-line nav, matching what the user sees on screen).
+  optsRef.current = {
+    ...optsRef.current,
+    width: effectiveWrap === 'none' ? Number.MAX_SAFE_INTEGER : inner.width,
+  }
 
   // ── Wrap layout + visual cursor coords ─────────────────────────────
   //
-  // Build the soft-wrap layout from the current buffer and the
-  // measured inner width. The layout decomposes the value into VISUAL
-  // ROWS (one logical line may produce many rows when its cell width
-  // exceeds the budget) and provides bidirectional position maps:
-  // logicalToVisual for placing the cursor; visualToLogical for
-  // mapping clicks back to char indices.
+  // Build the layout from the current buffer + measured inner width.
+  // The layout decomposes the value into VISUAL ROWS (one logical line
+  // may produce many rows when its cell width exceeds the budget) and
+  // provides bidirectional position maps: logicalToVisual for placing
+  // the cursor; visualToLogical for mapping clicks back to char indices.
   //
-  // Width fallback strategy. Two distinct cases produce
+  // Two width regimes:
+  //
+  //   - `wrap === 'none'` — pass MAX_SAFE_INTEGER so no row ever wraps.
+  //     The layout becomes one row per logical line. Caret math still
+  //     works (cell column = sum of cells up to caret); h-scroll
+  //     handles horizontal viewport.
+  //   - `wrap === 'soft'` — pass measured inner.width. Long lines wrap
+  //     onto continuation rows.
+  //
+  // Width fallback strategy (soft-wrap only). Two distinct cases produce
   // `inner.width === 0`, and they need different handling:
   //
   //   1. First render before yoga has measured. No prior valid width —
@@ -314,7 +352,12 @@ export default function TextInput({
   //      doesn't re-render forever.
   const lastValidInnerWidth = useRef(80)
   if (inner.width > 0) lastValidInnerWidth.current = inner.width
-  const layoutWidth = inner.width > 0 ? inner.width : lastValidInnerWidth.current
+  const layoutWidth =
+    effectiveWrap === 'none'
+      ? Number.MAX_SAFE_INTEGER
+      : inner.width > 0
+        ? inner.width
+        : lastValidInnerWidth.current
   const layout = useMemo(
     () => buildWrapLayout(state.value, { width: layoutWidth }),
     [state.value, layoutWidth],
@@ -328,41 +371,31 @@ export default function TextInput({
 
   // ── Scroll: keep caret visible inside the visible window ───────────
   //
-  // scrollY is in VISUAL rows (was logical lines pre-soft-wrap).
-  // scrollX is retained for the future `wrap='none'` opt-in (E1) and
-  // stays at 0 in the soft-wrap default — rows wrap onto next-row
-  // instead of horizontally scrolling within a row. The setter is
-  // prefixed `_` because nothing writes it yet (E1 will rename back).
-  const [scrollX, _setScrollX] = useState(0)
+  // scrollY: visual rows. Always active when innerHeight is bounded.
+  // scrollX: cell columns. Only active when wrap='none' — soft-wrap
+  // doesn't h-scroll because rows wrap onto the next row instead. The
+  // cursor declaration subtracts both unconditionally; in soft-wrap
+  // mode scrollX stays at 0, so the math degenerates to the right
+  // value.
+  const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
 
-  // Adjust scrollY on every change that could shift the caret's
-  // visual row out of the visible window. Re-fires on:
-  //
-  //   - inner.height — the box's vertical content area changed (the
-  //     window the caret must fit inside grew or shrank).
-  //   - visual.row — the caret's visual position changed. This is
-  //     transitively driven by state.value (typing / pasting / undo),
-  //     state.caret (any caret-moving action), AND inner.width
-  //     (terminal/container resize → wrap layout rebuild → caret
-  //     visual position recomputes via logicalToVisual). One
-  //     dependency captures all three sources because `visual` is a
-  //     useMemo over (layout, state.caret) and `layout` is a useMemo
-  //     over (state.value, inner.width).
-  //   - layout.rows.length — the total row count changed. Catches the
-  //     edge where width changes but visual.row happens to stay the
-  //     same (e.g. caret on row 0, width grows so content needs
-  //     fewer rows): scrollY needs to clamp to the new max.
-  //   - scrollY — needed for the read-modify-write inside the effect.
+  // Re-scroll on every change that could shift the caret out of the
+  // visible window. See dep notes per-axis below.
   //
   // useEffect (not useLayoutEffect): the next paint reflects both the
   // new caret AND the new scroll in the same render — React batches
-  // the setScrollY here with the original cause.
+  // the setScrollX/Y here with the original cause.
   //
-  // First-frame note: `inner.height === 0` means yoga hasn't measured
-  // yet. Skip the re-scroll for one frame; the next render with a
-  // measured height triggers via the inner.height dep.
+  // First-frame note: `inner.height === 0` / `inner.width === 0` means
+  // yoga hasn't measured yet. Skip for one frame; the next render with
+  // a measured size triggers via the deps.
   useEffect(() => {
+    // Vertical: re-fires on inner.height (box vertical area changed),
+    // visual.row (caret's visual row changed — transitively driven by
+    // state.value / state.caret / inner.width through useMemos),
+    // layout.rows.length (catches the edge where width changes but
+    // visual.row stays the same), and scrollY (read-modify-write).
     if (inner.height > 0) {
       const next = scrollToKeepCaretVisible({
         scroll: scrollY,
@@ -372,7 +405,35 @@ export default function TextInput({
       })
       if (next !== scrollY) setScrollY(next)
     }
-  }, [inner.height, visual.row, layout.rows.length, scrollY])
+    // Horizontal: only when wrap='none'. caretPos = visual.col (in
+    // cells; layout.logicalToVisual returns display cells). contentSize
+    // is the current row's cell width — wrap='none' means one row per
+    // logical line, so this is the caret's logical line's width. Other
+    // logical lines may be longer and clip past the right edge in
+    // multiline mode (single shared scrollX); that's the wrap='none'
+    // multiline UX, matches vim's nowrap behavior.
+    if (effectiveWrap === 'none' && inner.width > 0) {
+      const currentRow = layout.rows[visual.row]
+      const rowWidth = currentRow ? stringWidth(currentRow.text) : 0
+      const next = scrollToKeepCaretVisible({
+        scroll: scrollX,
+        caretPos: visual.col,
+        windowSize: inner.width,
+        contentSize: Math.max(rowWidth, visual.col + 1),
+      })
+      if (next !== scrollX) setScrollX(next)
+    }
+  }, [
+    inner.height,
+    inner.width,
+    visual.row,
+    visual.col,
+    layout.rows,
+    layout.rows.length,
+    scrollX,
+    scrollY,
+    effectiveWrap,
+  ])
 
   // Subscribe to focus state via FocusContext. The earlier shortcut
   // `ref.current.focusManager?.activeElement === ref.current` was
@@ -589,9 +650,11 @@ export default function TextInput({
         passwordChar,
         selectionColor,
         placeholder,
+        scrollX,
         scrollY,
         innerHeight: inner.height,
         innerWidth: inner.width,
+        wrap: effectiveWrap,
       }),
     [
       state,
@@ -600,9 +663,11 @@ export default function TextInput({
       passwordChar,
       selectionColor,
       placeholder,
+      scrollX,
       scrollY,
       inner.height,
       inner.width,
+      effectiveWrap,
     ],
   )
 
@@ -709,15 +774,20 @@ type RenderOpts = {
   passwordChar: string
   selectionColor: Color
   placeholder: string | undefined
+  /** Horizontal scroll offset (cells). Only non-zero when wrap='none'. */
+  scrollX: number
   scrollY: number
   innerHeight: number
   /** Inner content width (cells, net of border + padding). Needed by
-   *  the multi-row selection renderer to compute right-edge slack —
-   *  the gap between the row's content end and the box's right edge —
-   *  which gets filled with selection bg so multi-row selections look
-   *  like one continuous stripe rather than disconnected per-row
-   *  highlights. */
+   *  the multi-row selection renderer (wrap='soft') to compute
+   *  right-edge slack, AND by the per-row cell-slicing path
+   *  (wrap='none') to know how many cells to slice per row. */
   innerWidth: number
+  /** Active wrap mode. `'soft'` uses the wrap layout's visual rows
+   *  with multi-row selection-stripe rendering. `'none'` renders one
+   *  row per logical line and cell-slices each row by `scrollX` for
+   *  horizontal scroll. */
+  wrap: 'soft' | 'none'
 }
 
 /** Mask one row's text with `passwordChar` repeated per code-point.
@@ -759,8 +829,17 @@ function maskRowText(rowText: string, password: boolean, passwordChar: string): 
  *  buffer) the slice may overshoot, so it's clamped to maskedText
  *  length defensively. */
 function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts): React.ReactNode {
-  const { password, passwordChar, selectionColor, placeholder, scrollY, innerHeight, innerWidth } =
-    opts
+  const {
+    password,
+    passwordChar,
+    selectionColor,
+    placeholder,
+    scrollX,
+    scrollY,
+    innerHeight,
+    innerWidth,
+    wrap,
+  } = opts
 
   if (state.value === '' && placeholder) {
     return (
@@ -777,6 +856,57 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
   // size to content; subsequent renders apply the slice.
   const visibleRows =
     innerHeight > 0 ? layout.rows.slice(scrollY, scrollY + innerHeight) : layout.rows
+
+  // wrap='none' branch: one row per logical line, cell-sliced by
+  // scrollX for horizontal scroll. Selection is rendered in-row only —
+  // multi-row selection stripe (right-edge / indent fill) doesn't
+  // apply because hanging-indent doesn't apply, and the row's right
+  // edge is past the visible window when content overflows. Same
+  // approximation the pre-soft-wrap renderer used for selection across
+  // a horizontally-scrolled wide char (selection cell math treats
+  // scroll offset as char-aligned).
+  if (wrap === 'none') {
+    return visibleRows.map((row, rowIdx) => {
+      const maskedText = maskRowText(row.text, password, passwordChar)
+      const visibleText =
+        innerWidth > 0 ? sliceRowByCells(maskedText, scrollX, innerWidth) : maskedText
+      const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
+      const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
+      // visStart / visEnd: selection range in the SLICED visible text.
+      // Subtract scrollX (cells) from char-relative localStart/End —
+      // identity for ASCII content; off-by-N for wide chars at the
+      // boundary, same v1 limitation as the old renderer.
+      const visStart = innerWidth > 0 ? Math.max(0, localStart - scrollX) : localStart
+      const visEnd = innerWidth > 0 ? Math.max(0, localEnd - scrollX) : localEnd
+
+      if (visStart === visEnd) {
+        return (
+          <Text
+            // biome-ignore lint/suspicious/noArrayIndexKey: see comment below
+            key={rowIdx}
+            wrap="truncate-end"
+          >
+            {visibleText || ' '}
+          </Text>
+        )
+      }
+
+      const before = visibleText.slice(0, visStart)
+      const sel = visibleText.slice(visStart, visEnd) || ' '
+      const after = visibleText.slice(visEnd)
+      return (
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: see comment below
+          key={rowIdx}
+          wrap="truncate-end"
+        >
+          {before}
+          <Text backgroundColor={selectionColor}>{sel}</Text>
+          {after}
+        </Text>
+      )
+    })
+  }
 
   // Walk visible rows, emitting per-row segments. Index-as-key is
   // correct here: rows have no stable identity (the buffer re-renders
