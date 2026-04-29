@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { wrapByCells, wrapByWords } from './wrap-math.js'
+import { buildWrapLayout, wrapByCells, wrapByWords } from './wrap-math.js'
 
 describe('wrapByCells', () => {
   describe('basic ASCII', () => {
@@ -309,6 +309,241 @@ describe('wrapByWords', () => {
         it(`rejoins for input=${JSON.stringify(input.slice(0, 30))}... width=${width}`, () => {
           const result = wrapByWords(input, width)
           expect(result.join('')).toBe(input)
+        })
+      }
+    }
+  })
+})
+
+describe('buildWrapLayout', () => {
+  describe('row construction', () => {
+    it('produces one zero-cell row for empty input (so caret can sit on it)', () => {
+      const layout = buildWrapLayout('', { width: 10 })
+      expect(layout.rows).toHaveLength(1)
+      expect(layout.rows[0]).toMatchObject({
+        text: '',
+        logicalLine: 0,
+        startCharIdx: 0,
+        endCharIdx: 0,
+        isWrapContinuation: false,
+      })
+    })
+
+    it('produces one row for a single short logical line', () => {
+      const layout = buildWrapLayout('hello', { width: 10 })
+      expect(layout.rows).toHaveLength(1)
+      expect(layout.rows[0]).toMatchObject({
+        text: 'hello',
+        logicalLine: 0,
+        startCharIdx: 0,
+        endCharIdx: 5,
+        isWrapContinuation: false,
+      })
+    })
+
+    it('wraps a long logical line into multiple visual rows', () => {
+      const layout = buildWrapLayout('hello world', { width: 6 })
+      expect(layout.rows).toHaveLength(2)
+      expect(layout.rows[0]).toMatchObject({
+        text: 'hello ',
+        logicalLine: 0,
+        startCharIdx: 0,
+        endCharIdx: 6,
+        isWrapContinuation: false,
+      })
+      expect(layout.rows[1]).toMatchObject({
+        text: 'world',
+        logicalLine: 0,
+        startCharIdx: 6,
+        endCharIdx: 11,
+        isWrapContinuation: true,
+      })
+    })
+
+    it('handles \\n as a hard break — not a wrap continuation', () => {
+      const layout = buildWrapLayout('hi\nbye', { width: 10 })
+      expect(layout.rows).toHaveLength(2)
+      expect(layout.rows[0]).toMatchObject({
+        text: 'hi',
+        logicalLine: 0,
+        startCharIdx: 0,
+        endCharIdx: 2,
+        isWrapContinuation: false,
+      })
+      expect(layout.rows[1]).toMatchObject({
+        text: 'bye',
+        logicalLine: 1,
+        startCharIdx: 3, // skip the \n
+        endCharIdx: 6,
+        isWrapContinuation: false, // hard break, not wrap
+      })
+    })
+
+    it('produces empty visual rows for consecutive newlines', () => {
+      // 'a\n\n\nb' = 'a' + 3 \n + 'b' = 4 logical lines: 'a', '', '', 'b'
+      const layout = buildWrapLayout('a\n\n\nb', { width: 10 })
+      expect(layout.rows).toHaveLength(4)
+      expect(layout.rows.map((r) => r.text)).toEqual(['a', '', '', 'b'])
+      expect(layout.rows.map((r) => r.logicalLine)).toEqual([0, 1, 2, 3])
+    })
+
+    it('handles a leading newline (empty first line)', () => {
+      const layout = buildWrapLayout('\nhi', { width: 10 })
+      expect(layout.rows).toHaveLength(2)
+      expect(layout.rows[0].text).toBe('')
+      expect(layout.rows[1].text).toBe('hi')
+    })
+
+    it('handles a trailing newline (empty last line)', () => {
+      const layout = buildWrapLayout('hi\n', { width: 10 })
+      expect(layout.rows).toHaveLength(2)
+      expect(layout.rows[0].text).toBe('hi')
+      expect(layout.rows[1].text).toBe('')
+      expect(layout.rows[1].startCharIdx).toBe(3) // position after \n
+    })
+
+    it('respects opts.wrap = "char" (skip word boundaries)', () => {
+      // "hello world" width 6:
+      //   word: ["hello ", "world"]
+      //   char: ["hello ", "world"] — same here, but for "hello-world":
+      const wordLayout = buildWrapLayout('hello-world', { width: 6, wrap: 'word' })
+      // No whitespace → word-wrap falls back to char-wrap behavior:
+      expect(wordLayout.rows.map((r) => r.text)).toEqual(['hello-', 'world'])
+      const charLayout = buildWrapLayout('hello-world', { width: 6, wrap: 'char' })
+      // Pure char-wrap: same result here because input has no whitespace.
+      expect(charLayout.rows.map((r) => r.text)).toEqual(['hello-', 'world'])
+    })
+
+    it('width=0 returns no rows + safe fallback maps', () => {
+      const layout = buildWrapLayout('hello', { width: 0 })
+      expect(layout.rows).toEqual([])
+      expect(layout.logicalToVisual(0)).toEqual({ row: 0, col: 0 })
+      expect(layout.visualToLogical(0, 0)).toBe(0)
+    })
+  })
+
+  describe('logicalToVisual', () => {
+    it('returns {0,0} for position 0 in empty buffer', () => {
+      const layout = buildWrapLayout('', { width: 10 })
+      expect(layout.logicalToVisual(0)).toEqual({ row: 0, col: 0 })
+    })
+
+    it('translates positions within a single row to col offsets', () => {
+      const layout = buildWrapLayout('hello', { width: 10 })
+      expect(layout.logicalToVisual(0)).toEqual({ row: 0, col: 0 })
+      expect(layout.logicalToVisual(2)).toEqual({ row: 0, col: 2 })
+      expect(layout.logicalToVisual(5)).toEqual({ row: 0, col: 5 })
+    })
+
+    it('at a wrap boundary, prefers START of next row over END of previous', () => {
+      // "helloworld" width 5 → ["hello", "world"], no whitespace.
+      // Position 5 is the boundary. Convention: prefer next row.
+      const layout = buildWrapLayout('helloworld', { width: 5 })
+      expect(layout.logicalToVisual(5)).toEqual({ row: 1, col: 0 })
+    })
+
+    it('at a hard newline, position before \\n is end of current row', () => {
+      // "hi\nbye" — position 2 is the \n itself. Position before = 2
+      // should land at end of row 0. The \n ITSELF doesn't render
+      // anywhere visible. Position 3 = start of row 1.
+      const layout = buildWrapLayout('hi\nbye', { width: 10 })
+      expect(layout.logicalToVisual(2)).toEqual({ row: 0, col: 2 })
+      expect(layout.logicalToVisual(3)).toEqual({ row: 1, col: 0 })
+    })
+
+    it('counts cells with wide chars correctly', () => {
+      // "中a" — 中 is 2 cells, a is 1.
+      const layout = buildWrapLayout('中a', { width: 10 })
+      expect(layout.logicalToVisual(0)).toEqual({ row: 0, col: 0 })
+      expect(layout.logicalToVisual(1)).toEqual({ row: 0, col: 2 }) // after 中
+      expect(layout.logicalToVisual(2)).toEqual({ row: 0, col: 3 }) // after a
+    })
+
+    it('clamps negative positions to {0, 0}', () => {
+      const layout = buildWrapLayout('hello', { width: 10 })
+      expect(layout.logicalToVisual(-5)).toEqual({ row: 0, col: 0 })
+    })
+
+    it('clamps positions past end to last-row end', () => {
+      const layout = buildWrapLayout('hello', { width: 10 })
+      expect(layout.logicalToVisual(100)).toEqual({ row: 0, col: 5 })
+    })
+
+    it('handles position at end of wrapped buffer (no next row to prefer)', () => {
+      // "hello" width 5: one row, position 5 = end. No row 1 to prefer.
+      const layout = buildWrapLayout('hello', { width: 5 })
+      expect(layout.logicalToVisual(5)).toEqual({ row: 0, col: 5 })
+    })
+  })
+
+  describe('visualToLogical', () => {
+    it('returns 0 for empty buffer at any visual position', () => {
+      const layout = buildWrapLayout('', { width: 10 })
+      expect(layout.visualToLogical(0, 0)).toBe(0)
+      expect(layout.visualToLogical(0, 5)).toBe(0)
+    })
+
+    it('translates row+col to char index', () => {
+      const layout = buildWrapLayout('hello world', { width: 6 })
+      // Row 0 = "hello ", row 1 = "world"
+      expect(layout.visualToLogical(0, 0)).toBe(0)
+      expect(layout.visualToLogical(0, 3)).toBe(3)
+      expect(layout.visualToLogical(0, 6)).toBe(6) // end of row 0 = position 6
+      expect(layout.visualToLogical(1, 0)).toBe(6)
+      expect(layout.visualToLogical(1, 3)).toBe(9)
+    })
+
+    it('handles wide chars (col is in cells, returns char index)', () => {
+      // "中a" width 10: row 0 = "中a"
+      // Cell 0 = before 中
+      // Cell 1 = mid-中 → snaps to BEFORE 中 (don't split a wide char)
+      // Cell 2 = after 中, before a
+      // Cell 3 = after a
+      const layout = buildWrapLayout('中a', { width: 10 })
+      expect(layout.visualToLogical(0, 0)).toBe(0)
+      expect(layout.visualToLogical(0, 1)).toBe(0) // mid-wide-char → snap left
+      expect(layout.visualToLogical(0, 2)).toBe(1) // after 中
+      expect(layout.visualToLogical(0, 3)).toBe(2) // after a
+    })
+
+    it('clamps col past row end to row.endCharIdx', () => {
+      const layout = buildWrapLayout('hi', { width: 10 })
+      expect(layout.visualToLogical(0, 100)).toBe(2)
+    })
+
+    it('clamps row out of range', () => {
+      const layout = buildWrapLayout('hi', { width: 10 })
+      expect(layout.visualToLogical(100, 0)).toBe(0)
+      expect(layout.visualToLogical(-1, 0)).toBe(0)
+    })
+  })
+
+  describe('round-trip identity (logicalToVisual ∘ visualToLogical = identity)', () => {
+    // For every char index in the buffer, going logical → visual →
+    // logical should land on the same char idx (or close — wrap-
+    // boundary positions are semi-ambiguous, see below).
+    const cases = [
+      'hello',
+      'hello world',
+      'hi\nbye',
+      'a\n\nb',
+      `${'x'.repeat(20)}`,
+      'the quick brown fox',
+      '中文学习',
+      `Mr.${String.fromCodePoint(0x00a0)}Smith and Mrs.${String.fromCodePoint(0x00a0)}Smith`,
+    ]
+    for (const input of cases) {
+      for (const width of [5, 8, 12]) {
+        it(`round-trips for input=${JSON.stringify(input.slice(0, 20))}... width=${width}`, () => {
+          const layout = buildWrapLayout(input, { width })
+          for (let i = 0; i <= input.length; i++) {
+            const visual = layout.logicalToVisual(i)
+            const back = layout.visualToLogical(visual.row, visual.col)
+            // Wrap-boundary char indices are mapped to the START of
+            // the next row, so going back gives row.startCharIdx ===
+            // original. For non-boundary cases, exact identity.
+            expect(back).toBe(i)
+          }
         })
       }
     }

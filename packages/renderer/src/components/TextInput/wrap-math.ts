@@ -219,3 +219,196 @@ export function wrapByWords(text: string, width: number): string[] {
   if (row.length > 0) rows.push(row)
   return rows
 }
+
+/**
+ * Per-row metadata produced by `buildWrapLayout`. Each visual row
+ * carries enough context for the renderer to:
+ *
+ *   - Render the row's text
+ *   - Render selection highlights (needs startCharIdx + endCharIdx
+ *     to slice the buffer-relative selection range to row-local)
+ *   - Show wrap-continuation indicators (B-phase: the gutter glyph
+ *     at the start of `isWrapContinuation` rows)
+ *   - Map clicks back to buffer positions (visualToLogical)
+ */
+export type VisualRow = {
+  /** Text rendered on this row (no `\n` — that's a separator, never inside row text). */
+  readonly text: string
+  /** Index of the source logical line this row came from (0-based). */
+  readonly logicalLine: number
+  /** Char index in the full buffer where this row's text starts. */
+  readonly startCharIdx: number
+  /** Char index in the full buffer where this row's text ends (exclusive). */
+  readonly endCharIdx: number
+  /** True iff this row is a wrap continuation of the previous row's
+   *  logical line (vs starting a new logical line via `\n`). The
+   *  renderer uses this to draw a wrap-indicator glyph in the gutter. */
+  readonly isWrapContinuation: boolean
+}
+
+/** Output of `buildWrapLayout`. The `rows` array is the rendering
+ *  source-of-truth; the two map functions handle caret positioning. */
+export type WrapLayout = {
+  readonly rows: ReadonlyArray<VisualRow>
+  /** Translate a buffer char index to (visualRow, visualCol). The
+   *  column is in CELLS (wide chars count as 2). At a wrap boundary
+   *  (charIdx is the start of a continuation row), returns the
+   *  START of the new row, not the end of the previous — visually
+   *  clearer to the user where the caret is. */
+  readonly logicalToVisual: (charIdx: number) => { row: number; col: number }
+  /** Translate a visual (row, col) cell coordinate back to a buffer
+   *  char index. Used by click-to-position. Clamps `col` to the
+   *  row's content if the click landed past the row's last char. */
+  readonly visualToLogical: (row: number, col: number) => number
+}
+
+export type WrapOptions = {
+  /** Cell budget per row (already net of border + padding). */
+  width: number
+  /** Wrap strategy. Default `'word'`. `'char'` skips word-boundary
+   *  detection entirely — useful when the consumer wants packed
+   *  density (e.g. a hex dump or a no-prose token list). */
+  wrap?: 'word' | 'char'
+}
+
+/**
+ * Build a complete wrap layout for a multi-line buffer.
+ *
+ * Splits `value` on `\n` into logical lines, wraps each according to
+ * `opts.wrap`, builds per-row metadata, and returns the layout plus
+ * caret-position translation maps.
+ *
+ * Empty logical lines (consecutive `\n`s, leading/trailing `\n`)
+ * each produce ONE zero-cell visual row so the caret can sit on
+ * them — without that, an empty line would have no row and the
+ * caret would visually skip it.
+ *
+ * Width 0 returns no rows; the caller should treat this as
+ * "container too small to render" and render nothing rather than
+ * crash.
+ */
+export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
+  const { width, wrap = 'word' } = opts
+  if (width <= 0) {
+    return {
+      rows: [],
+      logicalToVisual: () => ({ row: 0, col: 0 }),
+      visualToLogical: () => 0,
+    }
+  }
+
+  const wrapper = wrap === 'char' ? wrapByCells : wrapByWords
+  const logicalLines = value.split('\n')
+  const rows: VisualRow[] = []
+  // Walking pointer into the buffer. Advances by row.text.length per
+  // emitted row + 1 per `\n` between logical lines.
+  let bufferPos = 0
+
+  for (let lineIdx = 0; lineIdx < logicalLines.length; lineIdx++) {
+    const line = logicalLines[lineIdx]!
+    if (line.length === 0) {
+      // Empty logical line → one zero-cell visual row. Without this
+      // the caret can't sit on the empty line.
+      rows.push({
+        text: '',
+        logicalLine: lineIdx,
+        startCharIdx: bufferPos,
+        endCharIdx: bufferPos,
+        isWrapContinuation: false,
+      })
+    } else {
+      const wrapped = wrapper(line, width)
+      // wrapByWords/wrapByCells return [] for empty input; we
+      // already handled that above. For non-empty input they always
+      // return at least one row.
+      let rowStart = bufferPos
+      for (let i = 0; i < wrapped.length; i++) {
+        const text = wrapped[i]!
+        rows.push({
+          text,
+          logicalLine: lineIdx,
+          startCharIdx: rowStart,
+          endCharIdx: rowStart + text.length,
+          isWrapContinuation: i > 0,
+        })
+        rowStart += text.length
+      }
+    }
+    bufferPos += line.length
+    // Account for the `\n` between this logical line and the next.
+    if (lineIdx < logicalLines.length - 1) bufferPos += 1
+  }
+
+  // ── Position translation maps ──────────────────────────────────
+
+  // Compute cell column from a row's text given a char offset INTO
+  // the row. Walks graphemes, summing widths. Used by both maps.
+  const cellsBefore = (text: string, charOffset: number): number => {
+    if (charOffset <= 0) return 0
+    if (charOffset >= text.length) return stringWidth(text)
+    return stringWidth(text.slice(0, charOffset))
+  }
+
+  const logicalToVisual = (charIdx: number): { row: number; col: number } => {
+    if (rows.length === 0) return { row: 0, col: 0 }
+    // Clamp negative to start.
+    if (charIdx <= 0) return { row: 0, col: 0 }
+    // Clamp past end to last row's end.
+    const lastRow = rows[rows.length - 1]!
+    if (charIdx >= lastRow.endCharIdx) {
+      return {
+        row: rows.length - 1,
+        col: cellsBefore(lastRow.text, charIdx - lastRow.startCharIdx),
+      }
+    }
+
+    // Find the row containing charIdx. Convention: at a wrap
+    // boundary (charIdx === a row's startCharIdx AND the previous
+    // row's endCharIdx), prefer the START of the new row — visually
+    // clearer than "cursor past last char of previous row." Doesn't
+    // apply to `\n` boundaries because those have a 1-char gap
+    // (the \n itself), so the boundary char-idx differs.
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]!
+      if (charIdx >= r.startCharIdx && charIdx <= r.endCharIdx) {
+        // Boundary case: prefer next row if this is a wrap continuation.
+        if (
+          charIdx === r.endCharIdx &&
+          i + 1 < rows.length &&
+          rows[i + 1]!.isWrapContinuation &&
+          rows[i + 1]!.startCharIdx === charIdx
+        ) {
+          continue
+        }
+        return { row: i, col: cellsBefore(r.text, charIdx - r.startCharIdx) }
+      }
+    }
+    // Defensive — shouldn't be reachable given the clamps above.
+    return { row: rows.length - 1, col: cellsBefore(lastRow.text, lastRow.text.length) }
+  }
+
+  const visualToLogical = (row: number, col: number): number => {
+    if (rows.length === 0) return 0
+    const r = rows[Math.max(0, Math.min(row, rows.length - 1))]!
+    if (col <= 0) return r.startCharIdx
+    // Walk the row, sum cells until we reach `col`.
+    let cellsAcc = 0
+    let charsAcc = 0
+    for (const { segment } of getGraphemeSegmenter().segment(r.text)) {
+      const w = stringWidth(segment)
+      if (cellsAcc + w > col) {
+        // The grapheme would push past `col` — we land BEFORE it.
+        return r.startCharIdx + charsAcc
+      }
+      cellsAcc += w
+      charsAcc += segment.length
+      if (cellsAcc === col) {
+        return r.startCharIdx + charsAcc
+      }
+    }
+    // col past row content → end of row.
+    return r.endCharIdx
+  }
+
+  return { rows, logicalToVisual, visualToLogical }
+}
