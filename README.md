@@ -2,6 +2,8 @@
 
 React terminal renderer. Pure-TypeScript Yoga flexbox, diff-based screen output, ScrollBox with viewport culling and hardware scroll hints.
 
+![drag and drop in the terminal](./docs/drag.gif)
+
 Used by [claude-corp](https://github.com/re-marked/claude-corp). Forked from [claude-code-kit](https://github.com/minnzen/claude-code-kit), itself a fork of [Ink](https://github.com/vadimdemedes/ink).
 
 ## Packages
