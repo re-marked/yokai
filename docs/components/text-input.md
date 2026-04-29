@@ -31,6 +31,10 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `cursorColor` | `Color` | terminal default | Cursor color while focused. OSC 12; supported by xterm/iTerm2/kitty/alacritty/Windows Terminal/VS Code. `ansi256(N)` not supported. |
 | `autoFocus` | `boolean` | `false` | Focus on mount. |
 | `historyCap` | `number` | `100` | Max undo entries. Older entries drop. |
+| `wrap` | `'soft' \| 'none'` | multiline → `'soft'`, single-line → `'none'` | Soft-wrap long lines onto visual rows (`'soft'`) or keep one row per logical line (`'none'`, h-scrolls past width). See [Soft-wrap](#soft-wrap). |
+| `indentedWrap` | `boolean` | `true` | Hanging indent: continuation rows of an indented logical line align under the first non-whitespace char. See [Advanced wrap control](#advanced-wrap-control). |
+| `wordBoundaries` | `'whitespace' \| 'identifier'` | `'whitespace'` | Where wrap is allowed to break. `'identifier'` adds snake_case / kebab-case / camelCase break candidates and treats URLs as atomic. See [Advanced wrap control](#advanced-wrap-control). |
+| `wrapHints` | `ReadonlyArray<WrapHint>` | — | Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Memoize the array reference. See [Advanced wrap control](#advanced-wrap-control). |
 
 ## Examples
 
@@ -109,15 +113,40 @@ const [name, setName] = useState('')
 
 - **Controlled vs uncontrolled.** Pass `value` for controlled mode (parent owns the buffer); pass `defaultValue` for uncontrolled (the input owns it). External `value` changes reset internal state — undo across an external set isn't a useful semantic.
 - **Caret rendering.** The real terminal cursor is positioned at the caret via `useDeclaredCursor`, so IME composition popups and screen readers follow correctly. No synthetic glyph.
+- **Caret is logical.** `state.caret` (and the `value` you receive in `onChange`) are LOGICAL — buffer char indices, wrap-agnostic. The internal layout translates between logical positions and visual rows on each render; consumers never see visual coords.
 - **Smart paste.** Short pastes (≤ `<AlternateScreen pasteThreshold>`, default 32 chars) come through as a stream of keystrokes — they feel like typing. Longer pastes fire `onPaste` and become one undo step.
 - **Single-line + newlines.** Pasting multiline content into a single-line input converts newlines to spaces (the alternative — silently dropping them — would corrupt the user's intent).
 - **Undo grouping.** Consecutive same-kind insertions or deletions merge into one undo step (a typed word is one Ctrl+Z, not N). Pastes are always their own step.
 - **Wide chars.** Caret math counts CJK / wide chars as 2 cells, combining marks as 0. Click positioning snaps to the LEFT edge of a wide char if the click lands mid-glyph.
 
+## Soft-wrap
+
+Multiline TextInput soft-wraps long lines onto VISUAL ROWS by default; single-line stays on one row and scrolls horizontally. Two terms to keep straight:
+
+- **Logical line** — text between two `\n`s (or buffer edges). Owned by `state.value`; what `onChange` reports.
+- **Visual row** — a slice of a logical line that fits on one screen row. Computed each render from the inner width.
+
+The caret moves through visual rows: ↓ takes you to the next visual row even if it's a wrap continuation of the same logical line, not the next `\n`. Selection paints as one continuous stripe across multi-row spans, including the slack at row ends so a multi-row selection reads as one connected block. Empty logical lines (consecutive `\n`s) get a single zero-cell visual row each so the caret can land on them.
+
+### Defaults
+
+| Mode | `wrap` default | What it does |
+|------|----------------|--------------|
+| `multiline` | `'soft'` | Long lines wrap onto continuation rows. Vertical scroll only; no horizontal scroll. |
+| Single-line | `'none'` | Content stays on one row; horizontal scroll keeps the caret in view. |
+
+To override: pass `wrap='none'` on a multiline input to disable wrapping (truncates + h-scrolls per row), or `wrap='soft'` on a single-line input (rare — single-line content rarely benefits).
+
+### Caret nav under soft-wrap
+
+- **↓ / ↑** walk visual rows in display order. A wrapped logical line's continuation row counts as the row below the first row.
+- **Preferred column.** When you press ↓ from a wide row, the column is captured. Subsequent ↓ presses preserve that column even when passing through SHORTER rows that clamp the caret to row end. The first horizontal move (←/→/Home/End/etc.) or any edit resets the captured column.
+- **Home / End** still operate on LOGICAL line boundaries — Home goes to the start of the current logical line (which may be on an earlier visual row if you're on a continuation).
+
 ## Scrolling
 
-- **Single-line**: when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
-- **Multiline**: when content exceeds the box height, the visible window scrolls vertically so the caret line stays in view. Each visible line truncates if it exceeds the inner width.
+- **Single-line** (or multiline with `wrap='none'`): when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
+- **Multiline with `wrap='soft'`** (the default): content wraps to fit width — no horizontal scroll. When the wrapped content exceeds box height, the visible window scrolls vertically so the caret's visual row stays in view.
 - The inner content area is read from yoga's computed size minus padding + border, so `width` / `height` props refer to the OUTER box. If you don't pass `width` / `height`, no scrolling — content fills the box's natural size.
 
 ## Known limitations
