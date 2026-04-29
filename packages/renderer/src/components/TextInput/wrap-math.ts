@@ -412,3 +412,54 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
 
   return { rows, logicalToVisual, visualToLogical }
 }
+
+/**
+ * Compute the target buffer position when the caret moves up or down
+ * one visual row, respecting "preferred column" semantics — the
+ * column the caret was at when the user started a vertical movement
+ * chain. So ↓ from `'abc[caret]def'` (col 6) lands at col 6 of the
+ * next row if it has one, or end-of-row otherwise; subsequent ↓ that
+ * crosses a SHORTER intermediate row and reaches a longer row lands
+ * back at col 6, not at the shorter row's end. Standard editor
+ * behavior.
+ *
+ * Behavior at buffer edges (matches VS Code, MS Word, most modern
+ * editors; differs from vim which beeps):
+ *   - ↑ from row 0 → charIdx 0 (start of buffer)
+ *   - ↓ from last row → end of buffer
+ *
+ * Caller's contract:
+ *   - Pass the caret's CURRENT preferredCol. The caller maintains
+ *     this in reducer state, resetting on horizontal moves
+ *     (left/right/home/end) and preserving on vertical moves.
+ *   - Returned charIdx is the new caret position; preferredCol
+ *     stays unchanged across the call (caller persists it as-is).
+ *
+ * Pure — no state inside the helper.
+ */
+export function nextVisualRow(
+  layout: WrapLayout,
+  fromCharIdx: number,
+  preferredCol: number,
+  direction: 'up' | 'down',
+): { charIdx: number } {
+  if (layout.rows.length === 0) return { charIdx: fromCharIdx }
+
+  const visual = layout.logicalToVisual(fromCharIdx)
+  const targetRow = visual.row + (direction === 'up' ? -1 : 1)
+
+  if (targetRow < 0) {
+    // Already at top — move to start of buffer.
+    return { charIdx: 0 }
+  }
+  if (targetRow >= layout.rows.length) {
+    // Already at bottom — move to end of buffer.
+    const lastRow = layout.rows[layout.rows.length - 1]!
+    return { charIdx: lastRow.endCharIdx }
+  }
+
+  // Land at preferredCol of the target row, clamped + snapped via
+  // visualToLogical (which walks graphemes — never returns a mid-
+  // wide-char position).
+  return { charIdx: layout.visualToLogical(targetRow, preferredCol) }
+}

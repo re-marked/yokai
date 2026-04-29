@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buildWrapLayout, wrapByCells, wrapByWords } from './wrap-math.js'
+import { buildWrapLayout, nextVisualRow, wrapByCells, wrapByWords } from './wrap-math.js'
 
 describe('wrapByCells', () => {
   describe('basic ASCII', () => {
@@ -312,6 +312,89 @@ describe('wrapByWords', () => {
         })
       }
     }
+  })
+})
+
+describe('nextVisualRow', () => {
+  it('moves down to the next row at preferredCol', () => {
+    // "abcdef\nghijkl" → two rows of 6 chars each. Caret at row 0
+    // col 3 (between c and d). ↓ should land at row 1 col 3.
+    const layout = buildWrapLayout('abcdef\nghijkl', { width: 10 })
+    // Caret at charIdx 3 (between 'c' and 'd' on row 0).
+    const { charIdx } = nextVisualRow(layout, 3, 3, 'down')
+    // Row 1 starts at idx 7 (after \n), col 3 → idx 10.
+    expect(charIdx).toBe(10)
+  })
+
+  it('moves up to the previous row at preferredCol', () => {
+    const layout = buildWrapLayout('abcdef\nghijkl', { width: 10 })
+    // Caret at row 1 col 4 → charIdx 11. ↑ should land at row 0 col 4 → idx 4.
+    const { charIdx } = nextVisualRow(layout, 11, 4, 'up')
+    expect(charIdx).toBe(4)
+  })
+
+  it('clamps to end-of-row when target row is shorter than preferredCol', () => {
+    // "longline\nhi" → row 0 = "longline" (8 chars), row 1 = "hi" (2 chars).
+    // Caret at row 0 col 6 (idx 6). ↓ with preferredCol=6 → row 1's max is
+    // col 2, so charIdx = end of row 1 = 11.
+    const layout = buildWrapLayout('longline\nhi', { width: 20 })
+    const { charIdx } = nextVisualRow(layout, 6, 6, 'down')
+    expect(charIdx).toBe(11) // end of "hi"
+  })
+
+  it('respects preferredCol across a SHORTER intermediate row when reaching a longer one', () => {
+    // "longline\nhi\nlongerline" — three rows.
+    // Caret at row 0 col 6, ↓ → row 1 (clamped to col 2 since "hi" is only 2),
+    // BUT preferredCol stays 6. Caller calls nextVisualRow again with the
+    // SAME preferredCol=6 → row 2 col 6.
+    const layout = buildWrapLayout('longline\nhi\nlongerline', { width: 20 })
+    // Move down once: lands at end of "hi" (idx 11).
+    const step1 = nextVisualRow(layout, 6, 6, 'down')
+    expect(step1.charIdx).toBe(11)
+    // Move down again with preferredCol still 6 (caller maintains it).
+    const step2 = nextVisualRow(layout, step1.charIdx, 6, 'down')
+    // Row 2 starts at idx 12 (after \n). Col 6 → idx 18.
+    expect(step2.charIdx).toBe(18)
+  })
+
+  it('↑ at row 0 → start of buffer (charIdx 0)', () => {
+    const layout = buildWrapLayout('hello\nworld', { width: 10 })
+    // Caret at row 0 col 3.
+    const { charIdx } = nextVisualRow(layout, 3, 3, 'up')
+    expect(charIdx).toBe(0)
+  })
+
+  it('↓ at last row → end of buffer (charIdx = lastRow.endCharIdx)', () => {
+    const layout = buildWrapLayout('hello\nworld', { width: 10 })
+    // Caret at row 1 col 2 = idx 8.
+    const { charIdx } = nextVisualRow(layout, 8, 2, 'down')
+    expect(charIdx).toBe(11) // end of "world"
+  })
+
+  it('navigates across wrap continuations (not just \\n boundaries)', () => {
+    // "abcdefghij" width 5 → two rows: ["abcde", "fghij"]. Both same logical line.
+    const layout = buildWrapLayout('abcdefghij', { width: 5 })
+    // Caret at row 0 col 2 (idx 2). ↓ → row 1 col 2 = idx 7.
+    expect(nextVisualRow(layout, 2, 2, 'down').charIdx).toBe(7)
+    // ↑ from row 1 col 2 → row 0 col 2 = idx 2.
+    expect(nextVisualRow(layout, 7, 2, 'up').charIdx).toBe(2)
+  })
+
+  it('handles wide chars in target row (snaps left from mid-char)', () => {
+    // Row 0 = "abcd", row 1 = "中文" (4 cells). preferredCol=3 lands
+    // mid-character 文 (which spans cells 2-3). visualToLogical
+    // snaps LEFT to start of 文 = col 2 = charIdx 6 (after \n + 中).
+    const layout = buildWrapLayout('abcd\n中文', { width: 10 })
+    const { charIdx } = nextVisualRow(layout, 3, 3, 'down')
+    // Row 1 starts at idx 5 (after \n). visualToLogical(1, 3):
+    //   walk "中文": 中 width 2, cellsAcc=2. 文 width 2, would push
+    //   to 4 > 3. Land BEFORE 文 → charIdx = 5 + 1 (chars consumed) = 6.
+    expect(charIdx).toBe(6)
+  })
+
+  it('returns current charIdx unchanged when layout has no rows (width=0)', () => {
+    const layout = buildWrapLayout('hello', { width: 0 })
+    expect(nextVisualRow(layout, 3, 3, 'down').charIdx).toBe(3)
   })
 })
 
