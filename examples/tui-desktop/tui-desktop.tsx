@@ -71,6 +71,7 @@ function App(): React.ReactNode {
   })
 
   const [text, setText] = useState(INITIAL_TEXT)
+  const [editorOpen, setEditorOpen] = useState(true)
 
   // Center the editor horizontally on first paint. initialPos is
   // captured at Draggable mount and not re-applied on prop changes
@@ -88,33 +89,37 @@ function App(): React.ReactNode {
           <Text dim>drag · type · select · q to quit</Text>
         </Box>
         {/* Editor — black background so header text doesn't bleed
-            through if dragged over it. */}
-        <Draggable
-          initialPos={{ left: initialLeft, top: 1 }}
-          width={WINDOW_WIDTH}
-          height={WINDOW_HEIGHT}
-          borderStyle="single"
-          borderColor="gray"
-          backgroundColor="black"
-          flexDirection="column"
-        >
-          <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
-            <Text dim>scratch.md</Text>
-            <CloseButton onClose={exit} />
-          </Box>
-          <Box flexDirection="column" flexGrow={1} paddingX={1} paddingTop={1}>
-            <TextInput
-              value={text}
-              onChange={setText}
-              multiline
-              autoFocus
-              width={54}
-              height={11}
-              cursorStyle="bar"
-              cursorBlink
-            />
-          </Box>
-        </Draggable>
+            through if dragged over it. Close [×] hides this window
+            (sets editorOpen=false); the colored squares below stay
+            interactive. q / Ctrl+C still exits the whole app. */}
+        {editorOpen && (
+          <Draggable
+            initialPos={{ left: initialLeft, top: 1 }}
+            width={WINDOW_WIDTH}
+            height={WINDOW_HEIGHT}
+            borderStyle="single"
+            borderColor="gray"
+            backgroundColor="black"
+            flexDirection="column"
+          >
+            <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
+              <Text dim>scratch.md</Text>
+              <CloseButton onClose={() => setEditorOpen(false)} />
+            </Box>
+            <Box flexDirection="column" flexGrow={1} paddingX={1} paddingTop={1}>
+              <TextInput
+                value={text}
+                onChange={setText}
+                multiline
+                autoFocus
+                width={54}
+                height={11}
+                cursorStyle="bar"
+                cursorBlink
+              />
+            </Box>
+          </Draggable>
+        )}
         {/* Three solid colored squares — drag them around, click any
             one to raise above the others. Cascading initial positions
             so they overlap visually, the z-order is interactive. No
