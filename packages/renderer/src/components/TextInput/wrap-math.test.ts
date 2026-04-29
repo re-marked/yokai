@@ -938,11 +938,7 @@ describe('wrap hints (programmatic atomic spans)', () => {
       }
       // Pin the exact rows so a regression in either direction (over-
       // splitting OR over-merging into one row) shows up.
-      expect(layout.rows.map((r) => r.text)).toEqual([
-        'pre ',
-        'veryLongAtomicWord ',
-        'post',
-      ])
+      expect(layout.rows.map((r) => r.text)).toEqual(['pre ', 'veryLongAtomicWord ', 'post'])
     })
 
     it('word-mode atomic-span overflow at start of buffer (no prior safe break)', () => {
