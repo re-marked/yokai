@@ -151,7 +151,7 @@ describe('wrapByWords', () => {
 
     it('handles three-word wrapping at exact boundaries', () => {
       // "the quick fox" = 13. Width 5: "the " (4) fits, "q" pushes
-      // to 5, fits, "u" → 6, no whitespace break in row → wait no.
+      // to 5, fits, "u" → 6, break at lastBreak=4. Push "the ", row.
       // Walk: t(1) h(2) e(3) " "(4) lastBreak=4. q(5) fits. u(6)
       // > 5, break at lastBreak=4. Push "the ", row="quick"...
       //   q(1) u(2) i(3) c(4) k(5). Then " "(6) fits as ws past
@@ -208,19 +208,20 @@ describe('wrapByWords', () => {
       expect(result[0]).toBe('hello ')
     })
 
-    it('preserves leading whitespace as part of the first word (no break before content)', () => {
-      // "  hello" width 4 — leading whitespace must NOT be a break
-      // candidate. The whole "  hello" stays atomic until something
-      // forces a break.
-      // Walk: " "(1, no lastBreak — hasContent=false). " "(2, no
-      // lastBreak). h(3). e(4). l(5)>4, no lastBreak → char-wrap
-      // fallback: push "  he", row="l" w=1. l(2). o(3). End: push
-      // "llo". → ["  he", "llo"]
+    it('breaks at leading whitespace when overflow forces it (preserves word integrity)', () => {
+      // "  hello" width 4. Leading whitespace IS a break candidate —
+      // when "hello" overflows the row, wrap breaks at the last
+      // leading whitespace position instead of mid-word.
+      // Walk: " "(1, brk=1). " "(2, brk=2). h(3). e(4). l(5)>4, break
+      // at brk=2. Push "  ". row=overhang+"l" = "hel"+"l" = "hell" (4).
+      // o(5)>4. brk=-1 (reset by break). char-wrap. Push "hell".
+      // row="o". End. Push "o". → ["  ", "hell", "o"]
+      // Word integrity preferred over compact rows: "hello" stays
+      // intact across rows when possible. Earlier versions char-wrapped
+      // "hello" to "  he"/"llo" which looked broken.
       const result = wrapByWords('  hello', 4)
       expect(result.join('')).toBe('  hello')
-      // The first row should NOT be just whitespace — that'd mean we
-      // used leading ws as a break point.
-      expect(result[0]).not.toBe('  ')
+      expect(result[0]).toBe('  ')
     })
 
     it('handles multiple consecutive spaces preserved at break point', () => {
@@ -229,6 +230,10 @@ describe('wrapByWords', () => {
       // Walk: hello(5), " "(6, lastBreak=6), " "(7, lastBreak=7),
       // " "(8, lastBreak=8), w(9)>6, break at lastBreak=8 → push
       // "hello   ", row="world".
+      // Trailing whitespace stays on the row it terminates per HTML/CSS
+      // pre-wrap convention. The renderer's responsibility is to clip
+      // visible cells past width (no ellipsis) — overflow rows are
+      // cosmetic, not data corruption.
       expect(wrapByWords('hello   world', 6)).toEqual(['hello   ', 'world'])
     })
 

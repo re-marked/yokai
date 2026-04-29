@@ -18,13 +18,14 @@ import type { PasteEvent } from '../../events/paste-event.js'
 import { useClipboard } from '../../hooks/use-clipboard.js'
 import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
 import { LayoutEdge } from '../../layout/node.js'
+import { stringWidth } from '../../stringWidth.js'
 import type { Color } from '../../styles.js'
 import type { CursorStyle } from '../../termio/dec.js'
 import Box, { type Props as BoxProps } from '../Box.js'
 import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
 import { clipboardKeyAction } from './clipboard-action.js'
-import { scrollToKeepCaretVisible } from './scroll-math.js'
+import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
 import {
   type Action,
   type ReducerOptions,
@@ -33,7 +34,12 @@ import {
   reduce,
   selectionOrCaretRange,
 } from './state.js'
-import { type WrapLayout, buildWrapLayout } from './wrap-math.js'
+import {
+  type WordBoundaryMode,
+  type WrapHint,
+  type WrapLayout,
+  buildWrapLayout,
+} from './wrap-math.js'
 
 export type TextInputProps = Except<
   BoxProps,
@@ -59,6 +65,77 @@ export type TextInputProps = Except<
   /** Allow newlines in the buffer. Enter inserts a newline; Ctrl+Enter
    *  submits. Default false (single-line). */
   multiline?: boolean
+  /**
+   * Wrap mode.
+   *
+   * - `'soft'` — long lines wrap onto continuation rows. Word boundaries
+   *   used by default; tunable via `wordBoundaries` and `wrapHints`.
+   *   Hanging indent on wraps via `indentedWrap` (default on).
+   * - `'none'` — long lines DON'T wrap. Single-line scrolls horizontally
+   *   to keep the caret visible; multiline truncates each logical line
+   *   at the box's right edge AND scrolls horizontally as the caret
+   *   moves past the visible window.
+   *
+   * Default depends on `multiline`: `'soft'` when multiline (matches
+   * `<textarea>`'s wrap default); `'none'` when single-line (matches
+   * `<input>`, vim's default, every modern editor's "Name field"-style
+   * input). Pass `wrap` explicitly to override either way — for instance
+   * a single-line code-snippet field that should grow vertically can
+   * set `wrap='soft'`, and a multiline address field that should never
+   * wrap can set `wrap='none'`.
+   */
+  wrap?: 'soft' | 'none'
+  /**
+   * When `wrap='soft'`, continuation rows of a wrapped logical line
+   * visually align under the first non-whitespace character of the
+   * original line — vim's `breakindent`, VS Code's "wrap with
+   * indent." Default `true` (enabled), matching what every modern
+   * editor does for prose / list / quote / indented-code content.
+   *
+   * Set `false` for the unindented behavior (continuation rows start
+   * at column 0). Useful when the consumer wants raw column-0 wrap
+   * for terminal-style content like log lines.
+   *
+   * Threshold: indent only applies when the indent leaves at least
+   * width / 2 cells of content room — beyond that the indent gets
+   * abandoned automatically. No-op when `wrap='none'`.
+   */
+  indentedWrap?: boolean
+  /**
+   * Word-boundary detection mode for wrap break-points (only applies
+   * when `wrap='soft'`).
+   *
+   * - `'whitespace'` (default): wrap breaks only at standard
+   *   whitespace (space, tab). The simplest, fastest mode — fits
+   *   most prose / chat / form-field content.
+   * - `'identifier'`: also breaks at `_` / `-` boundaries
+   *   (snake_case, kebab-case) and at lowercase→uppercase
+   *   transitions (camelCase, PascalCase). Treats URLs
+   *   (`http(s)://...`) as atomic — never breaks inside them.
+   *   Tuned for code-like + CLI command content (slash commands
+   *   with flags, file paths, identifiers).
+   */
+  wordBoundaries?: WordBoundaryMode
+  /**
+   * Programmatic wrap hints — buffer-relative atomic spans that the
+   * wrap algorithm must NOT break inside. Useful for keeping
+   * semantically-atomic content together: mention chips (`@toast`),
+   * chit-id refs (`chit-abc-123`), inline code spans, etc.
+   *
+   * Hints intersect each logical line's range automatically (the
+   * wrap-math primitive clips to per-line ranges). Empty / inverted
+   * ranges (`end <= start`) are silently ignored.
+   *
+   * **Memoize the array reference.** This prop is in the layout
+   * useMemo's dep array — passing a fresh array every render forces
+   * a layout recompute on every render (O(N) over the buffer).
+   * `useMemo([dependencies])` it consumer-side, or hoist a stable
+   * reference, OR accept the recompute if the buffer is small.
+   *
+   * No-op when `wrap='none'` (no wrap, no break-points, no hints
+   * to honor).
+   */
+  wrapHints?: ReadonlyArray<WrapHint>
   /** Cap on buffer length in characters. Default unlimited. */
   maxLength?: number
   /** Render placeholder text dimmed when the buffer is empty. */
@@ -160,6 +237,10 @@ export default function TextInput({
   onSubmit,
   onCancel,
   multiline = false,
+  wrap,
+  indentedWrap = true,
+  wordBoundaries = 'whitespace',
+  wrapHints,
   maxLength,
   placeholder,
   password = false,
@@ -175,6 +256,11 @@ export default function TextInput({
   ...boxProps
 }: PropsWithChildren<TextInputProps>): React.ReactNode {
   const isControlled = value !== undefined
+  // Wrap mode default depends on multiline: 'soft' for textarea-style,
+  // 'none' for input-style. Single-line consumers who want vertical
+  // wrap can opt in via wrap='soft'; multiline consumers who want a
+  // single visible logical line per row can opt out via wrap='none'.
+  const effectiveWrap = wrap ?? (multiline ? 'soft' : 'none')
 
   // optsRef MUST be declared before useReducer. On a render that has
   // queued dispatches, useReducer drains them by calling the reducer
@@ -187,11 +273,17 @@ export default function TextInput({
   // re-renders-update-state-before-effects round trip. Width is updated
   // separately AFTER `inner` is declared (see the matching mutation in
   // the Scroll section) — `inner.width` isn't in scope yet here.
+  // Wrap-related options (indentedWrap, wordBoundaries, hints) MUST
+  // mirror the renderer's so visual-row Up/Down nav lands where the
+  // user sees the row break.
   optsRef.current = {
     multiline,
     maxLength,
     historyCap,
     width: optsRef.current.width,
+    indentedWrap,
+    wordBoundaries,
+    hints: wrapHints,
   }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
@@ -275,22 +367,34 @@ export default function TextInput({
     }
   })
   // Push the latest measured width into optsRef so the next dispatch's
-  // reducer call (visual-row navigation, post-C4) operates on the
-  // current layout. Lags by one frame on the very first render (yoga
-  // hasn't measured yet); the wrap-math primitive treats width=0 as
-  // "no layout, no rows" and visual-row nav falls back gracefully.
-  optsRef.current = { ...optsRef.current, width: inner.width }
+  // reducer call (visual-row navigation, C4) operates on the current
+  // layout. Use the same width regime as the render-side layout above
+  // — MAX_SAFE_INTEGER for wrap='none' (so the reducer's nextVisualRow
+  // sees one row per logical line and Up/Down behave as
+  // logical-line nav, matching what the user sees on screen).
+  optsRef.current = {
+    ...optsRef.current,
+    width: effectiveWrap === 'none' ? Number.MAX_SAFE_INTEGER : inner.width,
+  }
 
   // ── Wrap layout + visual cursor coords ─────────────────────────────
   //
-  // Build the soft-wrap layout from the current buffer and the
-  // measured inner width. The layout decomposes the value into VISUAL
-  // ROWS (one logical line may produce many rows when its cell width
-  // exceeds the budget) and provides bidirectional position maps:
-  // logicalToVisual for placing the cursor; visualToLogical for
-  // mapping clicks back to char indices.
+  // Build the layout from the current buffer + measured inner width.
+  // The layout decomposes the value into VISUAL ROWS (one logical line
+  // may produce many rows when its cell width exceeds the budget) and
+  // provides bidirectional position maps: logicalToVisual for placing
+  // the cursor; visualToLogical for mapping clicks back to char indices.
   //
-  // Width fallback strategy. Two distinct cases produce
+  // Two width regimes:
+  //
+  //   - `wrap === 'none'` — pass MAX_SAFE_INTEGER so no row ever wraps.
+  //     The layout becomes one row per logical line. Caret math still
+  //     works (cell column = sum of cells up to caret); h-scroll
+  //     handles horizontal viewport.
+  //   - `wrap === 'soft'` — pass measured inner.width. Long lines wrap
+  //     onto continuation rows.
+  //
+  // Width fallback strategy (soft-wrap only). Two distinct cases produce
   // `inner.width === 0`, and they need different handling:
   //
   //   1. First render before yoga has measured. No prior valid width —
@@ -313,10 +417,21 @@ export default function TextInput({
   //      doesn't re-render forever.
   const lastValidInnerWidth = useRef(80)
   if (inner.width > 0) lastValidInnerWidth.current = inner.width
-  const layoutWidth = inner.width > 0 ? inner.width : lastValidInnerWidth.current
+  const layoutWidth =
+    effectiveWrap === 'none'
+      ? Number.MAX_SAFE_INTEGER
+      : inner.width > 0
+        ? inner.width
+        : lastValidInnerWidth.current
   const layout = useMemo(
-    () => buildWrapLayout(state.value, { width: layoutWidth }),
-    [state.value, layoutWidth],
+    () =>
+      buildWrapLayout(state.value, {
+        width: layoutWidth,
+        indentedWrap,
+        wordBoundaries,
+        hints: wrapHints,
+      }),
+    [state.value, layoutWidth, indentedWrap, wordBoundaries, wrapHints],
   )
   // Caret in visual cell coords. `col` already includes any indent
   // decoration on continuation rows (display-col convention from
@@ -327,41 +442,31 @@ export default function TextInput({
 
   // ── Scroll: keep caret visible inside the visible window ───────────
   //
-  // scrollY is in VISUAL rows (was logical lines pre-soft-wrap).
-  // scrollX is retained for the future `wrap='none'` opt-in (E1) and
-  // stays at 0 in the soft-wrap default — rows wrap onto next-row
-  // instead of horizontally scrolling within a row. The setter is
-  // prefixed `_` because nothing writes it yet (E1 will rename back).
-  const [scrollX, _setScrollX] = useState(0)
+  // scrollY: visual rows. Always active when innerHeight is bounded.
+  // scrollX: cell columns. Only active when wrap='none' — soft-wrap
+  // doesn't h-scroll because rows wrap onto the next row instead. The
+  // cursor declaration subtracts both unconditionally; in soft-wrap
+  // mode scrollX stays at 0, so the math degenerates to the right
+  // value.
+  const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
 
-  // Adjust scrollY on every change that could shift the caret's
-  // visual row out of the visible window. Re-fires on:
-  //
-  //   - inner.height — the box's vertical content area changed (the
-  //     window the caret must fit inside grew or shrank).
-  //   - visual.row — the caret's visual position changed. This is
-  //     transitively driven by state.value (typing / pasting / undo),
-  //     state.caret (any caret-moving action), AND inner.width
-  //     (terminal/container resize → wrap layout rebuild → caret
-  //     visual position recomputes via logicalToVisual). One
-  //     dependency captures all three sources because `visual` is a
-  //     useMemo over (layout, state.caret) and `layout` is a useMemo
-  //     over (state.value, inner.width).
-  //   - layout.rows.length — the total row count changed. Catches the
-  //     edge where width changes but visual.row happens to stay the
-  //     same (e.g. caret on row 0, width grows so content needs
-  //     fewer rows): scrollY needs to clamp to the new max.
-  //   - scrollY — needed for the read-modify-write inside the effect.
+  // Re-scroll on every change that could shift the caret out of the
+  // visible window. See dep notes per-axis below.
   //
   // useEffect (not useLayoutEffect): the next paint reflects both the
   // new caret AND the new scroll in the same render — React batches
-  // the setScrollY here with the original cause.
+  // the setScrollX/Y here with the original cause.
   //
-  // First-frame note: `inner.height === 0` means yoga hasn't measured
-  // yet. Skip the re-scroll for one frame; the next render with a
-  // measured height triggers via the inner.height dep.
+  // First-frame note: `inner.height === 0` / `inner.width === 0` means
+  // yoga hasn't measured yet. Skip for one frame; the next render with
+  // a measured size triggers via the deps.
   useEffect(() => {
+    // Vertical: re-fires on inner.height (box vertical area changed),
+    // visual.row (caret's visual row changed — transitively driven by
+    // state.value / state.caret / inner.width through useMemos),
+    // layout.rows.length (catches the edge where width changes but
+    // visual.row stays the same), and scrollY (read-modify-write).
     if (inner.height > 0) {
       const next = scrollToKeepCaretVisible({
         scroll: scrollY,
@@ -371,7 +476,43 @@ export default function TextInput({
       })
       if (next !== scrollY) setScrollY(next)
     }
-  }, [inner.height, visual.row, layout.rows.length, scrollY])
+    // Horizontal: only when wrap='none'. caretPos = visual.col (in
+    // cells; layout.logicalToVisual returns display cells). contentSize
+    // is the current row's cell width — wrap='none' means one row per
+    // logical line, so this is the caret's logical line's width. Other
+    // logical lines may be longer and clip past the right edge in
+    // multiline mode (single shared scrollX); that's the wrap='none'
+    // multiline UX, matches vim's nowrap behavior.
+    if (effectiveWrap === 'none' && inner.width > 0) {
+      const currentRow = layout.rows[visual.row]
+      const rowWidth = currentRow ? stringWidth(currentRow.text) : 0
+      const next = scrollToKeepCaretVisible({
+        scroll: scrollX,
+        caretPos: visual.col,
+        windowSize: inner.width,
+        contentSize: Math.max(rowWidth, visual.col + 1),
+      })
+      if (next !== scrollX) setScrollX(next)
+    } else if (scrollX !== 0) {
+      // wrap mode left 'none' (toggled at runtime, OR width=0 first
+      // render). Soft-wrap doesn't h-scroll, but the cursor declaration
+      // and click handler still subtract / add scrollX unconditionally
+      // (degenerate to no-op when 0). A stale non-zero scrollX from the
+      // previous wrap='none' epoch would shift cursor and click target
+      // off the rendered text. Reset to keep them aligned.
+      setScrollX(0)
+    }
+  }, [
+    inner.height,
+    inner.width,
+    visual.row,
+    visual.col,
+    layout.rows,
+    layout.rows.length,
+    scrollX,
+    scrollY,
+    effectiveWrap,
+  ])
 
   // Subscribe to focus state via FocusContext. The earlier shortcut
   // `ref.current.focusManager?.activeElement === ref.current` was
@@ -415,9 +556,20 @@ export default function TextInput({
   // cursor at the box's outer top-left corner instead of at the
   // caret's actual cell. Visible immediately as a cursor "above" or
   // "to the left of" the text.
+  // Clamp visual.col to the rightmost in-box cell when the buffer
+  // position is past the rendered content (e.g. trailing whitespace
+  // beyond the row's nominal width). Trailing whitespace is invisible
+  // and clipped by the renderer; the cursor would otherwise land past
+  // the box's right border. Logical position stays in state.caret;
+  // this only affects visual placement. Wrap='none' uses scrollX to
+  // keep the caret in view, so the clamp only fires for soft-wrap.
+  const clampedVisualCol =
+    effectiveWrap === 'soft' && inner.width > 0 && visual.col >= inner.width
+      ? Math.max(0, inner.width - 1)
+      : visual.col
   const cursorRef = useDeclaredCursor({
     line: inner.offsetY + visual.row - scrollY,
-    column: inner.offsetX + visual.col - scrollX,
+    column: inner.offsetX + clampedVisualCol - scrollX,
     active: isFocused,
     style: cursorStyle,
     blink: cursorBlink,
@@ -588,10 +740,25 @@ export default function TextInput({
         passwordChar,
         selectionColor,
         placeholder,
+        scrollX,
         scrollY,
         innerHeight: inner.height,
+        innerWidth: inner.width,
+        wrap: effectiveWrap,
       }),
-    [state, layout, password, passwordChar, selectionColor, placeholder, scrollY, inner.height],
+    [
+      state,
+      layout,
+      password,
+      passwordChar,
+      selectionColor,
+      placeholder,
+      scrollX,
+      scrollY,
+      inner.height,
+      inner.width,
+      effectiveWrap,
+    ],
   )
 
   // Focus-aware border color. Extract idle borderColor from boxProps so
@@ -697,8 +864,20 @@ type RenderOpts = {
   passwordChar: string
   selectionColor: Color
   placeholder: string | undefined
+  /** Horizontal scroll offset (cells). Only non-zero when wrap='none'. */
+  scrollX: number
   scrollY: number
   innerHeight: number
+  /** Inner content width (cells, net of border + padding). Needed by
+   *  the multi-row selection renderer (wrap='soft') to compute
+   *  right-edge slack, AND by the per-row cell-slicing path
+   *  (wrap='none') to know how many cells to slice per row. */
+  innerWidth: number
+  /** Active wrap mode. `'soft'` uses the wrap layout's visual rows
+   *  with multi-row selection-stripe rendering. `'none'` renders one
+   *  row per logical line and cell-slices each row by `scrollX` for
+   *  horizontal scroll. */
+  wrap: 'soft' | 'none'
 }
 
 /** Mask one row's text with `passwordChar` repeated per code-point.
@@ -711,8 +890,27 @@ function maskRowText(rowText: string, password: boolean, passwordChar: string): 
 
 /** Render visual rows from the wrap layout, slicing each row's
  *  selection range and applying password masking + indent decoration.
+ *
+ *  Multi-row selection rendering: a selection that spans more than one
+ *  visual row paints as a CONTINUOUS STRIPE — partial-row segments at
+ *  the start/end fill the row's right-edge slack with selection bg,
+ *  and continuation rows get the same bg over their hanging-indent
+ *  decoration. Eye sees one highlighted region instead of a series of
+ *  disconnected per-row segments.
+ *
+ *  Two row-edge booleans drive the decoration:
+ *
+ *    - `indentBg`: selection started BEFORE this row's first char →
+ *      indent decoration cells get bg. Means the row is mid- or
+ *      end-of a multi-row selection (selection coming in from above).
+ *    - `rightSlackBg`: selection extends PAST this row's last char →
+ *      slack from row content's right edge to box's right edge gets
+ *      bg. Means selection continues onto the next row.
+ *
  *  Empty buffer renders the placeholder dimmed (single-row,
- *  truncate-end so a long placeholder doesn't itself wrap).
+ *  truncate-end so a long placeholder doesn't itself wrap). Empty
+ *  visual rows in a multi-row selection are NOT yet bg-decorated;
+ *  D3 adds that.
  *
  *  Per-row selection slicing uses UNMASKED row.text indices because
  *  row.startCharIdx / state.caret / state.selection are all buffer-
@@ -721,7 +919,17 @@ function maskRowText(rowText: string, password: boolean, passwordChar: string): 
  *  buffer) the slice may overshoot, so it's clamped to maskedText
  *  length defensively. */
 function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts): React.ReactNode {
-  const { password, passwordChar, selectionColor, placeholder, scrollY, innerHeight } = opts
+  const {
+    password,
+    passwordChar,
+    selectionColor,
+    placeholder,
+    scrollX,
+    scrollY,
+    innerHeight,
+    innerWidth,
+    wrap,
+  } = opts
 
   if (state.value === '' && placeholder) {
     return (
@@ -739,11 +947,106 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
   const visibleRows =
     innerHeight > 0 ? layout.rows.slice(scrollY, scrollY + innerHeight) : layout.rows
 
+  // wrap='none' branch: one row per logical line, cell-sliced by
+  // scrollX for horizontal scroll. Selection is rendered in-row only —
+  // multi-row selection stripe (right-edge / indent fill) doesn't
+  // apply because hanging-indent doesn't apply, and the row's right
+  // edge is past the visible window when content overflows. Same
+  // approximation the pre-soft-wrap renderer used for selection across
+  // a horizontally-scrolled wide char (selection cell math treats
+  // scroll offset as char-aligned).
+  if (wrap === 'none') {
+    return visibleRows.map((row, rowIdx) => {
+      const maskedText = maskRowText(row.text, password, passwordChar)
+      const visibleText =
+        innerWidth > 0 ? sliceRowByCells(maskedText, scrollX, innerWidth) : maskedText
+      const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
+      const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
+      // visStart / visEnd: selection range in the SLICED visible text.
+      // Subtract scrollX (cells) from char-relative localStart/End AND
+      // clamp to [0, visibleText.length]. Without the upper clamp, a
+      // selection that's entirely to the right of the horizontal
+      // viewport (selStart and selEnd both past scrollX + innerWidth)
+      // would still pass `visStart !== visEnd` and the renderer would
+      // fall into the selection branch, rendering a phantom
+      // highlighted space (the empty slice + `|| ' '` fallback).
+      // After clamping, off-screen selections collapse to
+      // `visStart === visEnd` and the plain-render branch fires.
+      // Cell math is char-aligned for ASCII content; off-by-N for
+      // wide chars at the boundary, same v1 limitation as the
+      // pre-soft-wrap renderer.
+      const visStart =
+        innerWidth > 0 ? clamp(localStart - scrollX, 0, visibleText.length) : localStart
+      const visEnd = innerWidth > 0 ? clamp(localEnd - scrollX, 0, visibleText.length) : localEnd
+
+      if (visStart === visEnd) {
+        return (
+          <Text
+            // biome-ignore lint/suspicious/noArrayIndexKey: see comment below
+            key={rowIdx}
+            wrap="truncate-end"
+          >
+            {visibleText || ' '}
+          </Text>
+        )
+      }
+
+      // Clamping ensures visStart < visEnd here, so the slice is
+      // guaranteed non-empty — no `|| ' '` fallback needed.
+      const before = visibleText.slice(0, visStart)
+      const sel = visibleText.slice(visStart, visEnd)
+      const after = visibleText.slice(visEnd)
+      return (
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: see comment below
+          key={rowIdx}
+          wrap="truncate-end"
+        >
+          {before}
+          <Text backgroundColor={selectionColor}>{sel}</Text>
+          {after}
+        </Text>
+      )
+    })
+  }
+
   // Walk visible rows, emitting per-row segments. Index-as-key is
   // correct here: rows have no stable identity (the buffer re-renders
   // on every keystroke), and a stable key per slot avoids unmount-on-
   // edit.
   return visibleRows.map((row, rowIdx) => {
+    // Empty visual row (from an empty logical line / consecutive \n).
+    // Renders as a single space — gives the row visual height so the
+    // caret can sit on it, AND fills it with selection bg if a
+    // multi-row selection range passes through this position. Without
+    // the bg, a selection that spans empty lines would appear visually
+    // broken (gaps between the highlighted content rows).
+    //
+    // Touched-by-selection condition for an empty row at position P:
+    // P falls inside the half-open range [selStart, selEnd). The
+    // `selStart < selEnd` guard excludes a degenerate caret-only
+    // "selection" (anchor === focus) from being treated as a stripe.
+    if (row.text === '') {
+      const P = row.startCharIdx
+      const touchesSelection = selStart < selEnd && selStart <= P && P < selEnd
+      // Pad empty rows to the full inner width so every cell inside
+      // the box is explicitly written. Otherwise cells past the single
+      // placeholder space stay at terminal background, which can look
+      // visually inconsistent inside the box. Falls back to a single
+      // space when innerWidth isn't measured yet (first render).
+      const fillCells = innerWidth > 0 ? Math.max(1, innerWidth) : 1
+      return (
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
+          key={rowIdx}
+          wrap="truncate-end"
+          backgroundColor={touchesSelection ? selectionColor : undefined}
+        >
+          {' '.repeat(fillCells)}
+        </Text>
+      )
+    }
+
     const maskedText = maskRowText(row.text, password, passwordChar)
     // Hanging-indent decoration: spaces prepended to continuation rows
     // so they visually align under the first non-whitespace char of
@@ -752,43 +1055,92 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
     // row.text already.
     const indent = row.indentCells > 0 ? ' '.repeat(row.indentCells) : ''
 
+    // Clip the masked text to fit available content cells (innerWidth
+    // minus indent decoration). Wrap-math allows trailing whitespace
+    // to overflow the row's nominal width (HTML/CSS pre-wrap convention
+    // — spaces are visual nothing and shouldn't reflow surrounding
+    // content as the user types more chars). Clipping here prevents
+    // the rendering Text's truncate-end from triggering on what's
+    // actually invisible whitespace; without it, every row that ends
+    // with a trailing space at the wrap boundary shows an ellipsis on
+    // an otherwise clean wrap.
+    const maxContentCells =
+      innerWidth > 0 ? Math.max(0, innerWidth - row.indentCells) : Number.MAX_SAFE_INTEGER
+    const visibleMaskedText =
+      innerWidth > 0 && stringWidth(maskedText) > maxContentCells
+        ? sliceRowByCells(maskedText, 0, maxContentCells)
+        : maskedText
+    // Trailing pad: always render full-width rows so every cell inside
+    // the box is explicitly written (as a space char). Without this,
+    // cells past row content stay at terminal background — visually
+    // can look like inconsistent "random spaces" against the box's
+    // interior, especially when the box is much wider than the row's
+    // content. Padding makes the rendered area visually uniform.
+    const trailingPad =
+      innerWidth > 0 ? Math.max(0, maxContentCells - stringWidth(visibleMaskedText)) : 0
+    const trailingPadStr = trailingPad > 0 ? ' '.repeat(trailingPad) : ''
+
     // Selection slice in unmasked-row-text indices.
     const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
     const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
+    const hasInRowSelection = localStart < localEnd
 
-    if (localStart === localEnd) {
-      // No selection on this row — render plain. The `|| ' '` ensures
-      // empty visual rows (zero-cell rows for empty logical lines) get
-      // a single space so the row has height 1; the caret can land on
-      // it. For non-empty content the indent + masked text is used.
+    if (!hasInRowSelection) {
+      // No selection on this row — render plain. Padded to full width.
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
           key={rowIdx}
           wrap="truncate-end"
         >
-          {indent + maskedText || ' '}
+          {indent + visibleMaskedText + trailingPadStr}
         </Text>
       )
     }
 
-    // Defensive clamp for the password+non-ASCII edge: mask length can
-    // be < row.text length when the buffer has multi-UTF-16-unit graphemes.
-    const sliceStart = Math.min(localStart, maskedText.length)
-    const sliceEnd = Math.min(localEnd, maskedText.length)
-    const before = maskedText.slice(0, sliceStart)
-    const sel = maskedText.slice(sliceStart, sliceEnd) || ' '
-    const after = maskedText.slice(sliceEnd)
+    // Selection decoration. Each row paints as: [indent (maybe bg)]
+    // [before][sel + slack (bg)][after][pad]. The indent gets bg only
+    // when selection extended from the row above (selStart strictly
+    // less than this row's start); the right-slack gets bg when
+    // selection reaches OR extends past this row's end position. The
+    // `>=` (vs `>`) handles the case where the user dragged through
+    // empty cells past content end — selection clamps to
+    // row.endCharIdx (per layout.visualToLogical), but visually the
+    // highlight should still fill the slack so it's clear what the
+    // user dragged over. Matches VS Code / Sublime behavior.
+    //
+    // The trailing pad goes EITHER inside the bg slack (when selection
+    // extends to row end → trailingPadStr fills with bg as part of
+    // slack) OR after the after segment (when selection is contained
+    // within content → trailingPadStr fills with no bg as final pad).
+    // Either way the rendered row is full-width.
+    const indentBg = selStart < row.startCharIdx
+    const rightSlackBg = selEnd >= row.endCharIdx
+    const slackChars = rightSlackBg ? trailingPadStr : ''
+    const trailingNoBg = rightSlackBg ? '' : trailingPadStr
+
+    // Defensive clamp for the password+non-ASCII edge AND for the
+    // trailing-whitespace clip above: visibleMaskedText length can be
+    // < unmasked-row length, so localStart/localEnd may overshoot.
+    const sliceStart = Math.min(localStart, visibleMaskedText.length)
+    const sliceEnd = Math.min(localEnd, visibleMaskedText.length)
+    const before = visibleMaskedText.slice(0, sliceStart)
+    const sel = visibleMaskedText.slice(sliceStart, sliceEnd) || ' '
+    const after = visibleMaskedText.slice(sliceEnd)
     return (
       <Text
         // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
         key={rowIdx}
         wrap="truncate-end"
       >
-        {indent}
+        {indentBg ? <Text backgroundColor={selectionColor}>{indent}</Text> : indent}
         {before}
-        <Text backgroundColor={selectionColor}>{sel}</Text>
+        <Text backgroundColor={selectionColor}>
+          {sel}
+          {slackChars}
+        </Text>
         {after}
+        {trailingNoBg}
       </Text>
     )
   })

@@ -399,15 +399,36 @@ export function wrapByWords(
     const absPosBefore = rowAbsStart + row.length
 
     if (breakable) {
-      // Whitespace always fits past width (invisible at boundary).
+      // Whitespace always fits past width — trailing whitespace stays
+      // on the row it terminates rather than wrapping onto a new row.
+      // Matches HTML/CSS pre-wrap convention. The renderer side clips
+      // the visible cells to box width so trailing whitespace past
+      // width is invisible rather than triggering an ellipsis.
+      //
+      // Why this matters for UX: when the user types text in a field
+      // and content wraps, the trailing space between the last word
+      // and the wrapped word stays on the previous row rather than
+      // jumping to the start of the new row as more characters are
+      // added. Spaces are visual nothing — they shouldn't reflow
+      // surrounding content.
+      //
+      // Whitespace is recorded as a HARD break candidate regardless of
+      // hasContent. Earlier versions guarded with `hasContent` to keep
+      // leading-whitespace-+-first-word atomic (so '  hello' stays as
+      // one row even when it'd overflow), but that produced ugly mid-
+      // word char-wrap when the row really did overflow ('      app
+      // ban' at width 6 broke 'app' into 'a'+'p'+'p' instead of
+      // wrapping after the leading spaces). Without the guard, leading
+      // whitespace becomes a break point ONLY when overflow forces it
+      // — fitting rows still keep leading whitespace + first word
+      // together (no overflow → brk never used).
+      //
+      // Atomic-span exception: still skip recording when inside a
+      // wrap hint range — consumers explicitly bound those positions
+      // together.
       row += segment
       rowWidth += w
-      // Record whitespace as a HARD break candidate UNLESS it's
-      // inside a caller-supplied atomic span. Inside-an-atomic-span
-      // means the consumer explicitly bound this range together
-      // (e.g. "Mr. Smith" via wrap hint); the space between Mr. and
-      // Smith mustn't be used as a break point.
-      if (hasContent && !isInsideRange(allAtomicSpans, absPosBefore)) {
+      if (!isInsideRange(allAtomicSpans, absPosBefore)) {
         lastBreakIdx = row.length
         lastBreakIsHard = true
       }
