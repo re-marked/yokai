@@ -963,11 +963,21 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
       const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
       const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
       // visStart / visEnd: selection range in the SLICED visible text.
-      // Subtract scrollX (cells) from char-relative localStart/End —
-      // identity for ASCII content; off-by-N for wide chars at the
-      // boundary, same v1 limitation as the old renderer.
-      const visStart = innerWidth > 0 ? Math.max(0, localStart - scrollX) : localStart
-      const visEnd = innerWidth > 0 ? Math.max(0, localEnd - scrollX) : localEnd
+      // Subtract scrollX (cells) from char-relative localStart/End AND
+      // clamp to [0, visibleText.length]. Without the upper clamp, a
+      // selection that's entirely to the right of the horizontal
+      // viewport (selStart and selEnd both past scrollX + innerWidth)
+      // would still pass `visStart !== visEnd` and the renderer would
+      // fall into the selection branch, rendering a phantom
+      // highlighted space (the empty slice + `|| ' '` fallback).
+      // After clamping, off-screen selections collapse to
+      // `visStart === visEnd` and the plain-render branch fires.
+      // Cell math is char-aligned for ASCII content; off-by-N for
+      // wide chars at the boundary, same v1 limitation as the
+      // pre-soft-wrap renderer.
+      const visStart =
+        innerWidth > 0 ? clamp(localStart - scrollX, 0, visibleText.length) : localStart
+      const visEnd = innerWidth > 0 ? clamp(localEnd - scrollX, 0, visibleText.length) : localEnd
 
       if (visStart === visEnd) {
         return (
@@ -981,8 +991,10 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
         )
       }
 
+      // Clamping ensures visStart < visEnd here, so the slice is
+      // guaranteed non-empty — no `|| ' '` fallback needed.
       const before = visibleText.slice(0, visStart)
-      const sel = visibleText.slice(visStart, visEnd) || ' '
+      const sel = visibleText.slice(visStart, visEnd)
       const after = visibleText.slice(visEnd)
       return (
         <Text
