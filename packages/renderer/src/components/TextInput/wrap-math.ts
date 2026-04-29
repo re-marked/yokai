@@ -143,6 +143,32 @@ function isBreakableWhitespace(grapheme: string): boolean {
  */
 export type WordBoundaryMode = 'whitespace' | 'identifier'
 
+/**
+ * A consumer-supplied wrap hint marks a buffer range where the wrap
+ * algorithm should NOT break. Used to keep semantically-atomic
+ * content together — mention chips (`@toast`), chit-id refs
+ * (`chit-abc-123`), code spans, etc.
+ *
+ * Hints are buffer-relative: `start` and `end` are char indices into
+ * the full TextInput value, not into any per-line slice. The wrap
+ * layout intersects hints with each logical line's range
+ * automatically. Empty / inverted ranges (`end <= start`) are
+ * silently ignored.
+ *
+ * `joinWith`: the field is reserved for inserting a glyph at the
+ * forced break point when an unbreakable span is wider than `width`
+ * (e.g. `'-'` to render a soft hyphen inside an over-wide identifier).
+ * NOT IMPLEMENTED in this PR — requires renderer-side glyph injection
+ * outside the wrap-math layer; tracked for the soft-wrap follow-up.
+ * The field is on the type so consumers can wire it now and start
+ * benefiting once the render integration lands, with no breaking change.
+ */
+export type WrapHint = {
+  start: number
+  end: number
+  joinWith?: string
+}
+
 // URL detection regex — scans a logical line for spans that should
 // be treated as atomic (never broken inside). `\S+` captures up to
 // the next whitespace; conservative but matches what users mean by
@@ -261,13 +287,21 @@ export function wrapByWords(
   text: string,
   width: number,
   boundaries: WordBoundaryMode = 'whitespace',
+  /** Caller-supplied atomic spans (line-relative) — positions inside
+   *  these ranges are NEVER break candidates. Combined with URL
+   *  detection in identifier mode. Pass `[]` (or omit) for no hints. */
+  atomicSpans: ReadonlyArray<readonly [number, number]> = [],
 ): string[] {
   if (width <= 0) return []
   if (text.length === 0) return []
 
   // Identifier mode: precompute URL atomic spans up front. Cheaper
   // than a regex.test per grapheme, and most lines have zero URLs.
+  // Combine with caller-supplied atomic spans (from wrap hints) so
+  // the avoid check is one isInsideRange call per grapheme.
   const urlRanges = boundaries === 'identifier' ? findUrlRanges(text) : []
+  const allAtomicSpans: ReadonlyArray<readonly [number, number]> =
+    atomicSpans.length === 0 ? urlRanges : [...urlRanges, ...atomicSpans]
 
   const rows: string[] = []
   let row = ''
@@ -305,9 +339,12 @@ export function wrapByWords(
       // Whitespace always fits past width (invisible at boundary).
       row += segment
       rowWidth += w
-      if (hasContent) {
-        // Whitespace gives us a HARD break candidate — overrides any
-        // earlier soft 'preferred' candidate.
+      // Record whitespace as a HARD break candidate UNLESS it's
+      // inside a caller-supplied atomic span. Inside-an-atomic-span
+      // means the consumer explicitly bound this range together
+      // (e.g. "Mr. Smith" via wrap hint); the space between Mr. and
+      // Smith mustn't be used as a break point.
+      if (hasContent && !isInsideRange(allAtomicSpans, absPosBefore)) {
         lastBreakIdx = row.length
         lastBreakIsHard = true
       }
@@ -318,12 +355,10 @@ export function wrapByWords(
     // Identifier-mode soft break check: is the position BEFORE the
     // current grapheme a preferred break? If so, record it (but only
     // if no harder break is already known later in the row).
+    // Atomic-span check is inside classifyIdentifierBoundary — passes
+    // 'avoid' which we skip below.
     if (boundaries === 'identifier' && hasContent && prevChar !== undefined) {
-      const kind = classifyIdentifierBoundary(prevChar, segment[0], absPosBefore, urlRanges)
-      // 'break' is handled by the whitespace branch above; here we
-      // only care about 'preferred'. 'avoid' explicitly suppresses
-      // any candidate — but since we only RECORD candidates here
-      // (not overwrite), we just skip without resetting.
+      const kind = classifyIdentifierBoundary(prevChar, segment[0], absPosBefore, allAtomicSpans)
       if (kind === 'preferred' && !lastBreakIsHard) {
         lastBreakIdx = row.length
       }
@@ -415,6 +450,9 @@ export type WrapOptions = {
   /** Word boundary detection mode. Only used when `wrap === 'word'`.
    *  Default `'whitespace'`. See `WordBoundaryMode` for details. */
   wordBoundaries?: WordBoundaryMode
+  /** Programmatic wrap hints — buffer-relative atomic spans the
+   *  wrap algorithm must NOT break inside. See `WrapHint`. */
+  hints?: ReadonlyArray<WrapHint>
 }
 
 /**
@@ -434,7 +472,7 @@ export type WrapOptions = {
  * crash.
  */
 export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
-  const { width, wrap = 'word', wordBoundaries = 'whitespace' } = opts
+  const { width, wrap = 'word', wordBoundaries = 'whitespace', hints } = opts
   if (width <= 0) {
     return {
       rows: [],
@@ -443,10 +481,14 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
     }
   }
 
-  const wrapper =
-    wrap === 'char'
-      ? (line: string, w: number) => wrapByCells(line, w)
-      : (line: string, w: number) => wrapByWords(line, w, wordBoundaries)
+  // Normalize hints once: drop empty/inverted ranges; sort by start
+  // for predictable intersection scans. Per-line slicing happens
+  // inside the loop (cheap — we have at most a few hints typically).
+  const normalizedHints: ReadonlyArray<WrapHint> = (hints ?? [])
+    .filter((h) => h.end > h.start)
+    .slice()
+    .sort((a, b) => a.start - b.start)
+
   const logicalLines = value.split('\n')
   const rows: VisualRow[] = []
   // Walking pointer into the buffer. Advances by row.text.length per
@@ -466,7 +508,24 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
         isWrapContinuation: false,
       })
     } else {
-      const wrapped = wrapper(line, width)
+      // Translate buffer-relative hints into line-relative atomic
+      // spans for wrapByWords. A hint that overlaps this line gets
+      // clipped to the line's range; hints entirely outside are
+      // skipped.
+      const lineStart = bufferPos
+      const lineEnd = bufferPos + line.length
+      const lineAtomicSpans: Array<readonly [number, number]> = []
+      for (const h of normalizedHints) {
+        if (h.end <= lineStart) continue // before this line
+        if (h.start >= lineEnd) break // after this line (sorted, so no later overlap either)
+        const spanStart = Math.max(0, h.start - lineStart)
+        const spanEnd = Math.min(line.length, h.end - lineStart)
+        if (spanEnd > spanStart) lineAtomicSpans.push([spanStart, spanEnd] as const)
+      }
+      const wrapped =
+        wrap === 'char'
+          ? wrapByCells(line, width)
+          : wrapByWords(line, width, wordBoundaries, lineAtomicSpans)
       // wrapByWords/wrapByCells return [] for empty input; we
       // already handled that above. For non-empty input they always
       // return at least one row.
