@@ -908,6 +908,56 @@ describe('wrap hints (programmatic atomic spans)', () => {
       }
     })
 
+    it('word-mode atomic-span overflow when span exceeds width (regression)', () => {
+      // Symmetric coverage to char-mode: word-wrap must also honor the
+      // atomic-span contract when the span is wider than `width`. Before
+      // the fix, word-mode hit overflow inside the hint with no break
+      // candidate and char-wrapped through the span (splitting at idx 14).
+      //
+      // Layout BEFORE fix (broken):
+      //   row 0: 'pre '
+      //   row 1: 'veryLongAt'   ← split inside hint at idx 14
+      //   row 2: 'omicWord '
+      //   row 3: 'post'
+      //
+      // Layout AFTER fix:
+      //   row 0: 'pre '
+      //   row 1: 'veryLongAtomicWord '  ← span stays atomic, accepts overflow
+      //   row 2: 'post'
+      const input = 'pre veryLongAtomicWord post'
+      const layout = buildWrapLayout(input, {
+        width: 10,
+        hints: [{ start: 4, end: 22 }], // 'veryLongAtomicWord'
+      })
+      // Rejoin invariant.
+      expect(layout.rows.map((r) => r.text).join('')).toBe(input)
+      // No row's break point lands strictly inside the hint range.
+      for (const row of layout.rows) {
+        const splitsHint = row.endCharIdx > 4 && row.endCharIdx < 22
+        expect(splitsHint).toBe(false)
+      }
+      // Pin the exact rows so a regression in either direction (over-
+      // splitting OR over-merging into one row) shows up.
+      expect(layout.rows.map((r) => r.text)).toEqual(['pre ', 'veryLongAtomicWord ', 'post'])
+    })
+
+    it('word-mode atomic-span overflow at start of buffer (no prior safe break)', () => {
+      // Edge case: span starts at idx 0, so there is literally NO safe
+      // break before it. The deferred-wrap branch must still terminate
+      // (just emits the over-wide span on row 0).
+      const input = 'veryLongAtomicWord post'
+      const layout = buildWrapLayout(input, {
+        width: 10,
+        hints: [{ start: 0, end: 18 }], // 'veryLongAtomicWord'
+      })
+      expect(layout.rows.map((r) => r.text).join('')).toBe(input)
+      for (const row of layout.rows) {
+        const splitsHint = row.endCharIdx > 0 && row.endCharIdx < 18
+        expect(splitsHint).toBe(false)
+      }
+      expect(layout.rows.map((r) => r.text)).toEqual(['veryLongAtomicWord ', 'post'])
+    })
+
     it('joinWith field is accepted but not yet active (deferred to follow-up)', () => {
       // The TYPE accepts joinWith; the implementation ignores it for
       // this PR (renderer-side glyph injection comes later). Verify
