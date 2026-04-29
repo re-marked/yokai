@@ -143,6 +143,79 @@ To override: pass `wrap='none'` on a multiline input to disable wrapping (trunca
 - **Preferred column.** When you press ↓ from a wide row, the column is captured. Subsequent ↓ presses preserve that column even when passing through SHORTER rows that clamp the caret to row end. The first horizontal move (←/→/Home/End/etc.) or any edit resets the captured column.
 - **Home / End** still operate on LOGICAL line boundaries — Home goes to the start of the current logical line (which may be on an earlier visual row if you're on a continuation).
 
+## Advanced wrap control
+
+Three props tune how soft-wrap decides where to break.
+
+### `indentedWrap` (boolean, default `true`)
+
+Hanging indent: when a logical line begins with leading whitespace, continuation rows are decorated with the same indent so wrapped content aligns under the first non-whitespace char of the original line. Mirrors vim's `breakindent`.
+
+```
+*  This is a long bulleted item that wraps onto a continuation row,
+   and the continuation aligns under "This" instead of column 0.
+```
+
+**Threshold.** The indent must leave at least `width / 2` cells of usable content per row. If not (very narrow box or very deep indent), the indent decoration is omitted on continuation rows for that line — graceful degrade rather than producing 1-char-wide rows.
+
+**Tab caveat.** Tab-only indent does NOT trigger hanging indent. `stringWidth` treats `\t` as 0 cells (no width metric available without a configured `tabWidth` — see [Deferred](#deferred)). Mix tab + space and the space portion still drives the indent.
+
+Pass `indentedWrap={false}` to disable globally — continuation rows start at column 0 regardless of leading whitespace.
+
+### `wordBoundaries` (`'whitespace' | 'identifier'`, default `'whitespace'`)
+
+In `'whitespace'` mode, wrap math breaks only at whitespace. In `'identifier'` mode, additional break candidates open up for identifier-shaped tokens:
+
+| Pattern | Break preference |
+|---------|------------------|
+| `snake_case` | break AFTER `_` |
+| `kebab-case` | break AFTER `-` |
+| `camelCase` / `PascalCase` | break BEFORE an uppercase that follows lowercase |
+| URL (`https://…`, `http://…`) | atomic — never break inside |
+
+Whitespace breaks always beat identifier breaks at the same row-end (a hard break is preferred over a preferred break). Reach for `'identifier'` on fields where users type slash commands, identifier names, file paths, or URLs — content that benefits from breaking at semantic boundaries when it overflows instead of mid-token.
+
+```tsx
+<TextInput
+  multiline
+  wordBoundaries="identifier"
+  defaultValue="/sling --target=backend-engineer --link=https://github.com/foo/bar"
+/>
+```
+
+### `wrapHints` (`ReadonlyArray<WrapHint>`, optional)
+
+Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Use for things a parser knows about: mention chips, rich-text tokens, code identifiers, file paths the consumer wants kept whole regardless of boundary heuristics.
+
+```tsx
+import { type WrapHint } from '@yokai-tui/renderer'
+
+const hints = useMemo<ReadonlyArray<WrapHint>>(
+  () => [
+    { start: 0, end: 6 },    // @toast
+    { start: 11, end: 23 },  // chit-abc-123
+  ],
+  [],
+)
+
+<TextInput value={value} onChange={setValue} multiline wrapHints={hints} />
+```
+
+**Memoize the array reference.** `wrapHints` participates in the layout's `useMemo` deps. Passing a fresh array every render forces a layout recompute even when the buffer didn't change. Use `useMemo` (or a ref-stable derive) and let your hint contents change only when the buffer does.
+
+**Span > width.** If a hinted span is wider than the inner cell width, it overflows on its own row rather than splitting — same contract URL detection in `'identifier'` mode follows. The renderer truncates the visible portion at row width; the buffer is intact.
+
+**Hint indices are buffer-relative.** A hint covering `chit-abc-123` at idx 11-23 stops being meaningful after the user inserts characters before idx 11. In a real app, derive hints from a parser running on `state.value` — don't hardcode against the initial value.
+
+The `WrapHint` type accepts an optional `joinWith?: string` field, but it's reserved and not yet implemented (renderer-side glyph injection at wrap continuations — coming in a follow-up).
+
+### Deferred
+
+These are documented gaps, not bugs:
+
+- **`joinWith` on hints** — renderer-side glyph injection at wrap continuations (e.g., showing a `↪` at the start of a wrapped row inside a hint). The type field is accepted but ignored.
+- **Configurable `tabWidth`** — tabs currently report 0 cells via `stringWidth`. A future option would let consumers pick a tab width for measurement (and unblock tab-only hanging indent).
+
 ## Scrolling
 
 - **Single-line** (or multiline with `wrap='none'`): when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
