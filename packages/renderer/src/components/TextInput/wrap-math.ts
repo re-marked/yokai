@@ -51,16 +51,39 @@ import { stringWidth } from '../../stringWidth.js'
  *     normalizes input through React's controlled value before this is
  *     called, so leading orphans are vanishingly rare in practice.
  */
-export function wrapByCells(text: string, width: number): string[] {
+export function wrapByCells(
+  text: string,
+  width: number,
+  /** Optional atomic spans (line-relative). When provided, wrap
+   *  decisions never break INSIDE a span — if normal char-wrap would
+   *  land inside, the row is rolled back to the last safe (outside-
+   *  span) break point and the span moves to the next row. If the
+   *  span itself is wider than `width`, it overflows on its own row(s)
+   *  rather than being split. Same contract `wrapByWords` honors —
+   *  required for `WrapHint`s to behave consistently in both wrap
+   *  modes. */
+  atomicSpans: ReadonlyArray<readonly [number, number]> = [],
+): string[] {
   if (width <= 0) return []
   if (text.length === 0) return []
 
   const rows: string[] = []
   let currentRow = ''
   let currentWidth = 0
+  // Char-index within `currentRow` of the last position that's
+  // OUTSIDE all atomic spans — i.e., a position where breaking is
+  // allowed. Updated each time we add a grapheme that lands outside
+  // any span. Used as the rollback target when we need to break but
+  // the natural break-point lies inside a span.
+  let lastSafeBreakIdx = 0
+  // Walking pointer — `text`-absolute char index where the current
+  // row begins. Translates row-internal positions to span-absolute
+  // for the inside-range check.
+  let rowAbsStart = 0
 
   for (const { segment } of getGraphemeSegmenter().segment(text)) {
     const w = stringWidth(segment)
+    const absPosBefore = rowAbsStart + currentRow.length
 
     // Zero-width grapheme — attach to current row without advancing
     // the cell counter. Combining marks (̃ ̀ ́), ZWJ (‍), variation
@@ -79,25 +102,65 @@ export function wrapByCells(text: string, width: number): string[] {
     // still see + edit the character.
     if (w > width) {
       if (currentRow.length > 0) {
+        rowAbsStart += currentRow.length
         rows.push(currentRow)
       }
       rows.push(segment)
+      rowAbsStart += segment.length
       currentRow = ''
       currentWidth = 0
+      lastSafeBreakIdx = 0
       continue
     }
 
-    // Adding this grapheme would overflow → start a new row.
+    // Adding this grapheme would overflow → break.
     if (currentWidth + w > width) {
+      // If the natural break point (current position, before adding
+      // this grapheme) is inside an atomic span, roll back to the
+      // last safe break (outside any span). If there's none, accept
+      // the overflow — the span is wider than width and there's no
+      // clean way to split it. `lastSafeBreakIdx === 0` means either
+      // the row started inside a span OR no safe break was recorded;
+      // in both cases we just keep adding (the span will continue
+      // overflowing).
+      const breakingInsideSpan = isInsideRange(atomicSpans, absPosBefore)
+      if (breakingInsideSpan && lastSafeBreakIdx > 0) {
+        // Roll back — push everything before the span, carry the
+        // partial-span overhang to the next row plus the current
+        // grapheme.
+        const pushed = currentRow.slice(0, lastSafeBreakIdx)
+        const overhang = currentRow.slice(lastSafeBreakIdx)
+        rows.push(pushed)
+        rowAbsStart += pushed.length
+        currentRow = overhang + segment
+        currentWidth = stringWidth(currentRow)
+        lastSafeBreakIdx = 0
+        continue
+      }
+      if (breakingInsideSpan) {
+        // No safe break — accept overflow. The whole span (wider
+        // than width) ends up on its own row(s).
+        currentRow += segment
+        currentWidth += w
+        continue
+      }
+      // Normal break: position is outside any span.
+      rowAbsStart += currentRow.length
       rows.push(currentRow)
       currentRow = segment
       currentWidth = w
+      lastSafeBreakIdx = 0
       continue
     }
 
-    // Fits in the current row.
+    // Fits in the current row. Record this as a safe break candidate
+    // if the position AFTER this grapheme is outside any span (the
+    // position-after is where a future break would land).
     currentRow += segment
     currentWidth += w
+    if (atomicSpans.length === 0 || !isInsideRange(atomicSpans, rowAbsStart + currentRow.length)) {
+      lastSafeBreakIdx = currentRow.length
+    }
   }
 
   if (currentRow.length > 0) {
@@ -461,18 +524,28 @@ function detectLeadingIndent(line: string): { prefix: string; cells: number } {
 }
 
 /** Output of `buildWrapLayout`. The `rows` array is the rendering
- *  source-of-truth; the two map functions handle caret positioning. */
+ *  source-of-truth; the two map functions handle caret positioning.
+ *
+ *  **Column convention (both maps).** Columns are TRUE DISPLAY CELLS
+ *  — they include any `indentCells` rendered as a leading prefix on
+ *  continuation rows. So a caller can pass / receive cell coordinates
+ *  identical to what's painted on the screen, no manual offset
+ *  arithmetic needed. The functions add / subtract `indentCells`
+ *  internally based on the row's metadata. */
 export type WrapLayout = {
   readonly rows: ReadonlyArray<VisualRow>
   /** Translate a buffer char index to (visualRow, visualCol). The
-   *  column is in CELLS (wide chars count as 2). At a wrap boundary
+   *  column is in DISPLAY CELLS — already includes the row's
+   *  `indentCells` for continuation rows. At a wrap boundary
    *  (charIdx is the start of a continuation row), returns the
    *  START of the new row, not the end of the previous — visually
    *  clearer to the user where the caret is. */
   readonly logicalToVisual: (charIdx: number) => { row: number; col: number }
   /** Translate a visual (row, col) cell coordinate back to a buffer
-   *  char index. Used by click-to-position. Clamps `col` to the
-   *  row's content if the click landed past the row's last char. */
+   *  char index. `col` is in DISPLAY CELLS — clicks that land inside
+   *  a continuation row's indent decoration (col < `indentCells`)
+   *  snap to the start of the row's content. Used by
+   *  click-to-position. Clamps past-end col to row.endCharIdx. */
   readonly visualToLogical: (row: number, col: number) => number
 }
 
@@ -607,7 +680,7 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
 
       const wrapped =
         wrap === 'char'
-          ? wrapByCells(contentLine, contentWidth)
+          ? wrapByCells(contentLine, contentWidth, contentSpans)
           : wrapByWords(contentLine, contentWidth, wordBoundaries, contentSpans)
 
       // Edge case: all-whitespace line. detectLeadingIndent consumes
@@ -671,7 +744,7 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
     if (charIdx >= lastRow.endCharIdx) {
       return {
         row: rows.length - 1,
-        col: cellsBefore(lastRow.text, charIdx - lastRow.startCharIdx),
+        col: lastRow.indentCells + cellsBefore(lastRow.text, charIdx - lastRow.startCharIdx),
       }
     }
 
@@ -693,29 +766,41 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
         ) {
           continue
         }
-        return { row: i, col: cellsBefore(r.text, charIdx - r.startCharIdx) }
+        // Display col = indent decoration + text-internal col.
+        return {
+          row: i,
+          col: r.indentCells + cellsBefore(r.text, charIdx - r.startCharIdx),
+        }
       }
     }
     // Defensive — shouldn't be reachable given the clamps above.
-    return { row: rows.length - 1, col: cellsBefore(lastRow.text, lastRow.text.length) }
+    return {
+      row: rows.length - 1,
+      col: lastRow.indentCells + cellsBefore(lastRow.text, lastRow.text.length),
+    }
   }
 
   const visualToLogical = (row: number, col: number): number => {
     if (rows.length === 0) return 0
     const r = rows[Math.max(0, Math.min(row, rows.length - 1))]!
-    if (col <= 0) return r.startCharIdx
-    // Walk the row, sum cells until we reach `col`.
+    // Strip the indent decoration from `col` to get a text-internal
+    // column. A click that lands inside the indent (col < indentCells)
+    // maps to the row's content start — semantically "user clicked
+    // before any actual character of this row."
+    const textCol = Math.max(0, col - r.indentCells)
+    if (textCol === 0) return r.startCharIdx
+    // Walk the row, sum cells until we reach `textCol`.
     let cellsAcc = 0
     let charsAcc = 0
     for (const { segment } of getGraphemeSegmenter().segment(r.text)) {
       const w = stringWidth(segment)
-      if (cellsAcc + w > col) {
-        // The grapheme would push past `col` — we land BEFORE it.
+      if (cellsAcc + w > textCol) {
+        // The grapheme would push past `textCol` — we land BEFORE it.
         return r.startCharIdx + charsAcc
       }
       cellsAcc += w
       charsAcc += segment.length
-      if (cellsAcc === col) {
+      if (cellsAcc === textCol) {
         return r.startCharIdx + charsAcc
       }
     }

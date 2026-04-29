@@ -638,15 +638,52 @@ describe('hanging indent (indentedWrap)', () => {
     })
   })
 
-  describe('logicalToVisual + indented wrap', () => {
-    it('returns ROW-INTERNAL col (renderer adds indentCells offset for display)', () => {
-      // For "  hello world" width 8:
-      // Row 0: "  hello " (8 chars, indentCells=0)
-      // Row 1: "world" (5 chars, indentCells=2)
-      // Position 8 (start of row 1's content) → row 1 col 0 (NOT col 2).
-      // The renderer is responsible for adding indentCells to display.
+  describe('logicalToVisual + visualToLogical use display cols (incl. indentCells)', () => {
+    // For "  hello world" width 8:
+    //   Row 0: text="  hello " (8 chars, indentCells=0)
+    //   Row 1: text="world" (5 chars, indentCells=2 — render-time)
+    // Display col is what's painted on the screen. So row 1's first
+    // visible char is at display col 2 (after the 2-cell indent).
+    it('logicalToVisual returns display col (indentCells included on continuation rows)', () => {
       const layout = buildWrapLayout('  hello world', { width: 8, indentedWrap: true })
-      expect(layout.logicalToVisual(8)).toEqual({ row: 1, col: 0 })
+      // Position 8 = start of row 1's content. Display col = 0 (indent) + 0 (text col) = 2.
+      expect(layout.logicalToVisual(8)).toEqual({ row: 1, col: 2 })
+    })
+
+    it('logicalToVisual on a non-continuation row returns text-internal col (indentCells=0)', () => {
+      const layout = buildWrapLayout('  hello world', { width: 8, indentedWrap: true })
+      // Position 2 = first non-ws char on row 0. Row 0 has indentCells=0,
+      // so display col = 0 + cellsBefore("  hello ", 2) = 2.
+      expect(layout.logicalToVisual(2)).toEqual({ row: 0, col: 2 })
+    })
+
+    it('visualToLogical accepts display col (subtracts indentCells before walking row text)', () => {
+      const layout = buildWrapLayout('  hello world', { width: 8, indentedWrap: true })
+      // Click at display col 2 of row 1 = first char of "world" content.
+      // Should resolve to charIdx 8 (start of "world" in buffer).
+      expect(layout.visualToLogical(1, 2)).toBe(8)
+      // Click at display col 4 of row 1 = third char of "world" = 'r'.
+      // Effective text col = 4 - 2 = 2. → charIdx 8 + 2 = 10.
+      expect(layout.visualToLogical(1, 4)).toBe(10)
+    })
+
+    it('clicks INSIDE the indent decoration snap to row content start', () => {
+      const layout = buildWrapLayout('  hello world', { width: 8, indentedWrap: true })
+      // Display col 0 of row 1 = inside the rendered indent (before "world").
+      // User intent: "I clicked at the start of this row." → charIdx 8.
+      expect(layout.visualToLogical(1, 0)).toBe(8)
+      // col 1 also inside indent → still snaps to row start.
+      expect(layout.visualToLogical(1, 1)).toBe(8)
+    })
+
+    it('round-trip identity holds with indentCells (logicalToVisual ∘ visualToLogical = identity)', () => {
+      const input = '  hello world hello world'
+      const layout = buildWrapLayout(input, { width: 10, indentedWrap: true })
+      for (let i = 0; i <= input.length; i++) {
+        const v = layout.logicalToVisual(i)
+        const back = layout.visualToLogical(v.row, v.col)
+        expect(back).toBe(i)
+      }
     })
   })
 
@@ -812,6 +849,58 @@ describe('wrap hints (programmatic atomic spans)', () => {
       const hasAtomicDE = texts.some((t) => t.includes('d e'))
       expect(hasAtomicAB).toBe(true)
       expect(hasAtomicDE).toBe(true)
+    })
+
+    it('hints are honored in char wrap mode (not just word mode)', () => {
+      // Same hint contract must apply regardless of wrap strategy —
+      // otherwise a consumer who switches from word→char silently
+      // loses atomicity.
+      // 'one two three four' width 6, hint covering 'two three' (4-13).
+      // Without hint, char-wrap would happily split inside it.
+      // With hint, breaks must roll back to outside the span.
+      const input = 'one two three four'
+      const layout = buildWrapLayout(input, {
+        width: 6,
+        wrap: 'char',
+        hints: [{ start: 4, end: 13 }],
+      })
+      const reconstructed = layout.rows.map((r) => r.text).join('')
+      expect(reconstructed).toBe(input)
+      // No row should EXIT mid-span at a position INSIDE [4, 13).
+      // Detect: walk rows tracking absolute char position; for each
+      // boundary (end of a row that's NOT the last row), assert it's
+      // not strictly between 4 and 13.
+      let pos = 0
+      for (let i = 0; i < layout.rows.length - 1; i++) {
+        pos = layout.rows[i]!.endCharIdx
+        const insideHint = pos > 4 && pos < 13
+        expect(insideHint).toBe(false)
+      }
+    })
+
+    it('char-mode atomic-span overflow when span exceeds width', () => {
+      // 'a longwordhere b' width 5. Hint marks 'longwordhere' (chars 2-14)
+      // as atomic. The hint span is 12 cells, wider than width 5 — must
+      // be allowed to overflow on its own row(s) because there's no
+      // way to split it without violating the contract.
+      const input = 'a longwordhere b'
+      const layout = buildWrapLayout(input, {
+        width: 5,
+        wrap: 'char',
+        hints: [{ start: 2, end: 14 }],
+      })
+      expect(layout.rows.map((r) => r.text).join('')).toBe(input)
+      // The atomic span must appear as one contiguous slice across
+      // some row(s) without being split mid-span at column boundaries
+      // that would require breaking inside.
+      // We verify the weaker invariant: rejoin works, and no clean
+      // break landed strictly inside [2, 14).
+      let pos = 0
+      for (let i = 0; i < layout.rows.length - 1; i++) {
+        pos = layout.rows[i]!.endCharIdx
+        const insideHint = pos > 2 && pos < 14
+        expect(insideHint).toBe(false)
+      }
     })
 
     it('joinWith field is accepted but not yet active (deferred to follow-up)', () => {
