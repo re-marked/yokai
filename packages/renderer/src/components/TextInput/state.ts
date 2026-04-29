@@ -14,6 +14,7 @@ import {
   wordBoundaryAfter,
   wordBoundaryBefore,
 } from './caret-math.js'
+import { buildWrapLayout, nextVisualRow } from './wrap-math.js'
 
 /** Selection is anchor (where the user pressed) and focus (where they
  *  moved to). Either order — the helpers normalise via min/max. */
@@ -43,6 +44,16 @@ export type TextInputState = {
   /** Pointer into history. Starts at history.length - 1 (current
    *  state). Undo decrements, redo increments. */
   historyIndex: number
+  /** Display column (cells) the caret should snap to during a vertical
+   *  movement chain (Up / Down). Captured when the chain starts;
+   *  preserved across short intermediate rows so the caret returns to
+   *  the original column when crossing a row that's wide enough.
+   *  Reset to `null` after any non-vertical action (horizontal move,
+   *  edit, click, undo / redo) — the new caret position is the new
+   *  preferred column on the next vertical move. Standard editor
+   *  behavior (vim's `$` jump aside, matches vscode / sublime / most
+   *  editors). */
+  preferredCol: number | null
 }
 
 export type ReducerOptions = {
@@ -79,6 +90,7 @@ export function initialState(value: string): TextInputState {
     selection: null,
     history: [{ value, caret: value.length, selection: null, kind: 'init' }],
     historyIndex: 0,
+    preferredCol: null,
   }
 }
 
@@ -197,11 +209,33 @@ function moveCaretIndex(buffer: string, current: number, direction: CaretMove): 
 
 // ── The reducer ──────────────────────────────────────────────────────
 
+/**
+ * Apply an action. Public entry point — wraps `reduceCore` so the
+ * preferredCol field stays in sync with vertical-movement chains
+ * uniformly, without each action case having to think about it:
+ *
+ *   - Up / Down keep preferredCol intact (a chain in progress).
+ *   - Every other action resets preferredCol to null (the caret just
+ *     moved or the buffer just changed for non-vertical reasons; the
+ *     next vertical move should snap to the NEW column, not the old).
+ *
+ * No-op actions return the input state by referential identity so React
+ * memoization can short-circuit.
+ */
 export function reduce(
   state: TextInputState,
   action: Action,
   opts: ReducerOptions,
 ): TextInputState {
+  const next = reduceCore(state, action, opts)
+  if (next === state) return state
+  const isVertical =
+    action.type === 'moveCaret' && (action.direction === 'up' || action.direction === 'down')
+  if (isVertical) return next
+  return next.preferredCol === null ? next : { ...next, preferredCol: null }
+}
+
+function reduceCore(state: TextInputState, action: Action, opts: ReducerOptions): TextInputState {
   const cap = opts.historyCap ?? DEFAULT_HISTORY_CAP
 
   switch (action.type) {
@@ -314,12 +348,52 @@ export function reduce(
     }
 
     case 'moveCaret': {
+      // Vertical moves (Up / Down) walk VISUAL rows, not logical lines —
+      // a wrapped logical line spans multiple visual rows, and the caret
+      // should pass through each row before jumping to the next \n.
+      // Display column is sticky across short intermediate rows via the
+      // `preferredCol` field on state; the outer `reduce` wrapper
+      // preserves that field on up/down and clears it on every other
+      // action.
+      if (action.direction === 'up' || action.direction === 'down') {
+        let nextCaret: number
+        let nextPreferredCol: number | null
+        if (opts.width <= 0) {
+          // First-frame fallback: yoga hasn't measured yet, layout would
+          // be empty. Use logical-line nav for this one frame so the
+          // caret still moves; reset preferredCol because we don't know
+          // a true visual col without a layout. The next render with a
+          // measured width re-establishes proper visual nav.
+          nextCaret = moveCaretIndex(state.value, state.caret, action.direction)
+          nextPreferredCol = null
+        } else {
+          const layout = buildWrapLayout(state.value, { width: opts.width })
+          // First vertical step in a chain: capture the current display
+          // col as the "preferred" column. Subsequent steps reuse the
+          // same value so the caret survives passing through rows that
+          // are shorter than the preferred col, snapping back when a
+          // row is wide enough.
+          nextPreferredCol =
+            state.preferredCol !== null
+              ? state.preferredCol
+              : layout.logicalToVisual(state.caret).col
+          nextCaret = nextVisualRow(layout, state.caret, nextPreferredCol, action.direction).charIdx
+        }
+        const selection = action.extend
+          ? { anchor: state.selection?.anchor ?? state.caret, focus: nextCaret }
+          : null
+        // Caret-only changes don't go to history (would crowd undo with
+        // every arrow press).
+        return { ...state, caret: nextCaret, selection, preferredCol: nextPreferredCol }
+      }
+
+      // Horizontal / jump moves (left / right / home / end / wordLeft / etc.)
+      // — logical-buffer nav, identical to pre-soft-wrap behavior.
+      // preferredCol is reset by the outer `reduce` wrapper.
       const next = moveCaretIndex(state.value, state.caret, action.direction)
       const selection = action.extend
         ? { anchor: state.selection?.anchor ?? state.caret, focus: next }
         : null
-      // Caret-only changes don't go to history (would crowd undo with
-      // every arrow press).
       return { ...state, caret: next, selection }
     }
 
