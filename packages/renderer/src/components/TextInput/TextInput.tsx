@@ -783,6 +783,32 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
   // on every keystroke), and a stable key per slot avoids unmount-on-
   // edit.
   return visibleRows.map((row, rowIdx) => {
+    // Empty visual row (from an empty logical line / consecutive \n).
+    // Renders as a single space — gives the row visual height so the
+    // caret can sit on it, AND fills it with selection bg if a
+    // multi-row selection range passes through this position. Without
+    // the bg, a selection that spans empty lines would appear visually
+    // broken (gaps between the highlighted content rows).
+    //
+    // Touched-by-selection condition for an empty row at position P:
+    // P falls inside the half-open range [selStart, selEnd). The
+    // `selStart < selEnd` guard excludes a degenerate caret-only
+    // "selection" (anchor === focus) from being treated as a stripe.
+    if (row.text === '') {
+      const P = row.startCharIdx
+      const touchesSelection = selStart < selEnd && selStart <= P && P < selEnd
+      return (
+        <Text
+          // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
+          key={rowIdx}
+          wrap="truncate-end"
+          backgroundColor={touchesSelection ? selectionColor : undefined}
+        >
+          {' '}
+        </Text>
+      )
+    }
+
     const maskedText = maskRowText(row.text, password, passwordChar)
     // Hanging-indent decoration: spaces prepended to continuation rows
     // so they visually align under the first non-whitespace char of
@@ -797,17 +823,14 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
     const hasInRowSelection = localStart < localEnd
 
     if (!hasInRowSelection) {
-      // No selection on this row — render plain. The `|| ' '` ensures
-      // empty visual rows (zero-cell rows for empty logical lines) get
-      // a single space so the row has height 1; the caret can land on
-      // it. For non-empty content the indent + masked text is used.
+      // No selection on this row — render plain.
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
           key={rowIdx}
           wrap="truncate-end"
         >
-          {indent + maskedText || ' '}
+          {indent + maskedText}
         </Text>
       )
     }
