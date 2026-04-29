@@ -105,3 +105,117 @@ export function wrapByCells(text: string, width: number): string[] {
   }
   return rows
 }
+
+/**
+ * Whether a single grapheme is a wrap-friendly whitespace — a place
+ * where word-wrap is allowed to break. Plain ASCII space and tab
+ * qualify; non-breaking space (U+00A0) and figure space (U+2007) do
+ * NOT, by design (consumers use them to bind tokens together —
+ * e.g. "Mr. Smith" with a non-breaking space between).
+ *
+ * Newlines aren't considered here because `wrapByWords` operates on
+ * a SINGLE logical line (caller pre-splits on `\n`).
+ */
+function isBreakableWhitespace(grapheme: string): boolean {
+  if (grapheme.length === 0) return false
+  // Multi-codepoint graphemes (like ZWJ sequences) are never
+  // whitespace breaks — they're meant to render as a single visual
+  // unit. Fast-path: only single-codepoint graphemes can be break-
+  // friendly whitespace.
+  const cp = grapheme.codePointAt(0)
+  if (cp === undefined) return false
+  // Standard whitespace that's safe to break at.
+  return cp === 0x20 || cp === 0x09
+}
+
+/**
+ * Word-aware wrap: prefer to break at whitespace; fall back to the
+ * char-wrap (`wrapByCells`) when a token has no breakable whitespace
+ * within a row's cell budget.
+ *
+ * Convention at break points (matches HTML/CSS + most editors):
+ *   - Trailing whitespace stays on the row it terminates. The
+ *     terminal renders it as blank cells; visually invisible at the
+ *     row's right edge.
+ *   - Leading whitespace at the START of a logical line is treated
+ *     as part of the first word — never used as a break point. A
+ *     line like `'  hello'` won't be broken between the spaces and
+ *     `'hello'`; it stays atomic until something past the width
+ *     forces a break.
+ *
+ * Edge cases (covered by tests):
+ *   - Single token longer than width → char-wrap fallback within that
+ *     token, neighboring tokens still word-wrap.
+ *   - Multiple consecutive spaces at a break → all preserved on the
+ *     trailing row (collapsed visually at the boundary).
+ *   - Non-breaking spaces (U+00A0) are NOT break points, so
+ *     `'Mr. Smith'` stays atomic.
+ *   - Empty input → `[]` (same as `wrapByCells`).
+ *   - `width <= 0` → `[]`.
+ */
+export function wrapByWords(text: string, width: number): string[] {
+  if (width <= 0) return []
+  if (text.length === 0) return []
+
+  const rows: string[] = []
+  let row = ''
+  let rowWidth = 0
+  // Char-index within `row` where we last saw a "good" break point
+  // (immediately AFTER a whitespace that came AFTER non-whitespace).
+  // -1 = no break candidate. Reset on every emit.
+  let lastBreakIdx = -1
+  // Whether `row` contains at least one non-whitespace grapheme.
+  // Without this, leading whitespace would set up a break candidate
+  // BETWEEN the leading whitespace and the first word — splitting
+  // `'  hello'` into `['  ', 'hello']`. Tracking this prevents that.
+  let hasContent = false
+
+  for (const { segment } of getGraphemeSegmenter().segment(text)) {
+    const w = stringWidth(segment)
+    const breakable = isBreakableWhitespace(segment)
+
+    if (breakable) {
+      // Whitespace always fits — even past width, since it's
+      // visually invisible at the boundary. Append to current row;
+      // record a candidate break IF we already have non-ws content
+      // (so leading whitespace isn't a break point).
+      row += segment
+      rowWidth += w
+      if (hasContent) lastBreakIdx = row.length
+      continue
+    }
+
+    // Non-whitespace grapheme.
+    if (rowWidth + w > width) {
+      if (lastBreakIdx > 0) {
+        // Break at the last whitespace boundary. The overhang
+        // (anything between lastBreakIdx and end of row) carries to
+        // the next row before the current grapheme — usually empty
+        // because we haven't appended the current grapheme yet.
+        rows.push(row.slice(0, lastBreakIdx))
+        const overhang = row.slice(lastBreakIdx)
+        row = overhang + segment
+        rowWidth = stringWidth(row)
+      } else {
+        // No whitespace break in current row. Fall back to char-wrap
+        // behavior: push what we have, start fresh with the current
+        // grapheme. If the grapheme itself is wider than width, it
+        // overflows on its own row — same as wrapByCells.
+        if (row.length > 0) rows.push(row)
+        row = segment
+        rowWidth = w
+      }
+      lastBreakIdx = -1
+      hasContent = true
+      continue
+    }
+
+    // Fits in the current row.
+    row += segment
+    rowWidth += w
+    hasContent = true
+  }
+
+  if (row.length > 0) rows.push(row)
+  return rows
+}
