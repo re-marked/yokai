@@ -18,6 +18,7 @@ import {
   Box,
   Draggable,
   type MouseDownEvent,
+  TerminalSizeContext,
   Text,
   TextInput,
   render,
@@ -25,7 +26,10 @@ import {
   useInput,
 } from '@yokai/renderer'
 import type React from 'react'
-import { useCallback, useState } from 'react'
+import { useCallback, useContext, useState } from 'react'
+
+const WINDOW_WIDTH = 56
+const WINDOW_HEIGHT = 14
 
 const INITIAL_TEXT = `A React terminal renderer with cell-precise mouse events, multi-line text input with soft-wrap, and a pure-TypeScript Yoga flexbox layout engine.
 
@@ -40,6 +44,14 @@ function App(): React.ReactNode {
   })
 
   const [text, setText] = useState(INITIAL_TEXT)
+  // Center the editor horizontally on first paint. initialPos is
+  // captured at Draggable mount and not re-applied on prop changes
+  // (matches the prop's "defaultValue" semantics), so this is a
+  // one-shot centering — the user can drag freely from there. Falls
+  // back to left:8 if TerminalSizeContext isn't ready yet (rare;
+  // App provides it before any descendant renders).
+  const size = useContext(TerminalSizeContext)
+  const initialLeft = size?.columns ? Math.max(0, Math.floor((size.columns - WINDOW_WIDTH) / 2)) : 8
 
   // Close button isolates its own gesture so the click doesn't bubble
   // to the underlying Draggable's mouseDown (which would race a
@@ -67,9 +79,9 @@ function App(): React.ReactNode {
             this area. */}
         <Box flexDirection="column" flexGrow={1}>
           <Draggable
-            initialPos={{ left: 8, top: 2 }}
-            width={56}
-            height={14}
+            initialPos={{ left: initialLeft, top: 2 }}
+            width={WINDOW_WIDTH}
+            height={WINDOW_HEIGHT}
             borderStyle="single"
             borderColor="gray"
             flexDirection="column"
