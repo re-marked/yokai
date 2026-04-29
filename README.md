@@ -173,16 +173,15 @@ pnpm demo:text-input          # text input fields: single, multiline, password
 
 Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bottom — they're meant to be the first place you look when wiring a new interaction.
 
-## Consumption
+## Install
 
-```jsonc
-// package.json
-"dependencies": {
-  "@yokai-tui/renderer": "github:re-marked/yokai#v0.6.0"
-}
+```sh
+pnpm add @yokai-tui/renderer react
+# or
+npm install @yokai-tui/renderer react
 ```
 
-Pin to a tag, not `main` — `main` moves. See [release notes](https://github.com/re-marked/yokai/releases) for what's in each version.
+See [release notes](https://github.com/re-marked/yokai/releases) for what's in each version.
 
 ## Hooks
 

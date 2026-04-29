@@ -2,8 +2,6 @@
 
 Install yokai in a consumer project.
 
-Yokai is not published to npm. Consume it as a GitHub dependency pinned to a release tag, or as a workspace package in a monorepo.
-
 ## Peer dependencies
 
 | Package | Version |
@@ -11,30 +9,32 @@ Yokai is not published to npm. Consume it as a GitHub dependency pinned to a rel
 | `react` | `^19.2.5` |
 | `node`  | `>=22`  |
 
-## GitHub ref pin (canonical)
+## From npm (canonical)
+
+```sh
+pnpm add @yokai-tui/renderer react
+# or
+npm install @yokai-tui/renderer react
+```
+
+`@yokai-tui/shared` is pulled in transitively. Add it explicitly only if you import its symbols directly.
+
+See [release notes](https://github.com/re-marked/yokai/releases) for what changed in each version.
+
+## From a GitHub tag
+
+If you prefer pinning to source instead of npm:
 
 ```jsonc
-// package.json
 {
   "dependencies": {
-    "@yokai-tui/renderer": "github:re-marked/yokai#v0.5.0",
+    "@yokai-tui/renderer": "github:re-marked/yokai#v0.7.1",
     "react": "^19.2.5"
   }
 }
 ```
 
-Pin to a tag. `main` moves and breaks consumers between commits. See [release notes](https://github.com/re-marked/yokai/releases) for what changed in each version.
-
-If a project uses both `@yokai-tui/renderer` and `@yokai-tui/shared` directly, pin both to the same tag.
-
-```jsonc
-{
-  "dependencies": {
-    "@yokai-tui/renderer": "github:re-marked/yokai#v0.5.0",
-    "@yokai-tui/shared": "github:re-marked/yokai#v0.5.0"
-  }
-}
-```
+Pin to a tag. `main` moves and breaks consumers between commits.
 
 ## Monorepo workspace (first-party)
 
@@ -55,11 +55,7 @@ With pnpm:
 pnpm add @yokai-tui/renderer --workspace
 ```
 
-The shared package is hoisted automatically; explicit dependency is only required if the consumer imports `@yokai-tui/shared` symbols directly.
-
-## Build before use
-
-After install, build the workspace once. Renderer depends on shared:
+After install, build the workspace once (only needed for workspace / GitHub-tag consumers — npm tarballs ship pre-built):
 
 ```bash
 pnpm install
