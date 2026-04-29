@@ -9,8 +9,12 @@
 import { describe, expect, it } from 'vitest'
 import { type Action, type ReducerOptions, initialState, reduce, selectedText } from './state.js'
 
-const SINGLE: ReducerOptions = { multiline: false, maxLength: undefined }
-const MULTI: ReducerOptions = { multiline: true, maxLength: undefined }
+// Width is required by ReducerOptions because visual-row navigation
+// (`up` / `down` post-C4) needs to know where lines wrap. The value
+// here doesn't matter for tests that only exercise non-nav actions —
+// 80 is a reasonable terminal-ish default.
+const SINGLE: ReducerOptions = { multiline: false, maxLength: undefined, width: 80 }
+const MULTI: ReducerOptions = { multiline: true, maxLength: undefined, width: 80 }
 
 function init(value = '') {
   return initialState(value)

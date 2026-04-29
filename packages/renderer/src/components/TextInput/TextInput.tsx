@@ -182,10 +182,17 @@ export default function TextInput({
   // AFTER useReducer in render order, the reducer would hit a TDZ
   // ("Cannot access 'optsRef' before initialization") when the React
   // Compiler-transformed code re-enters this scope.
-  const optsRef = useRef<ReducerOptions>({ multiline, maxLength, historyCap })
-  // Mutate inline so the next dispatch sees the latest options without
-  // a re-renders-update-state-before-effects round trip.
-  optsRef.current = { multiline, maxLength, historyCap }
+  const optsRef = useRef<ReducerOptions>({ multiline, maxLength, historyCap, width: 0 })
+  // Mutate inline so the next dispatch sees the latest props without a
+  // re-renders-update-state-before-effects round trip. Width is updated
+  // separately AFTER `inner` is declared (see the matching mutation in
+  // the Scroll section) — `inner.width` isn't in scope yet here.
+  optsRef.current = {
+    multiline,
+    maxLength,
+    historyCap,
+    width: optsRef.current.width,
+  }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
   // over the ref so opts changes propagate to the next dispatch.
@@ -290,6 +297,12 @@ export default function TextInput({
       setInner(measured)
     }
   })
+  // Push the latest measured width into optsRef so the next dispatch's
+  // reducer call (visual-row navigation, post-C4) operates on the
+  // current layout. Lags by one frame on the very first render (yoga
+  // hasn't measured yet); the wrap-math primitive treats width=0 as
+  // "no layout, no rows" and visual-row nav falls back gracefully.
+  optsRef.current = { ...optsRef.current, width: inner.width }
 
   const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)

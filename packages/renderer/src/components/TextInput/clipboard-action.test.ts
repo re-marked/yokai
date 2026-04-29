@@ -9,7 +9,9 @@ import { describe, expect, it } from 'vitest'
 import { type ClipboardKeyInput, clipboardKeyAction } from './clipboard-action.js'
 import { type TextInputState, initialState, reduce } from './state.js'
 
-const opts = { multiline: false, maxLength: undefined }
+// width is required by ReducerOptions but irrelevant here — these
+// tests only build state via setCaret to seed selection ranges.
+const opts = { multiline: false, maxLength: undefined, width: 80 }
 
 function withSelection(value: string, anchor: number, focus: number): TextInputState {
   // Build state through the reducer so selection invariants hold.

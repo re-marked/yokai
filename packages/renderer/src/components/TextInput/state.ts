@@ -53,6 +53,18 @@ export type ReducerOptions = {
   /** Cap on buffer length. Insertions that would exceed it are
    *  truncated to fit. undefined = unlimited. */
   maxLength: number | undefined
+  /** Inner content width (cell columns, net of border + padding) of
+   *  the rendered TextInput. Required because visual-row navigation
+   *  (`up` / `down`) needs to know where lines wrap to compute the
+   *  next visual row's char index — it can't be derived from the
+   *  buffer alone.
+   *
+   *  May be 0 when the renderer hasn't measured yet (first frame
+   *  before yoga's calculateLayout, or a detached node). Consumers
+   *  of the field MUST handle 0 as "no layout, no nav" and fall back
+   *  gracefully — the wrap-math primitive already does so by
+   *  returning an empty layout. */
+  width: number
   /** Maximum entries to keep in history. Older entries drop from
    *  the front. Default 100. */
   historyCap?: number
