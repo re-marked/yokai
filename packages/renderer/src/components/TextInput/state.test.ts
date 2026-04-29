@@ -9,8 +9,12 @@
 import { describe, expect, it } from 'vitest'
 import { type Action, type ReducerOptions, initialState, reduce, selectedText } from './state.js'
 
-const SINGLE: ReducerOptions = { multiline: false, maxLength: undefined }
-const MULTI: ReducerOptions = { multiline: true, maxLength: undefined }
+// Width is required by ReducerOptions because visual-row navigation
+// (`up` / `down` post-C4) needs to know where lines wrap. The value
+// here doesn't matter for tests that only exercise non-nav actions —
+// 80 is a reasonable terminal-ish default.
+const SINGLE: ReducerOptions = { multiline: false, maxLength: undefined, width: 80 }
+const MULTI: ReducerOptions = { multiline: true, maxLength: undefined, width: 80 }
 
 function init(value = '') {
   return initialState(value)
@@ -378,5 +382,129 @@ describe('reduce: undo / redo', () => {
     }
     expect(s.history.length).toBe(5)
     expect(s.historyIndex).toBe(4)
+  })
+})
+
+// ── visual-row nav (up / down with preferredCol) ─────────────────────
+
+describe('reduce: visual-row nav (up / down)', () => {
+  // Width 10 — narrow enough to wrap test buffers onto multiple visual
+  // rows. wrapByCells fallback is exercised because the test bufer is
+  // a single token (no whitespace breaks).
+  const WIDE: ReducerOptions = { multiline: true, maxLength: undefined, width: 10 }
+
+  it('Down within a wrapped logical line walks visual rows', () => {
+    // 'aaaaaaaaaaaaaa' (14 chars). Width 10 wraps to two char-mode rows:
+    // 'aaaaaaaaaa' (10) + 'aaaa' (4). From row 0 col 5, Down lands on
+    // row 1 which only has 4 cells — caret clamps to row 1's end
+    // (idx 14, also the buffer end).
+    let s = init('aaaaaaaaaaaaaa')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, WIDE)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, WIDE)
+    expect(s.caret).toBe(14)
+    expect(s.preferredCol).toBe(5) // captured on this Down for the next vertical step
+  })
+
+  it('Up within a wrapped logical line walks visual rows', () => {
+    // Same buffer; caret in row 1 (continuation), press Up.
+    let s = init('aaaaaaaaaaaaaa')
+    s = reduce(s, { type: 'setCaret', charIdx: 12, extend: false }, WIDE)
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, WIDE)
+    // Row 1 col 2 → row 0 col 2 → idx 2.
+    expect(s.caret).toBe(2)
+    expect(s.preferredCol).toBe(2)
+  })
+
+  it('preferredCol persists across short intermediate visual rows', () => {
+    // Three rows of varying width — col 5 fits row 0 + row 2 but not
+    // the 2-cell row 1. After Down, caret clamps on row 1 to end-of-row;
+    // the next Down restores col 5 on row 2 because preferredCol stuck.
+    // Width 80 here — no wrap, just multiple logical lines, so visual
+    // rows == logical lines and the test isolates the preferredCol
+    // mechanism without dragging in wrap-math edge cases.
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.caret).toBe(10) // end of 'bb' (clamped)
+    expect(s.preferredCol).toBe(5)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.caret).toBe(16) // 'cccccc' position 5 → idx 11 + 5
+    expect(s.preferredCol).toBe(5)
+  })
+
+  it('preferredCol resets after a horizontal move', () => {
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.preferredCol).toBe(5)
+    s = reduce(s, { type: 'moveCaret', direction: 'left', extend: false }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+
+  it('preferredCol resets after typing', () => {
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.preferredCol).toBe(5)
+    s = reduce(s, { type: 'insertText', text: 'X' }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+
+  it('preferredCol resets after undo', () => {
+    // undo restores buffer / caret / selection but NOT preferredCol —
+    // the outer wrapper treats undo as a non-vertical action and clears
+    // preferredCol. (preferredCol is UI ephemeral, not editing state.)
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'insertText', text: 'X' }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.preferredCol).not.toBeNull()
+    s = reduce(s, { type: 'undo' }, MULTI)
+    expect(s.preferredCol).toBeNull()
+  })
+
+  it('Up at the first visual row clamps to buffer start', () => {
+    let s = init('aaaaaaaaaaaaaa') // wraps to two rows at width 10
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, WIDE)
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, WIDE)
+    expect(s.caret).toBe(0)
+  })
+
+  it('Down at the last visual row clamps to buffer end', () => {
+    let s = init('aaaaaaaaaaaaaa') // wraps to two rows at width 10
+    s = reduce(s, { type: 'setCaret', charIdx: 12, extend: false }, WIDE)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, WIDE)
+    expect(s.caret).toBe(14)
+  })
+
+  it('width=0 falls back to logical-line nav', () => {
+    // First-frame edge: yoga hasn't measured yet, layout would be
+    // empty. Up / Down still need to advance the caret — fall back to
+    // the pre-soft-wrap logical-line nav for that one frame.
+    const ZERO: ReducerOptions = { multiline: true, maxLength: undefined, width: 0 }
+    let s = init('hello\nworld')
+    s = reduce(s, { type: 'setCaret', charIdx: 9, extend: false }, ZERO)
+    s = reduce(s, { type: 'moveCaret', direction: 'up', extend: false }, ZERO)
+    expect(s.caret).toBe(3)
+    expect(s.preferredCol).toBeNull() // no real layout means no preferred col captured
+  })
+
+  it('Shift+Down extends selection AND preserves preferredCol', () => {
+    let s = init('aaaaaaa\nbb\ncccccc')
+    s = reduce(s, { type: 'setCaret', charIdx: 5, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: true }, MULTI)
+    expect(s.selection).toEqual({ anchor: 5, focus: 10 })
+    expect(s.preferredCol).toBe(5)
+  })
+
+  it('logical Down (multi-line, no wrap) still preserves col like before', () => {
+    // Regression check: existing 'down across lines preserves col' test
+    // already covers this implicitly, but assert preferredCol is also
+    // set so future refactors don't accidentally drop it.
+    let s = init('hello\nworld')
+    s = reduce(s, { type: 'setCaret', charIdx: 2, extend: false }, MULTI)
+    s = reduce(s, { type: 'moveCaret', direction: 'down', extend: false }, MULTI)
+    expect(s.caret).toBe(8)
+    expect(s.preferredCol).toBe(2)
   })
 })

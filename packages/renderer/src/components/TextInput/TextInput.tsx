@@ -23,9 +23,8 @@ import type { CursorStyle } from '../../termio/dec.js'
 import Box, { type Props as BoxProps } from '../Box.js'
 import FocusContext from '../FocusContext.js'
 import Text from '../Text.js'
-import { cellColumnAt, splitLines } from './caret-math.js'
 import { clipboardKeyAction } from './clipboard-action.js'
-import { scrollToKeepCaretVisible, sliceRowByCells } from './scroll-math.js'
+import { scrollToKeepCaretVisible } from './scroll-math.js'
 import {
   type Action,
   type ReducerOptions,
@@ -34,6 +33,7 @@ import {
   reduce,
   selectionOrCaretRange,
 } from './state.js'
+import { type WrapLayout, buildWrapLayout } from './wrap-math.js'
 
 export type TextInputProps = Except<
   BoxProps,
@@ -182,10 +182,17 @@ export default function TextInput({
   // AFTER useReducer in render order, the reducer would hit a TDZ
   // ("Cannot access 'optsRef' before initialization") when the React
   // Compiler-transformed code re-enters this scope.
-  const optsRef = useRef<ReducerOptions>({ multiline, maxLength, historyCap })
-  // Mutate inline so the next dispatch sees the latest options without
-  // a re-renders-update-state-before-effects round trip.
-  optsRef.current = { multiline, maxLength, historyCap }
+  const optsRef = useRef<ReducerOptions>({ multiline, maxLength, historyCap, width: 0 })
+  // Mutate inline so the next dispatch sees the latest props without a
+  // re-renders-update-state-before-effects round trip. Width is updated
+  // separately AFTER `inner` is declared (see the matching mutation in
+  // the Scroll section) — `inner.width` isn't in scope yet here.
+  optsRef.current = {
+    multiline,
+    maxLength,
+    historyCap,
+    width: optsRef.current.width,
+  }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
   // over the ref so opts changes propagate to the next dispatch.
@@ -244,38 +251,15 @@ export default function TextInput({
     onChange?.(state.value)
   }, [state.value, onChange])
 
-  // ── Focus + caret-cursor declaration ───────────────────────────────
-
+  // ── Inner content measurement ──────────────────────────────────────
+  //
+  // The wrap layout + scroll math both need to know the box's inner
+  // content area (width × height net of border + padding). Read from
+  // yoga via measureInnerSize() each commit. The value is one frame
+  // stale (calculateLayout runs AFTER useLayoutEffect), but for typing
+  // the lag is invisible because each keystroke triggers another
+  // render that catches up.
   const ref = useRef<DOMElement>(null)
-
-  // Compute caret screen position (cell coords) from the current state.
-  // For multiline, walk lines; for single-line, just cellColumnAt.
-  const caretLineCol = useMemo(() => {
-    const lines = splitLines(state.value)
-    let acc = 0
-    for (let i = 0; i < lines.length; i++) {
-      const len = lines[i]!.length
-      if (state.caret <= acc + len) {
-        const within = state.caret - acc
-        return { line: i, col: cellColumnAt(lines[i]!, within) }
-      }
-      acc += len + 1 // +1 for '\n'
-    }
-    return { line: lines.length - 1, col: cellColumnAt(lines[lines.length - 1]!, 0) }
-  }, [state.value, state.caret])
-
-  // ── Scroll: keep caret visible inside the visible window ───────────
-  //
-  // Two axes; only one applies per mode. Single-line: horizontal,
-  // measured in cells across the inner content area. Multiline:
-  // vertical, measured in rows across the inner content area.
-  //
-  // Inner content size is read from yoga via measureInnerSize() each
-  // commit. Read in useLayoutEffect so the value is fresh enough to
-  // matter for the next render — yoga's value is one frame stale
-  // (calculateLayout runs after this effect), but for typing the lag
-  // is invisible because each keystroke triggers another render that
-  // catches up.
   const [inner, setInner] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 })
   useLayoutEffect(() => {
     const node = ref.current
@@ -290,49 +274,104 @@ export default function TextInput({
       setInner(measured)
     }
   })
+  // Push the latest measured width into optsRef so the next dispatch's
+  // reducer call (visual-row navigation, post-C4) operates on the
+  // current layout. Lags by one frame on the very first render (yoga
+  // hasn't measured yet); the wrap-math primitive treats width=0 as
+  // "no layout, no rows" and visual-row nav falls back gracefully.
+  optsRef.current = { ...optsRef.current, width: inner.width }
 
-  const [scrollX, setScrollX] = useState(0)
+  // ── Wrap layout + visual cursor coords ─────────────────────────────
+  //
+  // Build the soft-wrap layout from the current buffer and the
+  // measured inner width. The layout decomposes the value into VISUAL
+  // ROWS (one logical line may produce many rows when its cell width
+  // exceeds the budget) and provides bidirectional position maps:
+  // logicalToVisual for placing the cursor; visualToLogical for
+  // mapping clicks back to char indices.
+  //
+  // Width fallback strategy. Two distinct cases produce
+  // `inner.width === 0`, and they need different handling:
+  //
+  //   1. First render before yoga has measured. No prior valid width —
+  //      use a sensible terminal default (80 cells) so the layout
+  //      produces SOMETHING for the box to size against. Next render
+  //      with the real width replaces this.
+  //   2. Subsequent render after yoga measured 0 — happens when the
+  //      terminal shrinks below border + padding (negative inner clamps
+  //      to 0 via `Math.max` in measureInnerSize). Falling back to a
+  //      constant default (or MAX_SAFE_INTEGER) here causes an INFINITE
+  //      LAYOUT LOOP: layout swings between "many narrow rows" (real
+  //      width) and "few huge-content rows" (default width); each Text's
+  //      yoga measurement differs wildly between modes, the Box's
+  //      computed width oscillates, inner.width keeps flipping back and
+  //      forth, and the measure useLayoutEffect's setInner never
+  //      converges. STICKY-VALID-WIDTH ref breaks the cycle: once we've
+  //      measured a positive width, we keep using it as the layout's
+  //      width even if a later measurement reports 0. The box on screen
+  //      may render clipped, but the layout stays stable and React
+  //      doesn't re-render forever.
+  const lastValidInnerWidth = useRef(80)
+  if (inner.width > 0) lastValidInnerWidth.current = inner.width
+  const layoutWidth = inner.width > 0 ? inner.width : lastValidInnerWidth.current
+  const layout = useMemo(
+    () => buildWrapLayout(state.value, { width: layoutWidth }),
+    [state.value, layoutWidth],
+  )
+  // Caret in visual cell coords. `col` already includes any indent
+  // decoration on continuation rows (display-col convention from
+  // wrap-math.ts), so the cursor declaration just adds the box's
+  // border+padding offset and subtracts scroll — no manual indent
+  // arithmetic needed here.
+  const visual = useMemo(() => layout.logicalToVisual(state.caret), [layout, state.caret])
+
+  // ── Scroll: keep caret visible inside the visible window ───────────
+  //
+  // scrollY is in VISUAL rows (was logical lines pre-soft-wrap).
+  // scrollX is retained for the future `wrap='none'` opt-in (E1) and
+  // stays at 0 in the soft-wrap default — rows wrap onto next-row
+  // instead of horizontally scrolling within a row. The setter is
+  // prefixed `_` because nothing writes it yet (E1 will rename back).
+  const [scrollX, _setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
-  const allLines = useMemo(() => splitLines(state.value), [state.value])
-  // Total content size. Single-line: cells of the only line.
-  // Multiline: row count.
-  const contentWidth = multiline ? 0 : cellColumnAt(allLines[0]!, allLines[0]!.length)
-  const contentHeight = allLines.length
 
-  // Adjust scroll on every state/size change so the caret stays in
-  // view. useEffect (not useLayoutEffect) so the next paint reflects
-  // both the new caret AND the new scroll in the same render — React
-  // batches the setState here with the original cause.
+  // Adjust scrollY on every change that could shift the caret's
+  // visual row out of the visible window. Re-fires on:
+  //
+  //   - inner.height — the box's vertical content area changed (the
+  //     window the caret must fit inside grew or shrank).
+  //   - visual.row — the caret's visual position changed. This is
+  //     transitively driven by state.value (typing / pasting / undo),
+  //     state.caret (any caret-moving action), AND inner.width
+  //     (terminal/container resize → wrap layout rebuild → caret
+  //     visual position recomputes via logicalToVisual). One
+  //     dependency captures all three sources because `visual` is a
+  //     useMemo over (layout, state.caret) and `layout` is a useMemo
+  //     over (state.value, inner.width).
+  //   - layout.rows.length — the total row count changed. Catches the
+  //     edge where width changes but visual.row happens to stay the
+  //     same (e.g. caret on row 0, width grows so content needs
+  //     fewer rows): scrollY needs to clamp to the new max.
+  //   - scrollY — needed for the read-modify-write inside the effect.
+  //
+  // useEffect (not useLayoutEffect): the next paint reflects both the
+  // new caret AND the new scroll in the same render — React batches
+  // the setScrollY here with the original cause.
+  //
+  // First-frame note: `inner.height === 0` means yoga hasn't measured
+  // yet. Skip the re-scroll for one frame; the next render with a
+  // measured height triggers via the inner.height dep.
   useEffect(() => {
-    if (!multiline && inner.width > 0) {
-      const next = scrollToKeepCaretVisible({
-        scroll: scrollX,
-        caretPos: caretLineCol.col,
-        windowSize: inner.width,
-        contentSize: Math.max(contentWidth, caretLineCol.col + 1),
-      })
-      if (next !== scrollX) setScrollX(next)
-    }
-    if (multiline && inner.height > 0) {
+    if (inner.height > 0) {
       const next = scrollToKeepCaretVisible({
         scroll: scrollY,
-        caretPos: caretLineCol.line,
+        caretPos: visual.row,
         windowSize: inner.height,
-        contentSize: Math.max(contentHeight, caretLineCol.line + 1),
+        contentSize: Math.max(layout.rows.length, visual.row + 1),
       })
       if (next !== scrollY) setScrollY(next)
     }
-  }, [
-    multiline,
-    inner.width,
-    inner.height,
-    caretLineCol.col,
-    caretLineCol.line,
-    contentWidth,
-    contentHeight,
-    scrollX,
-    scrollY,
-  ])
+  }, [inner.height, visual.row, layout.rows.length, scrollY])
 
   // Subscribe to focus state via FocusContext. The earlier shortcut
   // `ref.current.focusManager?.activeElement === ref.current` was
@@ -355,27 +394,30 @@ export default function TextInput({
   // contract — copy still "succeeds" silently in that case.
   const { copy } = useClipboard()
 
-  // Declare the terminal cursor at the caret, adjusted for the active
-  // axis's scroll offset so it lands on the visible cell. The hook
-  // only renders the cursor when `active` is true — we're active iff
-  // this is the focused element.
+  // Declare the terminal cursor at the caret, in the box's outer coord
+  // system. The hook only renders the cursor when `active` is true —
+  // we're active iff this is the focused element.
   //
-  // Only one axis is maintained per mode (scrollX in single-line,
-  // scrollY in multiline) — the inactive axis stays at zero. But if
-  // `multiline` is toggled at runtime AFTER scrolling, the previously
-  // active axis still holds its last offset. Subtracting unconditionally
-  // would push the cursor declaration to the wrong (sometimes negative)
-  // coordinate. Gate by mode so the inactive axis is never applied.
+  // `visual` is in inner-content cell coords (origin = first content
+  // cell, after border + padding). Add `inner.offsetX/Y` to translate
+  // into outer-box coords (useDeclaredCursor's contract). Subtract
+  // scroll so the cursor follows the visible window.
+  //
+  // scrollY is in visual rows; scrollX is in cells (only non-zero in
+  // the future `wrap='none'` mode — soft-wrap leaves it at 0). Both
+  // subtractions are unconditional: the inactive axis stays at 0, so
+  // the math degenerates to the right value.
+  //
   // Cursor declaration coords are interpreted relative to the OUTER
-  // box rect (per useDeclaredCursor's contract), but the rendered
-  // text starts at (offsetX, offsetY) inside that — past the border
-  // and padding. Without the offset, a TextInput with `borderStyle`
-  // or `paddingX/Y` lands the visible cursor at the box's outer
-  // top-left corner instead of at the caret's actual cell. Visible
-  // immediately as a cursor "above" or "to the left of" the text.
+  // box rect, but the rendered text starts at (offsetX, offsetY)
+  // inside — past the border and padding. Without the offset, a
+  // TextInput with `borderStyle` or `paddingX/Y` lands the visible
+  // cursor at the box's outer top-left corner instead of at the
+  // caret's actual cell. Visible immediately as a cursor "above" or
+  // "to the left of" the text.
   const cursorRef = useDeclaredCursor({
-    line: inner.offsetY + caretLineCol.line - (multiline ? scrollY : 0),
-    column: inner.offsetX + caretLineCol.col - (multiline ? 0 : scrollX),
+    line: inner.offsetY + visual.row - scrollY,
+    column: inner.offsetX + visual.col - scrollX,
     active: isFocused,
     style: cursorStyle,
     blink: cursorBlink,
@@ -486,8 +528,8 @@ export default function TextInput({
   )
 
   // Click positions the caret. Mouse drag (gesture-captured) extends
-  // selection. Multiline click translates the (col, row) cell coords
-  // into a char index by walking lines.
+  // selection. Translates click cell coords through the wrap layout's
+  // `visualToLogical` to land on the buffer char idx the user clicked.
   const handleMouseDown = useCallback(
     (e: MouseDownEvent) => {
       if (disabled) return
@@ -502,69 +544,54 @@ export default function TextInput({
       if (focusCtx && node) focusCtx.manager.focus(node)
 
       // Click coords are local to the Box (0-indexed from its top-left
-      // INCLUDING padding/border). The visible content starts at
-      // (scrollX, scrollY) within the buffer, so add the scroll
-      // offsets to land on the right buffer position. We don't try
-      // to subtract padding/border here — the renderer's hit-test
-      // already accounts for box layout, so localCol/Row are
-      // relative to the OUTER box. If the user adds padding, click
-      // accuracy near the edges will be off by the padding amount;
-      // documented limitation.
-      const idx = clickToCharIndex(
-        state.value,
-        e.localCol + scrollX,
-        e.localRow + scrollY,
-        password,
-        passwordChar,
+      // INCLUDING padding/border). The rendered content starts at
+      // (offsetX, offsetY) inside the box; subtract those to get into
+      // the inner content's coord system. Add scroll offsets to map
+      // visible cell → buffer cell. visualToLogical clamps row + col
+      // to the layout bounds, so out-of-content clicks (border/padding
+      // area) snap to the nearest valid char position.
+      //
+      // Password+non-ASCII edge case: layout was built on the unmasked
+      // buffer; click cell math operates on those widths. For ASCII
+      // passwords (the common case), unmasked widths === masked widths.
+      // Non-ASCII passwords (emoji/CJK in a masked buffer) inherit the
+      // off-by-N click position the pre-soft-wrap code also had.
+      const idx = layout.visualToLogical(
+        e.localRow - inner.offsetY + scrollY,
+        e.localCol - inner.offsetX + scrollX,
       )
       dispatch({ type: 'setCaret', charIdx: idx, extend: e.shiftKey })
       e.captureGesture({
         onMove(m) {
-          const newIdx = clickToCharIndex(
-            state.value,
-            m.col - (e.col - e.localCol) + scrollX,
-            m.row - (e.row - e.localRow) + scrollY,
-            password,
-            passwordChar,
+          const newIdx = layout.visualToLogical(
+            m.row - (e.row - e.localRow) - inner.offsetY + scrollY,
+            m.col - (e.col - e.localCol) - inner.offsetX + scrollX,
           )
           dispatch({ type: 'setCaret', charIdx: newIdx, extend: true })
         },
       })
     },
-    [disabled, state.value, password, passwordChar, scrollX, scrollY, focusCtx],
+    [disabled, layout, inner.offsetX, inner.offsetY, scrollX, scrollY, focusCtx],
   )
 
   // ── Rendering ─────────────────────────────────────────────────────
 
-  // Compute lines-with-selection-highlights for rendering. Pass
-  // scroll offsets so the rendered slice matches the cursor's
-  // declared position (single-line: skip `scrollX` cells of the only
-  // line; multiline: skip `scrollY` rows).
+  // Render visual rows from the wrap layout, slicing the selection
+  // per-row, applying password masking + indent decoration. scrollY
+  // windows the visible row range when innerHeight constrains the
+  // box; on first render (innerHeight === 0) all rows render so the
+  // box can size to content.
   const renderedLines = useMemo(
     () =>
-      renderLines(state, {
+      renderLines(state, layout, {
         password,
         passwordChar,
         selectionColor,
         placeholder,
-        scrollX,
         scrollY,
-        innerWidth: inner.width,
         innerHeight: inner.height,
-        multiline,
       }),
-    [
-      state,
-      password,
-      passwordChar,
-      selectionColor,
-      placeholder,
-      scrollX,
-      scrollY,
-      inner.width,
-      inner.height,
-      multiline,
-    ],
+    [state, layout, password, passwordChar, selectionColor, placeholder, scrollY, inner.height],
   )
 
   // Focus-aware border color. Extract idle borderColor from boxProps so
@@ -670,38 +697,31 @@ type RenderOpts = {
   passwordChar: string
   selectionColor: Color
   placeholder: string | undefined
-  scrollX: number
   scrollY: number
-  innerWidth: number
   innerHeight: number
-  multiline: boolean
 }
 
-function maskValue(value: string, password: boolean, passwordChar: string): string {
-  if (!password) return value
-  // Preserve newlines (don't mask line breaks).
-  return value
-    .split('\n')
-    .map((line) => passwordChar.repeat([...line].length))
-    .join('\n')
+/** Mask one row's text with `passwordChar` repeated per code-point.
+ *  Operates on a single visual row (no `\n` inside row.text, so the
+ *  line-splitting maskValue used to do is unnecessary here). */
+function maskRowText(rowText: string, password: boolean, passwordChar: string): string {
+  if (!password) return rowText
+  return passwordChar.repeat([...rowText].length)
 }
 
-/** Render the buffer as one Text per line, splitting each line into
- *  pre-selection / selection / post-selection segments so the
- *  selection highlight is visible. Empty buffer renders the
- *  placeholder dimmed. */
-function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
-  const {
-    password,
-    passwordChar,
-    selectionColor,
-    placeholder,
-    scrollX,
-    scrollY,
-    innerWidth,
-    innerHeight,
-    multiline,
-  } = opts
+/** Render visual rows from the wrap layout, slicing each row's
+ *  selection range and applying password masking + indent decoration.
+ *  Empty buffer renders the placeholder dimmed (single-row,
+ *  truncate-end so a long placeholder doesn't itself wrap).
+ *
+ *  Per-row selection slicing uses UNMASKED row.text indices because
+ *  row.startCharIdx / state.caret / state.selection are all buffer-
+ *  relative (unmasked). For ASCII passwords this is identity to the
+ *  masked-text indices; for non-ASCII passwords (emoji/CJK in a masked
+ *  buffer) the slice may overshoot, so it's clamped to maskedText
+ *  length defensively. */
+function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts): React.ReactNode {
+  const { password, passwordChar, selectionColor, placeholder, scrollY, innerHeight } = opts
 
   if (state.value === '' && placeholder) {
     return (
@@ -711,64 +731,61 @@ function renderLines(state: TextInputState, opts: RenderOpts): React.ReactNode {
     )
   }
 
-  const display = maskValue(state.value, password, passwordChar)
-  const lines = splitLines(display)
   const [selStart, selEnd] = selectionOrCaretRange(state)
 
-  // Multiline: window the line array vertically. Single-line: window
-  // the only line horizontally. Both fall back to the full buffer when
-  // measurements aren't available yet (first render).
-  const visibleLines =
-    multiline && innerHeight > 0 ? lines.slice(scrollY, scrollY + innerHeight) : lines
-  const lineOffset = multiline && innerHeight > 0 ? scrollY : 0
+  // Window the visual rows vertically. innerHeight === 0 means yoga
+  // hasn't measured yet (first render) — emit all rows so the box can
+  // size to content; subsequent renders apply the slice.
+  const visibleRows =
+    innerHeight > 0 ? layout.rows.slice(scrollY, scrollY + innerHeight) : layout.rows
 
-  // Walk lines, emitting per-line segments. Convert flat selection
-  // indices into per-line indices. Index-as-key is correct here: lines
-  // have no stable identity, the buffer re-renders on every keystroke,
-  // and a stable key per slot avoids unmount-on-edit.
-  let charOffset = 0
-  for (let i = 0; i < lineOffset; i++) {
-    charOffset += (lines[i]?.length ?? 0) + 1 // +1 for '\n'
-  }
-  return visibleLines.map((line, lineIdx) => {
-    // For single-line, slice horizontally by cells.
-    const visibleLine =
-      !multiline && innerWidth > 0 ? sliceRowByCells(line, scrollX, innerWidth) : line
-    const lineLen = line.length
-    const localStart = clamp(selStart - charOffset, 0, lineLen)
-    const localEnd = clamp(selEnd - charOffset, 0, lineLen)
-    charOffset += lineLen + 1
+  // Walk visible rows, emitting per-row segments. Index-as-key is
+  // correct here: rows have no stable identity (the buffer re-renders
+  // on every keystroke), and a stable key per slot avoids unmount-on-
+  // edit.
+  return visibleRows.map((row, rowIdx) => {
+    const maskedText = maskRowText(row.text, password, passwordChar)
+    // Hanging-indent decoration: spaces prepended to continuation rows
+    // so they visually align under the first non-whitespace char of
+    // the original logical line. Always 0 (and thus the empty string)
+    // for non-continuation rows — their leading whitespace is in
+    // row.text already.
+    const indent = row.indentCells > 0 ? ' '.repeat(row.indentCells) : ''
 
-    // Selection range in the SLICED visible line. Convert by walking
-    // cells; for the simple no-wide-char path this is just char-index
-    // math after subtracting scrollX. For correctness with wide chars
-    // we'd compute via the same cell math sliceRowByCells uses, but
-    // for v1 the simple path is correct enough — selection rendering
-    // on a horizontally-scrolled wide char is a v2 nice-to-have.
-    const visStart = !multiline && innerWidth > 0 ? Math.max(0, localStart - scrollX) : localStart
-    const visEnd = !multiline && innerWidth > 0 ? Math.max(0, localEnd - scrollX) : localEnd
+    // Selection slice in unmasked-row-text indices.
+    const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
+    const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
 
-    if (visStart === visEnd) {
+    if (localStart === localEnd) {
+      // No selection on this row — render plain. The `|| ' '` ensures
+      // empty visual rows (zero-cell rows for empty logical lines) get
+      // a single space so the row has height 1; the caret can land on
+      // it. For non-empty content the indent + masked text is used.
       return (
         <Text
           // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
-          key={lineIdx}
+          key={rowIdx}
           wrap="truncate-end"
         >
-          {visibleLine || ' '}
+          {indent + maskedText || ' '}
         </Text>
       )
     }
 
-    const before = visibleLine.slice(0, visStart)
-    const sel = visibleLine.slice(visStart, visEnd) || ' '
-    const after = visibleLine.slice(visEnd)
+    // Defensive clamp for the password+non-ASCII edge: mask length can
+    // be < row.text length when the buffer has multi-UTF-16-unit graphemes.
+    const sliceStart = Math.min(localStart, maskedText.length)
+    const sliceEnd = Math.min(localEnd, maskedText.length)
+    const before = maskedText.slice(0, sliceStart)
+    const sel = maskedText.slice(sliceStart, sliceEnd) || ' '
+    const after = maskedText.slice(sliceEnd)
     return (
       <Text
         // biome-ignore lint/suspicious/noArrayIndexKey: see comment above
-        key={lineIdx}
+        key={rowIdx}
         wrap="truncate-end"
       >
+        {indent}
         {before}
         <Text backgroundColor={selectionColor}>{sel}</Text>
         {after}
@@ -820,35 +837,4 @@ function clamp(v: number, lo: number, hi: number): number {
   if (v < lo) return lo
   if (v > hi) return hi
   return v
-}
-
-/** Translate a click within the input (local cell coords) into a char
- *  index. For multiline, walks lines; for single-line, just one line. */
-function clickToCharIndex(
-  value: string,
-  col: number,
-  row: number,
-  password: boolean,
-  passwordChar: string,
-): number {
-  const display = maskValue(value, password, passwordChar)
-  const lines = splitLines(display)
-  const targetLine = clamp(row, 0, lines.length - 1)
-  const line = lines[targetLine]!
-  // We need real-buffer index, not display-buffer. For non-password
-  // mode, display === value, no translation needed. For password mode,
-  // display has 1 mask-char per buffer-char; column-to-char-index
-  // works the same.
-  let acc = 0
-  for (let i = 0; i < targetLine; i++) acc += lines[i]!.length + 1
-
-  // cell column → char index within the line
-  let cellAcc = 0
-  for (let i = 0; i < line.length; i++) {
-    const w = cellColumnAt(line[i]!, 1)
-    if (cellAcc + w > col) return acc + i
-    cellAcc += w
-    if (cellAcc === col) return acc + i + 1
-  }
-  return acc + line.length
 }

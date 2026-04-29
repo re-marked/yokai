@@ -17,3 +17,4 @@ yarn.lock
 .env.*
 
 /roadmap.md
+/textinput-soft-wrap-plan.md
