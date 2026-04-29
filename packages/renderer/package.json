@@ -1,5 +1,5 @@
 {
-  "name": "@yokai/renderer",
+  "name": "@yokai-tui/renderer",
   "version": "0.7.1",
   "description": "Serious React TUI renderer for serious CLI apps. Pure TypeScript Yoga layout, diff-based rendering, ScrollBox, alt buffer, mouse events, draggable and resizable components.",
   "license": "MIT",
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
-    "@yokai/shared": "workspace:*",
+    "@yokai-tui/shared": "workspace:*",
     "auto-bind": "^5.0.1",
     "bidi-js": "^1.0.3",
     "chalk": "^5.6.2",

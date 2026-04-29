@@ -4,8 +4,8 @@ Container that exposes grab handles on its bottom / right / SE corner and update
 
 ## Import
 ```tsx
-import { Resizable } from '@yokai/renderer'
-import type { ResizeSize, ResizeHandleDirection, ResizeInfo } from '@yokai/renderer'
+import { Resizable } from '@yokai-tui/renderer'
+import type { ResizeSize, ResizeHandleDirection, ResizeInfo } from '@yokai-tui/renderer'
 ```
 
 ## Props

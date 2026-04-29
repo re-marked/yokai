@@ -4,7 +4,7 @@ Renders an error fallback with message, source location, code excerpt, and parse
 
 ## Import
 ```tsx
-import { ErrorOverview } from '@yokai/renderer'
+import { ErrorOverview } from '@yokai-tui/renderer'
 ```
 
 ## Props

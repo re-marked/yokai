@@ -10,7 +10,7 @@
     "url": "https://github.com/re-marked/yokai.git"
   },
   "scripts": {
-    "build": "pnpm --filter @yokai/shared build && pnpm --filter @yokai/renderer build",
+    "build": "pnpm --filter @yokai-tui/shared build && pnpm --filter @yokai-tui/renderer build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "vitest run",

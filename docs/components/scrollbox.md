@@ -4,7 +4,7 @@ A constrained-height container with `overflow: scroll`, viewport culling, and an
 
 ## Import
 ```tsx
-import { ScrollBox, type ScrollBoxHandle } from '@yokai/renderer'
+import { ScrollBox, type ScrollBoxHandle } from '@yokai-tui/renderer'
 ```
 
 ## Props

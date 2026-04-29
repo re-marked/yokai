@@ -4,7 +4,7 @@ Emits pre-rendered, pre-wrapped ANSI lines as a single Yoga leaf — bypasses th
 
 ## Import
 ```tsx
-import { RawAnsi } from '@yokai/renderer'
+import { RawAnsi } from '@yokai-tui/renderer'
 ```
 
 ## Props

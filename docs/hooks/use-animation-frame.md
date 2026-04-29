@@ -4,7 +4,7 @@ Synchronized animation clock that pauses when the attached element is offscreen.
 
 ## Import
 ```tsx
-import { useAnimationFrame } from '@yokai/renderer'
+import { useAnimationFrame } from '@yokai-tui/renderer'
 ```
 
 ## Signature

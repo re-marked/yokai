@@ -1,5 +1,5 @@
 import { type AnsiCode, ansiCodesToString, diffAnsiCodes } from '@alcalzone/ansi-tokenize'
-import { logForDebugging } from '@yokai/shared'
+import { logForDebugging } from '@yokai-tui/shared'
 import type { Diff, FlickerReason, Frame } from './frame'
 import type { Point } from './layout/geometry'
 import {

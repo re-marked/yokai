@@ -15,7 +15,7 @@
  * Press q or Escape to quit.
  */
 
-import { AlternateScreen, Box, Resizable, Text, render, useApp, useInput } from '@yokai/renderer'
+import { AlternateScreen, Box, Resizable, Text, render, useApp, useInput } from '@yokai-tui/renderer'
 import type React from 'react'
 import { useState } from 'react'
 

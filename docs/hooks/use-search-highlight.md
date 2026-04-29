@@ -4,7 +4,7 @@ Highlight search matches in screen-space across the rendered frame.
 
 ## Import
 ```tsx
-import { useSearchHighlight } from '@yokai/renderer'
+import { useSearchHighlight } from '@yokai-tui/renderer'
 ```
 
 ## Signature

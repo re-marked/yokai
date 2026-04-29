@@ -1,5 +1,5 @@
 import { Stream } from 'node:stream'
-import { logForDebugging } from '@yokai/shared'
+import { logForDebugging } from '@yokai-tui/shared'
 import type { ReactNode } from 'react'
 import type { FrameEvent } from './frame'
 import Ink, { type Options as InkOptions } from './ink'

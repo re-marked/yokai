@@ -1,6 +1,6 @@
 # Migration from Ink
 
-How to port an [Ink](https://github.com/vadimdemedes/ink) app to `@yokai/renderer`.
+How to port an [Ink](https://github.com/vadimdemedes/ink) app to `@yokai-tui/renderer`.
 
 ## What stays the same
 
@@ -69,7 +69,7 @@ Yokai honors `Styles.zIndex` on `position: 'absolute'` nodes. Stacking is per-pa
 
 ### Pure-TS Yoga
 
-Layout runs through `@yokai/shared`'s pure-TypeScript flexbox engine — no WASM, no native binding. One default differs from Ink:
+Layout runs through `@yokai-tui/shared`'s pure-TypeScript flexbox engine — no WASM, no native binding. One default differs from Ink:
 
 | Property | Ink default | yokai default |
 |----------|-------------|---------------|
@@ -79,7 +79,7 @@ Existing Ink layouts that relied on automatic shrinking need `flexShrink={1}` se
 
 ## Removed / renamed APIs
 
-The following Ink APIs are not exported by `@yokai/renderer` (verified against `packages/renderer/src/index.ts`):
+The following Ink APIs are not exported by `@yokai-tui/renderer` (verified against `packages/renderer/src/index.ts`):
 
 | Ink API | Status in yokai |
 |---------|-----------------|
@@ -111,7 +111,7 @@ render(<Item label="Hello" />)
 
 ```tsx
 // yokai
-import { render, Box, Text, useFocus, AlternateScreen } from '@yokai/renderer'
+import { render, Box, Text, useFocus, AlternateScreen } from '@yokai-tui/renderer'
 
 function Item({ label }: { label: string }) {
   const { ref, isFocused } = useFocus()

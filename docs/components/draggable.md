@@ -4,8 +4,8 @@ Press-hold-drag-release rectangle that updates its absolute position from cursor
 
 ## Import
 ```tsx
-import { Draggable } from '@yokai/renderer'
-import type { DragPos, DragBounds, DragInfo } from '@yokai/renderer'
+import { Draggable } from '@yokai-tui/renderer'
+import type { DragPos, DragBounds, DragInfo } from '@yokai-tui/renderer'
 ```
 
 ## Props

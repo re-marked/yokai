@@ -25,7 +25,7 @@ Behavior with the flag set:
 Pair this with [`useDeclaredCursor`](../hooks/use-declared-cursor.md) so the cursor lands on the focused input or the active item — that is the position the magnifier zooms to and the reader reads from.
 
 ```tsx
-import { useDeclaredCursor } from '@yokai/renderer'
+import { useDeclaredCursor } from '@yokai-tui/renderer'
 
 function Prompt({ value, caret }: { value: string; caret: number }) {
   useDeclaredCursor({ row: 0, col: caret })
@@ -43,7 +43,7 @@ Treat the mouse as optional. Every interaction must have a keyboard equivalent.
 - Escape cancels modals, closes menus, returns focus to the previous landmark.
 
 ```tsx
-import { FocusGroup, useFocus } from '@yokai/renderer'
+import { FocusGroup, useFocus } from '@yokai-tui/renderer'
 
 function Item({ label }: { label: string }) {
   const { isFocused } = useFocus()
@@ -73,7 +73,7 @@ Two patterns:
 
 ```tsx
 // 1. FocusRing — wraps the child and applies a border when focused
-import { FocusRing } from '@yokai/renderer'
+import { FocusRing } from '@yokai-tui/renderer'
 
 <FocusRing>
   <Button onClick={submit}>Submit</Button>
@@ -91,7 +91,7 @@ See [`<FocusRing>`](../components/focus-ring.md).
 Long screens force keyboard users to tab past every element. Provide landmarks and a way to jump to them.
 
 ```tsx
-import { useFocusManager, useFocus } from '@yokai/renderer'
+import { useFocusManager, useFocus } from '@yokai-tui/renderer'
 
 function App() {
   const main = useFocus({ id: 'main' })

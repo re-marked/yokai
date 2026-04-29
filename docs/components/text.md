@@ -4,7 +4,7 @@ Renders a styled text node — the only legal place to put string children in a 
 
 ## Import
 ```tsx
-import { Text } from '@yokai/renderer'
+import { Text } from '@yokai-tui/renderer'
 ```
 
 ## Props

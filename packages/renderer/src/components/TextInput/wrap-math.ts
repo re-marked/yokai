@@ -16,7 +16,7 @@
  * unit-testable in isolation against `wrap-math.test.ts`.
  */
 
-import { getGraphemeSegmenter } from '@yokai/shared'
+import { getGraphemeSegmenter } from '@yokai-tui/shared'
 import { stringWidth } from '../../stringWidth.js'
 
 /**

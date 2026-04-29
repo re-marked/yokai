@@ -40,7 +40,7 @@ Yokai follows [semver](https://semver.org/):
 - **minor** (`0.x.0`) — new public API, new components, new exported types
 - **major** (`x.0.0`) — breaking changes (none yet on the `0.x` line)
 
-`@yokai/renderer` and `@yokai/shared` move in lockstep — when one bumps, the other bumps to the same version. Root `package.json` syncs too.
+`@yokai-tui/renderer` and `@yokai-tui/shared` move in lockstep — when one bumps, the other bumps to the same version. Root `package.json` syncs too.
 
 Releases are cut **on demand**. The flow:
 
@@ -55,7 +55,7 @@ Consumers pin via git ref:
 
 ```jsonc
 "dependencies": {
-  "@yokai/renderer": "github:re-marked/yokai#vX.Y.Z"
+  "@yokai-tui/renderer": "github:re-marked/yokai#vX.Y.Z"
 }
 ```
 

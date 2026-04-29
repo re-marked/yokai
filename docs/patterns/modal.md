@@ -15,10 +15,10 @@ import {
   useApp,
   useFocusManager,
   useInput,
-} from '@yokai/renderer'
+} from '@yokai-tui/renderer'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { useFocus } from '@yokai/renderer'
+import { useFocus } from '@yokai-tui/renderer'
 
 function ConfirmModal({
   message,

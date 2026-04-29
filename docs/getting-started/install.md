@@ -17,7 +17,7 @@ Yokai is not published to npm. Consume it as a GitHub dependency pinned to a rel
 // package.json
 {
   "dependencies": {
-    "@yokai/renderer": "github:re-marked/yokai#v0.5.0",
+    "@yokai-tui/renderer": "github:re-marked/yokai#v0.5.0",
     "react": "^19.2.5"
   }
 }
@@ -25,13 +25,13 @@ Yokai is not published to npm. Consume it as a GitHub dependency pinned to a rel
 
 Pin to a tag. `main` moves and breaks consumers between commits. See [release notes](https://github.com/re-marked/yokai/releases) for what changed in each version.
 
-If a project uses both `@yokai/renderer` and `@yokai/shared` directly, pin both to the same tag.
+If a project uses both `@yokai-tui/renderer` and `@yokai-tui/shared` directly, pin both to the same tag.
 
 ```jsonc
 {
   "dependencies": {
-    "@yokai/renderer": "github:re-marked/yokai#v0.5.0",
-    "@yokai/shared": "github:re-marked/yokai#v0.5.0"
+    "@yokai-tui/renderer": "github:re-marked/yokai#v0.5.0",
+    "@yokai-tui/shared": "github:re-marked/yokai#v0.5.0"
   }
 }
 ```
@@ -44,7 +44,7 @@ For first-party consumers (claude-corp and similar), depend on the workspace pac
 // package.json
 {
   "dependencies": {
-    "@yokai/renderer": "workspace:*"
+    "@yokai-tui/renderer": "workspace:*"
   }
 }
 ```
@@ -52,10 +52,10 @@ For first-party consumers (claude-corp and similar), depend on the workspace pac
 With pnpm:
 
 ```bash
-pnpm add @yokai/renderer --workspace
+pnpm add @yokai-tui/renderer --workspace
 ```
 
-The shared package is hoisted automatically; explicit dependency is only required if the consumer imports `@yokai/shared` symbols directly.
+The shared package is hoisted automatically; explicit dependency is only required if the consumer imports `@yokai-tui/shared` symbols directly.
 
 ## Build before use
 

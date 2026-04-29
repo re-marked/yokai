@@ -18,7 +18,7 @@ For finer-grained recovery, write a React class component with `getDerivedStateF
 
 ```tsx
 import { Component, type ReactNode } from 'react'
-import { Box, Text } from '@yokai/renderer'
+import { Box, Text } from '@yokai-tui/renderer'
 
 class Boundary extends Component<
   { fallback: ReactNode; children: ReactNode },
@@ -81,7 +81,7 @@ function Loader({ load }: { load: () => Promise<Data> }) {
 `uncaughtException` and `unhandledRejection` are not auto-handled by yokai. The consumer owns this. Recommended pattern in a CLI entry point:
 
 ```ts
-import { render } from '@yokai/renderer'
+import { render } from '@yokai-tui/renderer'
 
 const instance = render(<App />)
 
@@ -104,7 +104,7 @@ await instance.waitUntilExit()
 Calling `exit()` with no argument unmounts cleanly and resolves the `waitUntilExit()` promise. Calling `exit(error)` rejects it with the supplied error.
 
 ```tsx
-import { useApp } from '@yokai/renderer'
+import { useApp } from '@yokai-tui/renderer'
 
 function App() {
   const { exit } = useApp()
@@ -134,7 +134,7 @@ try {
 `createRoot` is async. Failures during initial render reject the `createRoot()` promise. Wrap the call:
 
 ```ts
-import { createRoot } from '@yokai/renderer'
+import { createRoot } from '@yokai-tui/renderer'
 
 try {
   const root = await createRoot(<App />)
@@ -167,8 +167,8 @@ Stdout belongs to the renderer. Anything you write to stdout collides with the f
 // Option 1: stderr
 process.stderr.write(`[debug] ${value}\n`)
 
-// Option 2: gated debug logger from @yokai/shared
-import { logForDebugging } from '@yokai/shared'
+// Option 2: gated debug logger from @yokai-tui/shared
+import { logForDebugging } from '@yokai-tui/shared'
 logForDebugging('selected=' + selected, { level: 'debug' })
 ```
 

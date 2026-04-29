@@ -4,7 +4,7 @@ Focusable boolean toggle. Renders `[x]` / `[ ]` plus an optional label, the whol
 
 ## Import
 ```tsx
-import { Checkbox } from '@yokai/renderer'
+import { Checkbox } from '@yokai-tui/renderer'
 ```
 
 ## Props

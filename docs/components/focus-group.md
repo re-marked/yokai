@@ -4,8 +4,8 @@ Wraps a `<Box>` and adds arrow-key navigation between focusable descendants.
 
 ## Import
 ```tsx
-import { FocusGroup } from '@yokai/renderer'
-import type { FocusGroupDirection } from '@yokai/renderer'
+import { FocusGroup } from '@yokai-tui/renderer'
+import type { FocusGroupDirection } from '@yokai-tui/renderer'
 ```
 
 ## Props

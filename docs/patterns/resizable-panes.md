@@ -7,7 +7,7 @@ A split view where the user drags a divider to repartition space between two pan
 ### Approach A: two `<Resizable>` panels
 
 ```tsx
-import { AlternateScreen, Box, Resizable, Text, render, useApp, useInput } from '@yokai/renderer'
+import { AlternateScreen, Box, Resizable, Text, render, useApp, useInput } from '@yokai-tui/renderer'
 import type React from 'react'
 import { useState } from 'react'
 
@@ -67,7 +67,7 @@ import {
   render,
   useApp,
   useInput,
-} from '@yokai/renderer'
+} from '@yokai-tui/renderer'
 import type React from 'react'
 import { useState } from 'react'
 

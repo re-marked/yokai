@@ -10,8 +10,8 @@ Used by [claude-corp](https://github.com/re-marked/claude-corp). Forked from [cl
 
 | Package | Description |
 |---------|-------------|
-| [`@yokai/renderer`](./packages/renderer) | React reconciler, component library, event system, terminal I/O |
-| [`@yokai/shared`](./packages/shared) | Pure-TypeScript Yoga layout engine, logging, env helpers |
+| [`@yokai-tui/renderer`](./packages/renderer) | React reconciler, component library, event system, terminal I/O |
+| [`@yokai-tui/shared`](./packages/shared) | Pure-TypeScript Yoga layout engine, logging, env helpers |
 
 ## How it works
 
@@ -30,7 +30,7 @@ The renderer double-buffers frames, diffs cell-by-cell, and emits only the minim
 ## Components
 
 ```tsx
-import { render, Box, Text, ScrollBox } from '@yokai/renderer'
+import { render, Box, Text, ScrollBox } from '@yokai-tui/renderer'
 
 function App() {
   return (
@@ -128,7 +128,7 @@ Inside `onMouseDown`, call `event.captureGesture({ onMove, onUp })` to claim sub
 Tab / Shift+Tab cycle through every `tabIndex >= 0` element in the tree (built into the renderer — no setup needed). Arrow-key navigation is opt-in via `<FocusGroup>`, scoped to its descendants — Tab still cycles globally, arrows are bounded.
 
 ```tsx
-import { FocusGroup, FocusRing, Text, useFocusManager } from '@yokai/renderer'
+import { FocusGroup, FocusRing, Text, useFocusManager } from '@yokai-tui/renderer'
 
 function Menu({ items }) {
   return (
@@ -178,7 +178,7 @@ Each demo lives in `examples/` and is a small `.tsx` file you can read top-to-bo
 ```jsonc
 // package.json
 "dependencies": {
-  "@yokai/renderer": "github:re-marked/yokai#v0.6.0"
+  "@yokai-tui/renderer": "github:re-marked/yokai#v0.6.0"
 }
 ```
 

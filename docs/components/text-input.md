@@ -4,7 +4,7 @@ Editable text input. Single-line by default; pass `multiline` for newline-aware 
 
 ## Import
 ```tsx
-import { TextInput } from '@yokai/renderer'
+import { TextInput } from '@yokai-tui/renderer'
 ```
 
 ## Props

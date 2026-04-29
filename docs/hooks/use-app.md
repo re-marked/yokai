@@ -4,7 +4,7 @@ Access app-level actions from inside the React tree.
 
 ## Import
 ```tsx
-import { useApp } from '@yokai/renderer'
+import { useApp } from '@yokai-tui/renderer'
 ```
 
 ## Signature

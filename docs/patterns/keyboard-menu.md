@@ -15,7 +15,7 @@ import {
   useApp,
   useFocusManager,
   useInput,
-} from '@yokai/renderer'
+} from '@yokai-tui/renderer'
 import type React from 'react'
 import { useState } from 'react'
 

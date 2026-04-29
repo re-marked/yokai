@@ -4,14 +4,14 @@ Module-level layout of the yokai monorepo and the renderer's internal subsystems
 
 ## Responsibility
 
-Defines what each package owns, the dependency direction between them, and the named subsystems inside `@yokai/renderer`. Does NOT cover individual algorithms — see the per-subsystem pages.
+Defines what each package owns, the dependency direction between them, and the named subsystems inside `@yokai-tui/renderer`. Does NOT cover individual algorithms — see the per-subsystem pages.
 
 ## Packages
 
 | Package | Owns |
 |---|---|
-| `@yokai/shared` | Pure-TS Yoga port (`shared/src/yoga-layout/`), logging (`logger.ts`, `log.ts`, `debug.ts`), env helpers (`env.ts`, `envUtils.ts`), `stringWidth`, `sliceAnsi`, grapheme segmenter, `intl`, `semver`. No React, no terminal I/O, no DOM. |
-| `@yokai/renderer` | React reconciler, virtual DOM, layout glue, render pipeline, terminal I/O, event system, components, hooks. |
+| `@yokai-tui/shared` | Pure-TS Yoga port (`shared/src/yoga-layout/`), logging (`logger.ts`, `log.ts`, `debug.ts`), env helpers (`env.ts`, `envUtils.ts`), `stringWidth`, `sliceAnsi`, grapheme segmenter, `intl`, `semver`. No React, no terminal I/O, no DOM. |
+| `@yokai-tui/renderer` | React reconciler, virtual DOM, layout glue, render pipeline, terminal I/O, event system, components, hooks. |
 
 Dependency direction is one-way: `renderer → shared`. `shared` never imports from `renderer`. The shared package is a sibling, not a sub-tree.
 

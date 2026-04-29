@@ -42,6 +42,6 @@ Set `stickyScroll` to keep the scroll pinned to the bottom on append. If a scrol
 
 Something must keep the event loop alive. `render` does this when stdin is a TTY (raw mode + listener). If stdin is piped or redirected, raw mode is unavailable; use `useApp().exit` to control lifecycle, or read from a file instead. Check `useStdin().isRawModeSupported`.
 
-### TypeScript can't find @yokai/renderer
+### TypeScript can't find @yokai-tui/renderer
 
 Run `pnpm install` and `pnpm build` in order. Renderer's types are emitted by its build step and depend on shared being built first. In a workspace, ensure the consumer's `tsconfig.json` `paths` resolve to the built `dist/` or that workspace symlinks are present.

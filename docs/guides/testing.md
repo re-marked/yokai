@@ -1,6 +1,6 @@
 # Testing
 
-How to test components and behavior built on `@yokai/renderer`.
+How to test components and behavior built on `@yokai-tui/renderer`.
 
 ## Test runner
 
@@ -65,8 +65,8 @@ test('clamps at top', () => {
 For components that hang behavior off DOM-level events, build a hand-rolled DOMElement tree and dispatch events directly. Skips the reconciler, the Yoga calc, the screen diff — only the event path runs.
 
 ```ts
-import { createNode, appendChildNode, setAttribute } from '@yokai/renderer/dom'
-import { dispatchClick } from '@yokai/renderer/events/dispatch'
+import { createNode, appendChildNode, setAttribute } from '@yokai-tui/renderer/dom'
+import { dispatchClick } from '@yokai-tui/renderer/events/dispatch'
 
 const root = createNode('ink-root')
 const box = createNode('ink-box')
@@ -88,10 +88,10 @@ Invoke event class methods (e.g. `event.stopImmediatePropagation()`, `event.capt
 
 ## When to test through React
 
-Render a real tree via `render()` from `@yokai/renderer` only when the React state plumbing is the unit under test — cross-component prop flow, context propagation, hook lifecycle. For everything else (event dispatch, layout math, geometry helpers, registry behavior), the pure-helper + hand-built DOM path is faster and stricter.
+Render a real tree via `render()` from `@yokai-tui/renderer` only when the React state plumbing is the unit under test — cross-component prop flow, context propagation, hook lifecycle. For everything else (event dispatch, layout math, geometry helpers, registry behavior), the pure-helper + hand-built DOM path is faster and stricter.
 
 ```ts
-import { render } from '@yokai/renderer'
+import { render } from '@yokai-tui/renderer'
 import { PassThrough } from 'node:stream'
 
 const stdout = new PassThrough() as unknown as NodeJS.WriteStream

@@ -3,7 +3,7 @@
 Render "Hello, world" and exit on `q`.
 
 ```tsx
-import { render, Text, useApp, useInput } from '@yokai/renderer'
+import { render, Text, useApp, useInput } from '@yokai-tui/renderer'
 import type React from 'react'
 
 function App(): React.ReactNode {

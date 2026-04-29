@@ -17,8 +17,8 @@ const { execFileNoThrow } = vi.hoisted(() => ({
   execFileNoThrow: vi.fn(async () => ({ stdout: '', stderr: '', code: 0 })),
 }))
 
-vi.mock('@yokai/shared', async () => {
-  const actual = await vi.importActual<typeof import('@yokai/shared')>('@yokai/shared')
+vi.mock('@yokai-tui/shared', async () => {
+  const actual = await vi.importActual<typeof import('@yokai-tui/shared')>('@yokai-tui/shared')
   return {
     ...actual,
     execFileNoThrow,

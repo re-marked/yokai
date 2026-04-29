@@ -4,7 +4,7 @@ Focusable Box with a built-in focus-visible border indicator.
 
 ## Import
 ```tsx
-import { FocusRing } from '@yokai/renderer'
+import { FocusRing } from '@yokai-tui/renderer'
 ```
 
 ## Props

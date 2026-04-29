@@ -4,7 +4,7 @@ Report whether the terminal window itself currently has focus.
 
 ## Import
 ```tsx
-import { useTerminalFocus } from '@yokai/renderer'
+import { useTerminalFocus } from '@yokai-tui/renderer'
 ```
 
 ## Signature

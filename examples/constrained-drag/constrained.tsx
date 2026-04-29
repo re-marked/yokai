@@ -20,7 +20,7 @@
  * Press q or Escape to quit.
  */
 
-import { AlternateScreen, Box, Draggable, Text, render, useApp, useInput } from '@yokai/renderer'
+import { AlternateScreen, Box, Draggable, Text, render, useApp, useInput } from '@yokai-tui/renderer'
 import type React from 'react'
 
 const CONTAINER_W = 36

@@ -17,7 +17,7 @@ import {
   useInterval,
   useSearchHighlight,
   type ScrollBoxHandle,
-} from '@yokai/renderer'
+} from '@yokai-tui/renderer'
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 

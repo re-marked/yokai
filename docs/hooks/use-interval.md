@@ -4,7 +4,7 @@ Interval and time-tick hooks backed by the shared Clock.
 
 ## Import
 ```tsx
-import { useInterval, useAnimationTimer } from '@yokai/renderer'
+import { useInterval, useAnimationTimer } from '@yokai-tui/renderer'
 ```
 
 ## Signatures

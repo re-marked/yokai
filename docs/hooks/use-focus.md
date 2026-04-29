@@ -4,7 +4,7 @@ Track focus state for a single element and expose imperative focus.
 
 ## Import
 ```tsx
-import { useFocus } from '@yokai/renderer'
+import { useFocus } from '@yokai-tui/renderer'
 ```
 
 ## Signature
