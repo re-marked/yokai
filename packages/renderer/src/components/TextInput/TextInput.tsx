@@ -18,6 +18,7 @@ import type { PasteEvent } from '../../events/paste-event.js'
 import { useClipboard } from '../../hooks/use-clipboard.js'
 import { useDeclaredCursor } from '../../hooks/use-declared-cursor.js'
 import { LayoutEdge } from '../../layout/node.js'
+import { stringWidth } from '../../stringWidth.js'
 import type { Color } from '../../styles.js'
 import type { CursorStyle } from '../../termio/dec.js'
 import Box, { type Props as BoxProps } from '../Box.js'
@@ -590,8 +591,19 @@ export default function TextInput({
         placeholder,
         scrollY,
         innerHeight: inner.height,
+        innerWidth: inner.width,
       }),
-    [state, layout, password, passwordChar, selectionColor, placeholder, scrollY, inner.height],
+    [
+      state,
+      layout,
+      password,
+      passwordChar,
+      selectionColor,
+      placeholder,
+      scrollY,
+      inner.height,
+      inner.width,
+    ],
   )
 
   // Focus-aware border color. Extract idle borderColor from boxProps so
@@ -699,6 +711,13 @@ type RenderOpts = {
   placeholder: string | undefined
   scrollY: number
   innerHeight: number
+  /** Inner content width (cells, net of border + padding). Needed by
+   *  the multi-row selection renderer to compute right-edge slack —
+   *  the gap between the row's content end and the box's right edge —
+   *  which gets filled with selection bg so multi-row selections look
+   *  like one continuous stripe rather than disconnected per-row
+   *  highlights. */
+  innerWidth: number
 }
 
 /** Mask one row's text with `passwordChar` repeated per code-point.
@@ -711,8 +730,27 @@ function maskRowText(rowText: string, password: boolean, passwordChar: string): 
 
 /** Render visual rows from the wrap layout, slicing each row's
  *  selection range and applying password masking + indent decoration.
+ *
+ *  Multi-row selection rendering: a selection that spans more than one
+ *  visual row paints as a CONTINUOUS STRIPE — partial-row segments at
+ *  the start/end fill the row's right-edge slack with selection bg,
+ *  and continuation rows get the same bg over their hanging-indent
+ *  decoration. Eye sees one highlighted region instead of a series of
+ *  disconnected per-row segments.
+ *
+ *  Two row-edge booleans drive the decoration:
+ *
+ *    - `indentBg`: selection started BEFORE this row's first char →
+ *      indent decoration cells get bg. Means the row is mid- or
+ *      end-of a multi-row selection (selection coming in from above).
+ *    - `rightSlackBg`: selection extends PAST this row's last char →
+ *      slack from row content's right edge to box's right edge gets
+ *      bg. Means selection continues onto the next row.
+ *
  *  Empty buffer renders the placeholder dimmed (single-row,
- *  truncate-end so a long placeholder doesn't itself wrap).
+ *  truncate-end so a long placeholder doesn't itself wrap). Empty
+ *  visual rows in a multi-row selection are NOT yet bg-decorated;
+ *  D3 adds that.
  *
  *  Per-row selection slicing uses UNMASKED row.text indices because
  *  row.startCharIdx / state.caret / state.selection are all buffer-
@@ -721,7 +759,8 @@ function maskRowText(rowText: string, password: boolean, passwordChar: string): 
  *  buffer) the slice may overshoot, so it's clamped to maskedText
  *  length defensively. */
 function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts): React.ReactNode {
-  const { password, passwordChar, selectionColor, placeholder, scrollY, innerHeight } = opts
+  const { password, passwordChar, selectionColor, placeholder, scrollY, innerHeight, innerWidth } =
+    opts
 
   if (state.value === '' && placeholder) {
     return (
@@ -755,8 +794,9 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
     // Selection slice in unmasked-row-text indices.
     const localStart = clamp(selStart - row.startCharIdx, 0, row.text.length)
     const localEnd = clamp(selEnd - row.startCharIdx, 0, row.text.length)
+    const hasInRowSelection = localStart < localEnd
 
-    if (localStart === localEnd) {
+    if (!hasInRowSelection) {
       // No selection on this row — render plain. The `|| ' '` ensures
       // empty visual rows (zero-cell rows for empty logical lines) get
       // a single space so the row has height 1; the caret can land on
@@ -772,6 +812,22 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
       )
     }
 
+    // Multi-row selection decoration. Each row in a stripe-spanning
+    // selection paints as: [indent (maybe bg)][before][sel + slack
+    // (bg)][after]. The indent gets bg only when selection extended
+    // from the row above (selStart strictly less than this row's
+    // start); the right-slack gets bg only when selection continues
+    // to the row below (selEnd strictly greater than this row's end).
+    const indentBg = selStart < row.startCharIdx
+    const rightSlackBg = selEnd > row.endCharIdx
+    // Right-slack cell count: how many cells between this row's content
+    // end and the box's right edge. Only filled (with bg) when slack
+    // exists AND selection continues past row's end. innerWidth === 0
+    // (first render) gives slack=0 — no fill, defer until measured.
+    const usedCells = row.indentCells + stringWidth(maskedText)
+    const rightSlack = rightSlackBg ? Math.max(0, innerWidth - usedCells) : 0
+    const slackChars = rightSlack > 0 ? ' '.repeat(rightSlack) : ''
+
     // Defensive clamp for the password+non-ASCII edge: mask length can
     // be < row.text length when the buffer has multi-UTF-16-unit graphemes.
     const sliceStart = Math.min(localStart, maskedText.length)
@@ -785,9 +841,12 @@ function renderLines(state: TextInputState, layout: WrapLayout, opts: RenderOpts
         key={rowIdx}
         wrap="truncate-end"
       >
-        {indent}
+        {indentBg ? <Text backgroundColor={selectionColor}>{indent}</Text> : indent}
         {before}
-        <Text backgroundColor={selectionColor}>{sel}</Text>
+        <Text backgroundColor={selectionColor}>
+          {sel}
+          {slackChars}
+        </Text>
         {after}
       </Text>
     )
