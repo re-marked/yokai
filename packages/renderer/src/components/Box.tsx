@@ -24,6 +24,17 @@ export type Props = Except<Styles, 'textWrap'> & {
    */
   autoFocus?: boolean
   /**
+   * Whether mouse-clicking this element should move focus to it.
+   * Default `true` (matches the standard "click focuses" behavior).
+   *
+   * Set to `false` for elements that should be interactive but
+   * shouldn't tear focus away from a peer — e.g. a `<Checkbox>` or
+   * `<Radio>` next to a focused `<TextInput>` whose live preview
+   * shouldn't disappear when the user clicks a config toggle. Tab
+   * navigation is unaffected — the element still focuses on Tab.
+   */
+  claimFocusOnClick?: boolean
+  /**
    * Fired on left-button click (press + release without drag). Only works
    * inside `<AlternateScreen>` where mouse tracking is enabled — no-op
    * otherwise. The event bubbles from the deepest hit Box up through
@@ -80,6 +91,7 @@ function Box({
   ref,
   tabIndex,
   autoFocus,
+  claimFocusOnClick,
   onClick,
   onFocus,
   onFocusCapture,
@@ -118,6 +130,7 @@ function Box({
       ref={ref}
       tabIndex={tabIndex}
       autoFocus={autoFocus}
+      claimFocusOnClick={claimFocusOnClick}
       onClick={onClick}
       onFocus={onFocus}
       onFocusCapture={onFocusCapture}

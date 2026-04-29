@@ -1,13 +1,15 @@
 /**
  * Cursor styles demo — every (style × blink × color) combination
- * driven by real focusable checkboxes.
+ * driven by real focusable radios. The TextInput stays focused
+ * throughout: clicking a radio toggles its value WITHOUT tearing
+ * focus, so the live cursor preview updates in place without
+ * blinking out.
  *
  *   pnpm demo:cursor-styles
  *
- * Tab between sections. Arrows within a section. Enter / Space toggles
- * the focused checkbox. Mouse click toggles too. Type into the
- * TextInput at the bottom to watch the cursor morph live as you flip
- * the boxes.
+ * Tab between sections. Arrows within a section. Enter / Space
+ * toggles the focused radio. Mouse click toggles too. Type into the
+ * TextInput to watch the cursor morph live as you flip the boxes.
  *
  * Press Ctrl+C to quit.
  */
@@ -18,12 +20,11 @@ import {
   type Color,
   type CursorStyle,
   FocusGroup,
-  type KeyboardEvent,
+  Radio,
   Text,
   TextInput,
   render,
   useApp,
-  useFocus,
   useInput,
 } from '@yokai/renderer'
 import type React from 'react'
@@ -54,7 +55,7 @@ function App(): React.ReactNode {
   const [color, setColor] = useState<ColorChoice>('default')
   const [text, setText] = useState('Type here to see the cursor')
 
-  // Convert ColorChoice → the actual prop value (undefined = terminal default).
+  // Map ColorChoice → the actual prop value (undefined = terminal default).
   const cursorColor: Color | undefined = color === 'default' ? undefined : color
 
   return (
@@ -69,43 +70,42 @@ function App(): React.ReactNode {
         <Group label="Style (DECSCUSR shape)">
           <FocusGroup direction="row">
             {STYLES.map((s) => (
-              <Radio
-                key={s}
-                current={style}
-                value={s}
-                onChange={setStyle}
-                label={s}
-                swatch={swatchFor(s)}
-              />
+              <Radio key={s} current={style} value={s} onChange={setStyle} label={s} paddingX={1} />
             ))}
           </FocusGroup>
         </Group>
 
         <Group label="Blink (DECSCUSR pair)">
           <FocusGroup direction="row">
-            <Radio current={blink} value={true} onChange={setBlink} label="blinking" />
-            <Radio current={blink} value={false} onChange={setBlink} label="steady" />
+            <Radio
+              current={blink}
+              value={true}
+              onChange={setBlink}
+              label="blinking"
+              paddingX={1}
+            />
+            <Radio
+              current={blink}
+              value={false}
+              onChange={setBlink}
+              label="steady"
+              paddingX={1}
+            />
           </FocusGroup>
         </Group>
 
         <Group label="Color (OSC 12)">
           <FocusGroup direction="row">
             {COLORS.map((c) => (
-              <Radio
-                key={c}
-                current={color}
-                value={c}
-                onChange={setColor}
-                label={c}
-                swatch={c === 'default' ? '·' : '█'}
-                swatchColor={c === 'default' ? undefined : c}
-              />
+              <Radio key={c} current={color} value={c} onChange={setColor} paddingX={1}>
+                <Text color={c === 'default' ? undefined : c}>{` ${c}`}</Text>
+              </Radio>
             ))}
           </FocusGroup>
         </Group>
 
         <Box flexDirection="column" gap={1} marginTop={1}>
-          <Text dim>Live preview — type to watch the cursor</Text>
+          <Text dim>Live preview — type to watch the cursor (focus stays here while you click radios)</Text>
           <TextInput
             value={text}
             onChange={setText}
@@ -115,6 +115,7 @@ function App(): React.ReactNode {
             cursorStyle={style}
             cursorBlink={blink}
             cursorColor={cursorColor}
+            autoFocus
           />
         </Box>
 
@@ -131,101 +132,6 @@ function App(): React.ReactNode {
   )
 }
 
-// ── Primitives ────────────────────────────────────────────────────────
-
-/**
- * Mutually-exclusive checkbox — picks one value from a set, like an
- * HTML radio. `current === value` means "this one is selected." On
- * toggle, the only behavior is "set the parent to my value" (no
- * uncheck — the parent always has SOME value).
- */
-// Generic-without-constraint: with `T extends string | boolean`,
-// TypeScript widens T to the constraint bound when inferring from
-// the props, which then fails to accept `Dispatch<SetStateAction<X>>`
-// at the call site. Unconstrained T is fine here — callers always
-// pass matching `current` / `value` / `onChange` triples and TS
-// happily infers each one.
-function Radio<T>({
-  current,
-  value,
-  onChange,
-  label,
-  swatch,
-  swatchColor,
-}: {
-  current: T
-  value: T
-  onChange: (v: T) => void
-  label: string
-  swatch?: string
-  swatchColor?: string
-}): React.ReactNode {
-  const checked = current === value
-  return (
-    <Toggle
-      checked={checked}
-      onChange={(c) => {
-        // Radio semantics: clicking an already-checked option is a
-        // no-op (you can't uncheck without selecting another).
-        if (c) onChange(value)
-      }}
-      label={label}
-      swatch={swatch}
-      swatchColor={swatchColor}
-    />
-  )
-}
-
-/**
- * Single boolean checkbox. The whole row is the focusable element so
- * a click anywhere on `[ ] label` toggles, not just on the bracket
- * glyph. Shows focus chrome via a left-margin caret indicator.
- */
-function Toggle({
-  checked,
-  onChange,
-  label,
-  swatch,
-  swatchColor,
-}: {
-  checked: boolean
-  onChange: (v: boolean) => void
-  label: string
-  swatch?: string
-  swatchColor?: string
-}): React.ReactNode {
-  const { ref, isFocused } = useFocus()
-  const onKeyDown = (e: KeyboardEvent): void => {
-    // 'return' = Enter, ' ' = Space. Both are the conventional toggle
-    // keys on a checkbox. preventDefault so FocusGroup's arrow nav
-    // doesn't see us steal focus on Enter (it doesn't anyway, but
-    // belt-and-suspenders).
-    if (e.key === 'return' || e.key === ' ') {
-      e.preventDefault()
-      onChange(!checked)
-    }
-  }
-  return (
-    <Box
-      ref={ref}
-      tabIndex={0}
-      onClick={() => onChange(!checked)}
-      onKeyDown={onKeyDown}
-      paddingX={1}
-    >
-      <Text color={isFocused ? 'cyan' : undefined} bold={isFocused}>
-        {`${isFocused ? '▸ ' : '  '}[${checked ? 'x' : ' '}] `}
-      </Text>
-      {swatch !== undefined && (
-        <Text color={swatchColor as Color | undefined}>{`${swatch} `}</Text>
-      )}
-      <Text color={isFocused ? 'cyan' : undefined} bold={isFocused}>
-        {label}
-      </Text>
-    </Box>
-  )
-}
-
 function Group({
   label,
   children,
@@ -239,14 +145,6 @@ function Group({
       {children}
     </Box>
   )
-}
-
-// Visual swatch glyphs for cursor styles — tiny ASCII analogs of
-// what each shape looks like on the terminal.
-function swatchFor(style: CursorStyle): string {
-  if (style === 'block') return '█'
-  if (style === 'underline') return '_'
-  return '|' // bar
 }
 
 render(<App />)

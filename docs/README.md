@@ -131,6 +131,8 @@ docs/
 - [Resizable](components/resizable.md)
 - [FocusGroup](components/focus-group.md)
 - [FocusRing](components/focus-ring.md)
+- [Checkbox](components/checkbox.md)
+- [Radio](components/radio.md)
 - [TextInput](components/text-input.md)
 
 ### Hooks

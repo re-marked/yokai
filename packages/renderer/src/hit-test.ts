@@ -110,11 +110,23 @@ export function dispatchClick(
 
   // Click-to-focus: find the closest focusable ancestor and focus it.
   // root is always ink-root, which owns the FocusManager.
+  //
+  // `claimFocusOnClick={false}` opts a focusable out of click-to-focus
+  // — the node still participates in Tab navigation (tabIndex >= 0)
+  // but mouse-clicking it doesn't move focus. The walk stops at the
+  // first focusable found (matching the current first-tabIndex-wins
+  // convention) and either focuses or doesn't based on this attribute;
+  // it does NOT keep walking past an opted-out focusable to find an
+  // ancestor, because the user's click intent landed on the deepest
+  // focusable, not on a parent. Used by Checkbox / Radio so toggling
+  // doesn't tear focus from a peer TextInput (live-preview UX).
   if (root.focusManager) {
     let focusTarget: DOMElement | undefined = target
     while (focusTarget) {
       if (typeof focusTarget.attributes.tabIndex === 'number') {
-        root.focusManager.handleClickFocus(focusTarget)
+        if (focusTarget.attributes.claimFocusOnClick !== false) {
+          root.focusManager.handleClickFocus(focusTarget)
+        }
         break
       }
       focusTarget = focusTarget.parentNode

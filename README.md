@@ -68,7 +68,11 @@ render(<App />)
 
 **`<FocusRing>`** — focusable Box with built-in focus-visible border indicator (default `cyan` border on focus). Pair with `<FocusGroup>` for keyboard-navigable lists / menus.
 
-**`<TextInput>`** — editable text. Single-line or multiline. Caret via the real terminal cursor (IME / a11y correct). Smart bracketed paste, undo/redo, word nav, selection, password masking. Focus-color border by default (configurable via `borderColorFocus`). See [docs/components/text-input.md](./docs/components/text-input.md).
+**`<Checkbox>`** — `[x]` / `[ ]` boolean toggle. Click / Enter / Space toggles. Defaults `claimFocusOnClick={false}` so toggling doesn't tear focus from a peer (e.g. live-bound `<TextInput>`).
+
+**`<Radio>`** — `(x)` / `( )` mutually-exclusive selection bound to a value. Same focus model as `<Checkbox>`. Compose with `<FocusGroup>` for arrow-key navigation.
+
+**`<TextInput>`** — editable text. Single-line or multiline. Caret via the real terminal cursor (IME / a11y correct). Smart bracketed paste, undo/redo, word nav, selection, password masking. Focus-color border by default (configurable via `borderColorFocus`). Configurable cursor shape / blink / color via `cursorStyle / cursorBlink / cursorColor`. See [docs/components/text-input.md](./docs/components/text-input.md).
 
 ## ScrollBox API
 
