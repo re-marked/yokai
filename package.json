@@ -2,7 +2,7 @@
   "name": "yokai",
   "version": "0.7.0",
   "private": true,
-  "description": "React terminal renderer — pure TypeScript Yoga layout, diff-based rendering, ScrollBox",
+  "description": "Serious React TUI renderer for serious CLI apps. Pure TypeScript Yoga layout, diff-based rendering, ScrollBox, alt buffer, mouse events, draggable and resizable components.",
   "license": "MIT",
   "author": "Mark <psyhik17@gmail.com>",
   "repository": {

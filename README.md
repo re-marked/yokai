@@ -1,6 +1,6 @@
 # yokai
 
-React terminal renderer. Pure-TypeScript Yoga flexbox, diff-based screen output, ScrollBox with viewport culling and hardware scroll hints.
+Serious React TUI renderer for serious CLI apps. Pure TypeScript Yoga layout, diff-based rendering, ScrollBox, alt buffer, mouse events, draggable and resizable components.
 
 ![drag and drop in the terminal](./docs/drag.gif)
 
