@@ -34,7 +34,12 @@ import {
   reduce,
   selectionOrCaretRange,
 } from './state.js'
-import { type WordBoundaryMode, type WrapLayout, buildWrapLayout } from './wrap-math.js'
+import {
+  type WordBoundaryMode,
+  type WrapHint,
+  type WrapLayout,
+  buildWrapLayout,
+} from './wrap-math.js'
 
 export type TextInputProps = Except<
   BoxProps,
@@ -111,6 +116,26 @@ export type TextInputProps = Except<
    *   with flags, file paths, identifiers).
    */
   wordBoundaries?: WordBoundaryMode
+  /**
+   * Programmatic wrap hints — buffer-relative atomic spans that the
+   * wrap algorithm must NOT break inside. Useful for keeping
+   * semantically-atomic content together: mention chips (`@toast`),
+   * chit-id refs (`chit-abc-123`), inline code spans, etc.
+   *
+   * Hints intersect each logical line's range automatically (the
+   * wrap-math primitive clips to per-line ranges). Empty / inverted
+   * ranges (`end <= start`) are silently ignored.
+   *
+   * **Memoize the array reference.** This prop is in the layout
+   * useMemo's dep array — passing a fresh array every render forces
+   * a layout recompute on every render (O(N) over the buffer).
+   * `useMemo([dependencies])` it consumer-side, or hoist a stable
+   * reference, OR accept the recompute if the buffer is small.
+   *
+   * No-op when `wrap='none'` (no wrap, no break-points, no hints
+   * to honor).
+   */
+  wrapHints?: ReadonlyArray<WrapHint>
   /** Cap on buffer length in characters. Default unlimited. */
   maxLength?: number
   /** Render placeholder text dimmed when the buffer is empty. */
@@ -215,6 +240,7 @@ export default function TextInput({
   wrap,
   indentedWrap = true,
   wordBoundaries = 'whitespace',
+  wrapHints,
   maxLength,
   placeholder,
   password = false,
@@ -257,6 +283,7 @@ export default function TextInput({
     width: optsRef.current.width,
     indentedWrap,
     wordBoundaries,
+    hints: wrapHints,
   }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
@@ -397,8 +424,14 @@ export default function TextInput({
         ? inner.width
         : lastValidInnerWidth.current
   const layout = useMemo(
-    () => buildWrapLayout(state.value, { width: layoutWidth, indentedWrap, wordBoundaries }),
-    [state.value, layoutWidth, indentedWrap, wordBoundaries],
+    () =>
+      buildWrapLayout(state.value, {
+        width: layoutWidth,
+        indentedWrap,
+        wordBoundaries,
+        hints: wrapHints,
+      }),
+    [state.value, layoutWidth, indentedWrap, wordBoundaries, wrapHints],
   )
   // Caret in visual cell coords. `col` already includes any indent
   // decoration on continuation rows (display-col convention from

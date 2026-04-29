@@ -28,6 +28,7 @@ export type {
 } from './components/Resizable'
 export { default as TextInput } from './components/TextInput/TextInput'
 export type { TextInputProps } from './components/TextInput/TextInput'
+export type { WordBoundaryMode, WrapHint } from './components/TextInput/wrap-math'
 export { PasteEvent } from './events/paste-event'
 export { default as FocusGroup } from './components/FocusGroup'
 export type { FocusGroupProps, FocusGroupDirection } from './components/FocusGroup'
