@@ -150,14 +150,18 @@ describe('wrapByWords', () => {
     })
 
     it('handles three-word wrapping at exact boundaries', () => {
-      // "the quick fox" = 13. Width 5: "the " (4) fits, "q" pushes
-      // to 5, fits, "u" → 6, no whitespace break in row → wait no.
-      // Walk: t(1) h(2) e(3) " "(4) lastBreak=4. q(5) fits. u(6)
-      // > 5, break at lastBreak=4. Push "the ", row="quick"...
-      //   q(1) u(2) i(3) c(4) k(5). Then " "(6) fits as ws past
-      //   width but lastBreak=6. f(7) > 5, break at 6. Push
-      //   "quick ", row="fox".
-      expect(wrapByWords('the quick fox', 5)).toEqual(['the ', 'quick ', 'fox'])
+      // "the quick fox" = 13. Width 5. Trace:
+      //   t(1) h(2) e(3) " "(4) lastBreak=4 — "the " fits.
+      //   q(5) — fits exactly. u(6 > 5) — break at lastBreak=4.
+      //     Push "the ", row="qu".
+      //   i(3) c(4) k(5) — row="quick" (5).
+      //   " "(would be 6 > 5 AND row.length>0) — whitespace overflow
+      //     break. Push "quick", row=" ", hasContent=false.
+      //   f(2) o(3) x(4) — row=" fox" (4). End. Push " fox".
+      // Each row ≤ 5; trailing whitespace wraps to next row instead
+      // of overflowing the row width (which would produce ellipsis
+      // on the rendering Text).
+      expect(wrapByWords('the quick fox', 5)).toEqual(['the ', 'quick', ' fox'])
     })
 
     it('one-word input fits when shorter than width', () => {

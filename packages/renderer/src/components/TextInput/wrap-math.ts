@@ -399,24 +399,30 @@ export function wrapByWords(
     const absPosBefore = rowAbsStart + row.length
 
     if (breakable) {
-      // Overflow break for repeated whitespace: if the row already
-      // ends in whitespace AND adding this whitespace would push past
-      // width, wrap here. Without this, holding the spacebar (or any
-      // whitespace-only repeating input) grows the current row
-      // indefinitely; the cursor's logical column tracks the buffer's
-      // end and ends up declared past the box's right edge, which the
-      // terminal renders as a cursor floating outside the input.
+      // Whitespace overflow break: if adding this whitespace would
+      // push the row past width AND the row already has at least one
+      // grapheme, wrap here instead of letting the row exceed width.
+      // The trailing whitespace becomes the start of the next row.
       //
-      // The "trailing whitespace stays on the row" rule still applies
-      // for a SINGLE trailing whitespace at a word boundary — that
-      // single space fits past width on the terminating row, then the
-      // next non-whitespace word triggers a normal break. The
-      // `lastChar is whitespace` guard preserves that behavior:
-      // 'hello ' at width 6 stays one row (lastChar is 'o' when the
-      // space arrives, no overflow break); 'hello  ' at width 6 wraps
-      // (lastChar is ' ' when the second space arrives + overflow).
-      const lastChar = row.length > 0 ? row[row.length - 1] : ''
-      if (rowWidth + w > width && row.length > 0 && (lastChar === ' ' || lastChar === '\t')) {
+      // Without this, two pathologies appeared:
+      //   1. Holding the spacebar grew the current row indefinitely;
+      //      the cursor's logical column tracked the buffer's end and
+      //      got declared past the box's right edge.
+      //   2. Even a SINGLE trailing whitespace at end of row produced
+      //      a row `width + 1` cells wide. The rendering Text
+      //      (`wrap='truncate-end'`) showed an ellipsis on what should
+      //      have been a clean wrap. With soft-wrap there should NEVER
+      //      be an ellipsis — every char fits on a row by construction.
+      //
+      // Earlier versions gated this break on "row already ends in
+      // whitespace" to preserve the HTML/CSS "trailing whitespace fits
+      // past width" convention. yokai's renderer doesn't follow that
+      // convention (Text truncates excess content with an ellipsis),
+      // so the gate produced visible ugliness. Always-break is more
+      // consistent: multi-row selection stripes line up cleanly,
+      // cursor placement never exceeds the visible box, and consumers
+      // never see `…` on prose content.
+      if (rowWidth + w > width && row.length > 0) {
         rows.push(row)
         rowAbsStart += row.length
         row = segment
@@ -427,8 +433,7 @@ export function wrapByWords(
         prevChar = segment[0]
         continue
       }
-      // Whitespace fits past width on the terminating row (the
-      // single-trailing-whitespace case above). Append.
+      // Whitespace fits within remaining row budget. Append.
       row += segment
       rowWidth += w
       // Record whitespace as a HARD break candidate UNLESS it's
