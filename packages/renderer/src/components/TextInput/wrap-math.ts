@@ -399,7 +399,36 @@ export function wrapByWords(
     const absPosBefore = rowAbsStart + row.length
 
     if (breakable) {
-      // Whitespace always fits past width (invisible at boundary).
+      // Overflow break for repeated whitespace: if the row already
+      // ends in whitespace AND adding this whitespace would push past
+      // width, wrap here. Without this, holding the spacebar (or any
+      // whitespace-only repeating input) grows the current row
+      // indefinitely; the cursor's logical column tracks the buffer's
+      // end and ends up declared past the box's right edge, which the
+      // terminal renders as a cursor floating outside the input.
+      //
+      // The "trailing whitespace stays on the row" rule still applies
+      // for a SINGLE trailing whitespace at a word boundary — that
+      // single space fits past width on the terminating row, then the
+      // next non-whitespace word triggers a normal break. The
+      // `lastChar is whitespace` guard preserves that behavior:
+      // 'hello ' at width 6 stays one row (lastChar is 'o' when the
+      // space arrives, no overflow break); 'hello  ' at width 6 wraps
+      // (lastChar is ' ' when the second space arrives + overflow).
+      const lastChar = row.length > 0 ? row[row.length - 1] : ''
+      if (rowWidth + w > width && row.length > 0 && (lastChar === ' ' || lastChar === '\t')) {
+        rows.push(row)
+        rowAbsStart += row.length
+        row = segment
+        rowWidth = w
+        lastBreakIdx = -1
+        lastBreakIsHard = false
+        hasContent = false
+        prevChar = segment[0]
+        continue
+      }
+      // Whitespace fits past width on the terminating row (the
+      // single-trailing-whitespace case above). Append.
       row += segment
       rowWidth += w
       // Record whitespace as a HARD break candidate UNLESS it's

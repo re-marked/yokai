@@ -223,13 +223,42 @@ describe('wrapByWords', () => {
       expect(result[0]).not.toBe('  ')
     })
 
-    it('handles multiple consecutive spaces preserved at break point', () => {
-      // "hello   world" width 6 → "hello   " (8 cells but ws counts
-      // as 1 each in stringWidth, lastBreak resets each time).
-      // Walk: hello(5), " "(6, lastBreak=6), " "(7, lastBreak=7),
-      // " "(8, lastBreak=8), w(9)>6, break at lastBreak=8 → push
-      // "hello   ", row="world".
-      expect(wrapByWords('hello   world', 6)).toEqual(['hello   ', 'world'])
+    it('wraps when consecutive whitespace would push past width', () => {
+      // "hello   world" width 6: the "trailing whitespace fits past
+      // width" rule applies for ONE trailing whitespace at a word
+      // boundary, not arbitrary multi-space runs. Trace:
+      // hello(5), " "(6) — fits exactly, lastChar='o' not ws.
+      // " "(would be 7 > 6 AND lastChar=' ' AND row.length=6>0) → break.
+      //   Push "hello ". New row=" ". hasContent=false.
+      // " "(2). lastChar=' ' but rowWidth(2) ≤ 6, no break. Append.
+      //   row="  ". hasContent still false (no break candidate set).
+      // w(3), o(4), r(5), l(6), d(7>6) — char-wrap fallback because
+      //   no break candidate (the leading whitespace didn't qualify).
+      //   Push "  worl". New row="d". End: push "d".
+      // Matches CSS pre-wrap behavior — multi-space runs wrap at the
+      // first overflow rather than letting the row grow indefinitely.
+      // The previous "let trailing ws overflow forever" rule caused
+      // a real cursor-out-of-box bug when users held the spacebar.
+      expect(wrapByWords('hello   world', 6)).toEqual(['hello ', '  worl', 'd'])
+    })
+
+    it('repeated whitespace wraps onto new rows (cursor stays in box)', () => {
+      // Regression: holding the spacebar in a multiline input used to
+      // grow the row indefinitely. Cursor's logical column tracked the
+      // buffer end → terminal rendered cursor outside the input box.
+      // Fix: whitespace-overflow break on consecutive whitespace.
+      // "con " + 100 spaces, width 66:
+      //   row 1: "con " (4) + 62 spaces = 66 cells. (62nd space appends
+      //          at rowWidth=66; 63rd would push to 67 → break.)
+      //   row 2: 1 + 37 more = 38 spaces. 38 ≤ 66, fits.
+      const text = `con ${' '.repeat(100)}`
+      const rows = wrapByWords(text, 66)
+      expect(rows).toHaveLength(2)
+      expect(rows[0]).toBe(`con ${' '.repeat(62)}`)
+      expect(rows[0]?.length).toBe(66)
+      expect(rows[1]).toBe(' '.repeat(38))
+      // Rejoin invariant.
+      expect(rows.join('')).toBe(text)
     })
 
     it('does NOT break at non-breaking space (U+00A0)', () => {
