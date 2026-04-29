@@ -21,7 +21,7 @@
     "demo:focus-nav": "pnpm --filter @yokai-example/focus-nav start",
     "demo:text-input": "pnpm --filter @yokai-example/text-input start",
     "demo:cursor-styles": "pnpm --filter @yokai-example/cursor-styles start",
-    "demo:tui-desktop": "pnpm --filter @yokai-example/tui-desktop start"
+    "demo:scratchpad": "pnpm --filter @yokai-example/scratchpad start"
   },
   "engines": {
     "node": ">=22.0.0"

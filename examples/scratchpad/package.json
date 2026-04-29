@@ -1,10 +1,10 @@
 {
-  "name": "@yokai-example/tui-desktop",
+  "name": "@yokai-example/scratchpad",
   "version": "0.0.0",
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx tui-desktop.tsx"
+    "start": "tsx scratchpad.tsx"
   },
   "dependencies": {
     "@yokai/renderer": "workspace:*",

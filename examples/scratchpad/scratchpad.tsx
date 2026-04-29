@@ -1,12 +1,15 @@
 /**
- * yokai · draggable editor demo.
+ * yokai · scratchpad demo.
  *
- *   pnpm demo:tui-desktop
+ *   pnpm demo:scratchpad
  *
- * A draggable, multi-line editor + three colored draggable squares.
- * Drag the editor's title bar, type to edit, drag-select to highlight.
- * Drag the squares to demonstrate z-index reordering — click any one
- * to raise it above the others.
+ * A draggable, multi-line editor in the terminal. Drag the title bar
+ * to move it, type to edit, drag-select to highlight. Click [×] to
+ * close the editor (the demo stays running; press q to exit).
+ *
+ * The pre-loaded content explains what yokai is. The window itself
+ * is the proof — soft-wrap, multi-line cursor nav, mouse drag, all
+ * in a terminal.
  *
  * Press `q` or Ctrl+C to quit.
  */
@@ -90,8 +93,7 @@ function App(): React.ReactNode {
         </Box>
         {/* Editor — black background so header text doesn't bleed
             through if dragged over it. Close [×] hides this window
-            (sets editorOpen=false); the colored squares below stay
-            interactive. q / Ctrl+C still exits the whole app. */}
+            (sets editorOpen=false). q / Ctrl+C exits the demo. */}
         {editorOpen && (
           <Draggable
             initialPos={{ left: initialLeft, top: 1 }}
@@ -120,24 +122,6 @@ function App(): React.ReactNode {
             </Box>
           </Draggable>
         )}
-        {/* Three solid colored squares — drag them around, click any
-            one to raise above the others. Cascading initial positions
-            so they overlap visually, the z-order is interactive. No
-            content inside; pure colored blocks demonstrate drag and
-            stacking without any chrome. */}
-        <Draggable initialPos={{ left: 4, top: 18 }} width={10} height={4} backgroundColor="red" />
-        <Draggable
-          initialPos={{ left: 10, top: 19 }}
-          width={10}
-          height={4}
-          backgroundColor="blue"
-        />
-        <Draggable
-          initialPos={{ left: 16, top: 20 }}
-          width={10}
-          height={4}
-          backgroundColor="green"
-        />
       </Box>
     </AlternateScreen>
   )
