@@ -3,17 +3,29 @@
  *
  *   pnpm demo:drag
  *
- * Three rectangles. Drag them. q to quit.
+ * Three rectangles. Drag them onto the drop zone. q to quit.
  */
 
-import { AlternateScreen, Box, Draggable, Text, render, useApp, useInput } from '@yokai/renderer'
+import {
+  AlternateScreen,
+  Box,
+  Draggable,
+  DropTarget,
+  Text,
+  render,
+  useApp,
+  useInput,
+} from '@yokai/renderer'
 import type React from 'react'
+import { useState } from 'react'
 
 function App(): React.ReactNode {
   const { exit } = useApp()
   useInput((input, key) => {
     if (input === 'q' || key.escape || (key.ctrl && input === 'c')) exit()
   })
+
+  const [hovered, setHovered] = useState(false)
 
   return (
     <AlternateScreen mouseTracking>
@@ -30,6 +42,24 @@ function App(): React.ReactNode {
           height={5}
           backgroundColor="#0e7490"
         />
+        <DropTarget
+          position="absolute"
+          top={5}
+          left={50}
+          width={28}
+          height={9}
+          borderStyle="single"
+          borderColor={hovered ? '#a5f3fc' : '#475569'}
+          alignItems="center"
+          justifyContent="center"
+          onDragEnter={() => setHovered(true)}
+          onDragLeave={() => setHovered(false)}
+          onDrop={() => setHovered(false)}
+        >
+          <Text dim color={hovered ? '#a5f3fc' : 'gray'}>
+            drop
+          </Text>
+        </DropTarget>
       </Box>
     </AlternateScreen>
   )
