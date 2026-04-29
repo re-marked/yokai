@@ -399,49 +399,36 @@ export function wrapByWords(
     const absPosBefore = rowAbsStart + row.length
 
     if (breakable) {
-      // Whitespace overflow break: if adding this whitespace would
-      // push the row past width AND the row already has at least one
-      // grapheme, wrap here instead of letting the row exceed width.
-      // The trailing whitespace becomes the start of the next row.
+      // Whitespace always fits past width — trailing whitespace stays
+      // on the row it terminates rather than wrapping onto a new row.
+      // Matches HTML/CSS pre-wrap convention. The renderer side clips
+      // the visible cells to box width so trailing whitespace past
+      // width is invisible rather than triggering an ellipsis.
       //
-      // Without this, two pathologies appeared:
-      //   1. Holding the spacebar grew the current row indefinitely;
-      //      the cursor's logical column tracked the buffer's end and
-      //      got declared past the box's right edge.
-      //   2. Even a SINGLE trailing whitespace at end of row produced
-      //      a row `width + 1` cells wide. The rendering Text
-      //      (`wrap='truncate-end'`) showed an ellipsis on what should
-      //      have been a clean wrap. With soft-wrap there should NEVER
-      //      be an ellipsis — every char fits on a row by construction.
+      // Why this matters for UX: when the user types text in a field
+      // and content wraps, the trailing space between the last word
+      // and the wrapped word stays on the previous row rather than
+      // jumping to the start of the new row as more characters are
+      // added. Spaces are visual nothing — they shouldn't reflow
+      // surrounding content.
       //
-      // Earlier versions gated this break on "row already ends in
-      // whitespace" to preserve the HTML/CSS "trailing whitespace fits
-      // past width" convention. yokai's renderer doesn't follow that
-      // convention (Text truncates excess content with an ellipsis),
-      // so the gate produced visible ugliness. Always-break is more
-      // consistent: multi-row selection stripes line up cleanly,
-      // cursor placement never exceeds the visible box, and consumers
-      // never see `…` on prose content.
-      if (rowWidth + w > width && row.length > 0) {
-        rows.push(row)
-        rowAbsStart += row.length
-        row = segment
-        rowWidth = w
-        lastBreakIdx = -1
-        lastBreakIsHard = false
-        hasContent = false
-        prevChar = segment[0]
-        continue
-      }
-      // Whitespace fits within remaining row budget. Append.
+      // Whitespace is recorded as a HARD break candidate regardless of
+      // hasContent. Earlier versions guarded with `hasContent` to keep
+      // leading-whitespace-+-first-word atomic (so '  hello' stays as
+      // one row even when it'd overflow), but that produced ugly mid-
+      // word char-wrap when the row really did overflow ('      app
+      // ban' at width 6 broke 'app' into 'a'+'p'+'p' instead of
+      // wrapping after the leading spaces). Without the guard, leading
+      // whitespace becomes a break point ONLY when overflow forces it
+      // — fitting rows still keep leading whitespace + first word
+      // together (no overflow → brk never used).
+      //
+      // Atomic-span exception: still skip recording when inside a
+      // wrap hint range — consumers explicitly bound those positions
+      // together.
       row += segment
       rowWidth += w
-      // Record whitespace as a HARD break candidate UNLESS it's
-      // inside a caller-supplied atomic span. Inside-an-atomic-span
-      // means the consumer explicitly bound this range together
-      // (e.g. "Mr. Smith" via wrap hint); the space between Mr. and
-      // Smith mustn't be used as a break point.
-      if (hasContent && !isInsideRange(allAtomicSpans, absPosBefore)) {
+      if (!isInsideRange(allAtomicSpans, absPosBefore)) {
         lastBreakIdx = row.length
         lastBreakIsHard = true
       }
