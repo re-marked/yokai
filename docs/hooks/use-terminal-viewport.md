@@ -4,7 +4,7 @@ Detect whether an element is currently within the visible terminal viewport.
 
 ## Import
 ```tsx
-import { useTerminalViewport } from '@yokai/renderer'
+import { useTerminalViewport } from '@yokai-tui/renderer'
 ```
 
 ## Signature

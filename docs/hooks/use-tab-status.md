@@ -4,7 +4,7 @@ Declaratively set the terminal tab-status indicator (OSC 21337).
 
 ## Import
 ```tsx
-import { useTabStatus, type TabStatusKind } from '@yokai/renderer'
+import { useTabStatus, type TabStatusKind } from '@yokai-tui/renderer'
 ```
 
 ## Signature

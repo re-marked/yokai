@@ -7,7 +7,7 @@ Spinners and progress bars built on `useAnimationFrame`. Reach for these when wo
 A rotating glyph cycling through a fixed frame set.
 
 ```tsx
-import { Box, Text, render, useAnimationFrame } from '@yokai/renderer'
+import { Box, Text, render, useAnimationFrame } from '@yokai-tui/renderer'
 import type React from 'react'
 
 const FRAMES = ['⠋', '⠙', '⠹', '⠸']
@@ -39,7 +39,7 @@ render(<Spinner label="loading…" />)
 A determinate bar with a width-scaled fill and an optional percent label.
 
 ```tsx
-import { Box, Text, render, useInput } from '@yokai/renderer'
+import { Box, Text, render, useInput } from '@yokai-tui/renderer'
 import type React from 'react'
 import { useState } from 'react'
 
@@ -94,7 +94,7 @@ render(<Demo />)
 A bouncing block for work with no measurable completion.
 
 ```tsx
-import { Box, Text, render, useAnimationFrame } from '@yokai/renderer'
+import { Box, Text, render, useAnimationFrame } from '@yokai-tui/renderer'
 import type React from 'react'
 
 function IndeterminateBar({

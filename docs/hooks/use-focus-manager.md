@@ -4,7 +4,7 @@ Reactive access to the global FocusManager.
 
 ## Import
 ```tsx
-import { useFocusManager } from '@yokai/renderer'
+import { useFocusManager } from '@yokai-tui/renderer'
 ```
 
 ## Signature

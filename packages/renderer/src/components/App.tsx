@@ -1,4 +1,4 @@
-import { logError, logForDebugging } from '@yokai/shared'
+import { logError, logForDebugging } from '@yokai-tui/shared'
 import { PureComponent, type ReactNode } from 'react'
 import type { DOMElement } from '../dom'
 import { EventEmitter } from '../events/emitter'

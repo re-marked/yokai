@@ -4,7 +4,7 @@ Wraps children in an OSC 8 terminal hyperlink, with a plain-text fallback for te
 
 ## Import
 ```tsx
-import { Link } from '@yokai/renderer'
+import { Link } from '@yokai-tui/renderer'
 ```
 
 ## Props

@@ -4,8 +4,8 @@ Region that receives drop callbacks from active `<Draggable>` gestures.
 
 ## Import
 ```tsx
-import { DropTarget } from '@yokai/renderer'
-import type { DropInfo } from '@yokai/renderer'
+import { DropTarget } from '@yokai-tui/renderer'
+import type { DropInfo } from '@yokai-tui/renderer'
 ```
 
 ## Props

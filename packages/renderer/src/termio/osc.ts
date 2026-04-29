@@ -3,7 +3,7 @@
  */
 
 import { Buffer } from 'node:buffer'
-import { env, execFileNoThrow } from '@yokai/shared'
+import { env, execFileNoThrow } from '@yokai-tui/shared'
 import { BEL, ESC, ESC_TYPE, SEP } from './ansi'
 import type { Action, Color, TabStatusAction } from './types'
 

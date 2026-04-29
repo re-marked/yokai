@@ -1,6 +1,6 @@
 # Types reference
 
-Every type exported from `@yokai/renderer`. Source: `packages/renderer/src/index.ts`.
+Every type exported from `@yokai-tui/renderer`. Source: `packages/renderer/src/index.ts`.
 
 ## Component prop types
 
@@ -90,4 +90,4 @@ Every type exported from `@yokai/renderer`. Source: `packages/renderer/src/index
 |------|-------------|--------|
 | `clamp` (function) | `(value, min, max) => number` | `layout/geometry.ts` |
 
-`Rectangle`, `Point`, `Size`, and `Edges` from `layout/geometry.ts` are not re-exported through the public entry — import them from `@yokai/renderer/layout/geometry` if needed for internal extension work.
+`Rectangle`, `Point`, `Size`, and `Edges` from `layout/geometry.ts` are not re-exported through the public entry — import them from `@yokai-tui/renderer/layout/geometry` if needed for internal extension work.

@@ -1,4 +1,4 @@
-import { logError } from '@yokai/shared'
+import { logError } from '@yokai-tui/shared'
 import {
   ContinuousEventPriority,
   DefaultEventPriority,

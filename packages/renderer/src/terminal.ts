@@ -1,5 +1,5 @@
 import type { Writable } from 'node:stream'
-import { env, gte } from '@yokai/shared'
+import { env, gte } from '@yokai-tui/shared'
 import { coerce } from 'semver'
 import { getClearTerminalSequence } from './clearTerminal'
 import type { Diff } from './frame'

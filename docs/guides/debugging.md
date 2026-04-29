@@ -19,7 +19,7 @@ tail -f /tmp/yokai.log
 
 ## DEBUG flag
 
-`@yokai/shared` exposes `logForDebugging(message, { level })` which is gated on:
+`@yokai-tui/shared` exposes `logForDebugging(message, { level })` which is gated on:
 
 - `DEBUG=1` or `DEBUG=true` in the environment
 - `--debug` in `process.argv`
@@ -37,7 +37,7 @@ Output format: `2026-04-26T12:34:56.789Z [DEBUG] message`. Levels: `verbose`, `d
 `createRoot` and `render` accept an `onFrame` callback fired after every committed frame.
 
 ```ts
-import { createRoot } from '@yokai/renderer'
+import { createRoot } from '@yokai-tui/renderer'
 
 const root = await createRoot({
   onFrame: (event) => {

@@ -39,7 +39,7 @@ Keep the entry small. It mounts `<App />` and wires `process.on('SIGINT')` if th
 
 ```tsx
 // src/index.tsx
-import { render } from '@yokai/renderer'
+import { render } from '@yokai-tui/renderer'
 import { App } from './app'
 
 render(<App />)

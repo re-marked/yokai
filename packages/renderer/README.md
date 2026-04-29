@@ -1,17 +1,17 @@
-# @yokai/renderer
+# @yokai-tui/renderer
 
 React terminal renderer — reconciler, Yoga Flexbox layout, keyboard/mouse events, ANSI output.
 
 ## Install
 
 ```bash
-pnpm add @yokai/renderer react
+pnpm add @yokai-tui/renderer react
 ```
 
 ## Usage
 
 ```tsx
-import { render, Box, Text } from '@yokai/renderer'
+import { render, Box, Text } from '@yokai-tui/renderer'
 
 await render(
   <Box padding={1}>

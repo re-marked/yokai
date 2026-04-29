@@ -4,7 +4,7 @@ import {
   styledCharsFromTokens,
   tokenize,
 } from '@alcalzone/ansi-tokenize'
-import { getGraphemeSegmenter, logForDebugging, sliceAnsi } from '@yokai/shared'
+import { getGraphemeSegmenter, logForDebugging, sliceAnsi } from '@yokai-tui/shared'
 import { reorderBidi } from './bidi'
 import { type Rectangle, unionRect } from './layout/geometry'
 import {

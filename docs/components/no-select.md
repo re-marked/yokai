@@ -4,7 +4,7 @@ Marks a region as non-selectable so fullscreen text selection skips its cells.
 
 ## Import
 ```tsx
-import { NoSelect } from '@yokai/renderer'
+import { NoSelect } from '@yokai-tui/renderer'
 ```
 
 ## Props

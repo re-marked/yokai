@@ -4,7 +4,7 @@ Imperative access to text-selection state on the active Ink instance, plus a rea
 
 ## Import
 ```tsx
-import { useSelection, useHasSelection } from '@yokai/renderer'
+import { useSelection, useHasSelection } from '@yokai-tui/renderer'
 ```
 
 Selection is only available in fullscreen / alt-screen mode. Outside of it, every operation is a no-op and `useHasSelection` is always `false`.

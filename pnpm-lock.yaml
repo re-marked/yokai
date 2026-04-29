@@ -17,7 +17,7 @@ importers:
 
   examples/constrained-drag:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -30,7 +30,7 @@ importers:
 
   examples/cursor-styles:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -43,7 +43,7 @@ importers:
 
   examples/drag:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -56,7 +56,7 @@ importers:
 
   examples/drag-and-drop:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -69,7 +69,7 @@ importers:
 
   examples/focus-nav:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -82,7 +82,7 @@ importers:
 
   examples/resizable:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -95,7 +95,7 @@ importers:
 
   examples/scratchpad:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -108,7 +108,7 @@ importers:
 
   examples/text-input:
     dependencies:
-      '@yokai/renderer':
+      '@yokai-tui/renderer':
         specifier: workspace:*
         version: link:../../packages/renderer
       react:
@@ -124,7 +124,7 @@ importers:
       '@alcalzone/ansi-tokenize':
         specifier: ^0.3.0
         version: 0.3.0
-      '@yokai/shared':
+      '@yokai-tui/shared':
         specifier: workspace:*
         version: link:../shared
       auto-bind:

@@ -4,7 +4,7 @@ The fundamental layout primitive — a Yoga flexbox container with focus and poi
 
 ## Import
 ```tsx
-import { Box } from '@yokai/renderer'
+import { Box } from '@yokai-tui/renderer'
 ```
 
 ## Props

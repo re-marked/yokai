@@ -7,8 +7,8 @@ Guidance for Claude Code (or any AI assistant) working in this repository.
 `yokai` — a React terminal renderer used by [claude-corp](https://github.com/re-marked/claude-corp). Pure-TypeScript Yoga flexbox, diff-based screen output, ScrollBox with viewport culling and hardware scroll hints. Forked from [claude-code-kit](https://github.com/minnzen/claude-code-kit), itself a fork of [Ink](https://github.com/vadimdemedes/ink).
 
 Two packages in a pnpm monorepo:
-- `@yokai/renderer` — React reconciler, components, event system, terminal I/O
-- `@yokai/shared` — pure-TS Yoga port, logging, env helpers
+- `@yokai-tui/renderer` — React reconciler, components, event system, terminal I/O
+- `@yokai-tui/shared` — pure-TS Yoga port, logging, env helpers
 
 The renderer depends on the shared package, so always build shared first.
 

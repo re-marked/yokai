@@ -1,4 +1,4 @@
-import { logForDebugging } from '@yokai/shared'
+import { logForDebugging } from '@yokai-tui/shared'
 import { type DOMElement, markDirty } from './dom'
 import type { Frame } from './frame'
 import { consumeAbsoluteRemovedFlag } from './node-cache'

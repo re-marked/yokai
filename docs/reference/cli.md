@@ -7,8 +7,8 @@ The three entry points for mounting a yokai tree, plus the shapes they return. S
 Default export. Async; mounts a node and returns an `Instance` once the first render boundary settles.
 
 ```ts
-import render from '@yokai/renderer'
-// or: import { render } from '@yokai/renderer'
+import render from '@yokai-tui/renderer'
+// or: import { render } from '@yokai-tui/renderer'
 
 const instance = await render(<App />, options?)
 ```
@@ -110,7 +110,7 @@ Alt-screen and mouse-tracking cleanup runs unconditionally on signal-exit: `EXIT
 ### Standard app
 
 ```tsx
-import render, { Box, Text } from '@yokai/renderer'
+import render, { Box, Text } from '@yokai-tui/renderer'
 
 const { waitUntilExit } = await render(
   <Box>
@@ -123,7 +123,7 @@ await waitUntilExit()
 ### Test
 
 ```tsx
-import { renderSync } from '@yokai/renderer'
+import { renderSync } from '@yokai-tui/renderer'
 
 const instance = renderSync(<MyComponent />, { stdout: fakeStdout })
 // assertions on fakeStdout.lastFrame()
@@ -134,7 +134,7 @@ instance.cleanup()
 ### Pre-mount wiring
 
 ```tsx
-import { createRoot } from '@yokai/renderer'
+import { createRoot } from '@yokai-tui/renderer'
 
 const root = await createRoot({ onFrame: recordFrameMetrics })
 attachExternalEditorBridge(root)
@@ -144,4 +144,4 @@ await root.waitUntilExit()
 
 ## Re-exports
 
-`render`, `renderSync`, `createRoot`, and the types `RenderOptions`, `Instance`, `Root` are re-exported from the package root (`@yokai/renderer`).
+`render`, `renderSync`, `createRoot`, and the types `RenderOptions`, `Instance`, `Root` are re-exported from the package root (`@yokai-tui/renderer`).

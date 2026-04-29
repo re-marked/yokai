@@ -4,7 +4,7 @@ Switches the terminal into the alternate screen buffer for the duration of the m
 
 ## Import
 ```tsx
-import { AlternateScreen } from '@yokai/renderer'
+import { AlternateScreen } from '@yokai-tui/renderer'
 ```
 
 ## Props

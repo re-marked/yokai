@@ -1,4 +1,4 @@
-import { logForDebugging } from '@yokai/shared'
+import { logForDebugging } from '@yokai-tui/shared'
 import type { ReactElement } from 'react'
 import { LegacyRoot } from 'react-reconciler/constants.js'
 import { type DOMElement, createNode } from './dom'

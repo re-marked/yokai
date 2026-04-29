@@ -4,7 +4,7 @@ Declaratively set the terminal window/tab title.
 
 ## Import
 ```tsx
-import { useTerminalTitle } from '@yokai/renderer'
+import { useTerminalTitle } from '@yokai-tui/renderer'
 ```
 
 ## Signature

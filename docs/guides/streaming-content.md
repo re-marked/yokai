@@ -31,7 +31,7 @@ This works for typical LLM token rates (10 - 100 tokens/sec). Each setState comm
 For log tails, chat UIs, build output — anywhere new lines arrive at the bottom and the user usually wants to follow — wrap the stream in `<ScrollBox stickyScroll>`.
 
 ```tsx
-import { ScrollBox } from '@yokai/renderer'
+import { ScrollBox } from '@yokai-tui/renderer'
 
 <ScrollBox stickyScroll height={20}>
   {lines.map((line, i) => <Text key={i}>{line}</Text>)}
@@ -71,7 +71,7 @@ Mount cost is per-React-commit and walks the reconciler / Yoga tree. Per-cell di
 When a stream produces faster than the renderer can flush (rare for text, common for raw byte streams or noisy log sources), batch with a queue and flush on an animation frame.
 
 ```tsx
-import { useAnimationFrame } from '@yokai/renderer'
+import { useAnimationFrame } from '@yokai-tui/renderer'
 
 function ThrottledStream({ stream }: { stream: AsyncIterable<string> }) {
   const [text, setText] = useState('')

@@ -4,7 +4,7 @@ Subscribe to keyboard input with parsed key flags and the raw input string.
 
 ## Import
 ```tsx
-import { useInput } from '@yokai/renderer'
+import { useInput } from '@yokai-tui/renderer'
 ```
 
 ## Signature

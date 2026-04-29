@@ -1,6 +1,6 @@
 # Changelog
 
-Tagged releases of `@yokai/renderer` and `@yokai/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
+Tagged releases of `@yokai-tui/renderer` and `@yokai-tui/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 
 ## v0.6.0 — 2026-04-27
 

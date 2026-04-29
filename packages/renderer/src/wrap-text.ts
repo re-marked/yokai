@@ -1,4 +1,4 @@
-import { sliceAnsi } from '@yokai/shared'
+import { sliceAnsi } from '@yokai-tui/shared'
 import { stringWidth } from './stringWidth'
 import type { Styles } from './styles'
 import { wrapAnsi } from './wrapAnsi'

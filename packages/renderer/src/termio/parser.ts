@@ -11,7 +11,7 @@
  * - Style tracking: maintains current text style state
  */
 
-import { getGraphemeSegmenter } from '@yokai/shared'
+import { getGraphemeSegmenter } from '@yokai-tui/shared'
 import { C0 } from './ansi'
 import { CSI, CURSOR_STYLES, ERASE_DISPLAY, ERASE_LINE_REGION } from './csi'
 import { DEC } from './dec'

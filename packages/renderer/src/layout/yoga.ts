@@ -11,7 +11,7 @@ import Yoga, {
   PositionType,
   Wrap,
   type Node as YogaNode,
-} from '@yokai/shared/yoga-layout'
+} from '@yokai-tui/shared/yoga-layout'
 import {
   type LayoutAlign,
   LayoutDisplay,

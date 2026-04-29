@@ -1,8 +1,8 @@
 /* eslint-disable custom-rules/no-top-level-side-effects */
 
 import { appendFileSync } from 'node:fs'
-import { isEnvTruthy } from '@yokai/shared'
-import { getYogaCounters } from '@yokai/shared/yoga-layout'
+import { isEnvTruthy } from '@yokai-tui/shared'
+import { getYogaCounters } from '@yokai-tui/shared/yoga-layout'
 import createReconciler from 'react-reconciler'
 import {
   type DOMElement,

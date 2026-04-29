@@ -4,7 +4,7 @@ A focusable `<Box>` that fires `onAction` on Enter, Space, or click and exposes 
 
 ## Import
 ```tsx
-import { Button, type ButtonState } from '@yokai/renderer'
+import { Button, type ButtonState } from '@yokai-tui/renderer'
 ```
 
 ## Props

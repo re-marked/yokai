@@ -1,4 +1,4 @@
-import { logForDebugging } from '@yokai/shared'
+import { logForDebugging } from '@yokai-tui/shared'
 import type { Styles } from './styles'
 
 export function ifNotInteger(value: number | undefined, name: string): void {

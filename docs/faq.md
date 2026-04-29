@@ -19,7 +19,7 @@ Used by claude-corp in production. Stability is a hard requirement of the projec
 ## Setup
 
 **How do I install?**
-`pnpm add @yokai/renderer @yokai/shared`. The renderer depends on the shared package; both must be installed.
+`pnpm add @yokai-tui/renderer @yokai-tui/shared`. The renderer depends on the shared package; both must be installed.
 
 **What Node and React versions?**
 Node 20+. React 19 (the reconciler targets the React 19 host config).
@@ -79,7 +79,7 @@ Yes — pass `minSize={{ width: 1, height: 1 }}` or whatever floor you want. The
 ## Other
 
 **How do I print debug output?**
-Use `import { logForDebugging } from '@yokai/shared'`. Direct `console.log` is intercepted (when `patchConsole` is `true`) and routed to a buffer that prints above the rendered frame. See [debugging guide](./guides/debugging.md).
+Use `import { logForDebugging } from '@yokai-tui/shared'`. Direct `console.log` is intercepted (when `patchConsole` is `true`) and routed to a buffer that prints above the rendered frame. See [debugging guide](./guides/debugging.md).
 
 **How do I test components?**
 Use `renderSync` with a fake `stdout`, then assert on the captured frame. See [testing guide](./guides/testing.md).

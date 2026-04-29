@@ -4,7 +4,7 @@ Declares where the renderer should park the terminal cursor after each frame.
 
 ## Import
 ```tsx
-import { useDeclaredCursor } from '@yokai/renderer'
+import { useDeclaredCursor } from '@yokai-tui/renderer'
 ```
 
 ## Signature

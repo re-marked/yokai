@@ -4,7 +4,7 @@ Focusable mutually-exclusive selection bound to a value. Renders `(x)` / `( )` p
 
 ## Import
 ```tsx
-import { Radio } from '@yokai/renderer'
+import { Radio } from '@yokai-tui/renderer'
 ```
 
 ## Props

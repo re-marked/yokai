@@ -4,7 +4,7 @@ Access the stdin stream and raw-mode controls.
 
 ## Import
 ```tsx
-import { useStdin } from '@yokai/renderer'
+import { useStdin } from '@yokai-tui/renderer'
 ```
 
 ## Signature
