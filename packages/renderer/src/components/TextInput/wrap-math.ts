@@ -456,6 +456,19 @@ export function wrapByWords(
         rowAbsStart += lastBreakIdx
         row = overhang + segment
         rowWidth = stringWidth(row)
+      } else if (isInsideRange(allAtomicSpans, absPosBefore)) {
+        // Overflow with no break candidate AND we're inside an atomic
+        // span. Splitting here would violate the atomic-span contract
+        // ("NEVER break inside; if span > width, overflow on its own
+        // row" — same rule wrapByCells honors via lastSafeBreakIdx
+        // rollback). Defer the wrap by accepting the overflow in the
+        // current row; we'll push at the next safe break (whitespace
+        // exiting the span, or end of buffer).
+        row += segment
+        rowWidth += w
+        hasContent = true
+        prevChar = segment[segment.length - 1]
+        continue
       } else {
         // No break candidate — char-wrap fallback.
         if (row.length > 0) {
