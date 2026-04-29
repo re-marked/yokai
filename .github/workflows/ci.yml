@@ -31,7 +31,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build shared
-        run: pnpm --filter @yokai/shared build
+        run: pnpm --filter @yokai-tui/shared build
 
       - name: Typecheck
         run: pnpm -r typecheck
@@ -40,7 +40,7 @@ jobs:
         run: pnpm -r lint
 
       - name: Build renderer
-        run: pnpm --filter @yokai/renderer build
+        run: pnpm --filter @yokai-tui/renderer build
 
       - name: Test
         run: pnpm test
