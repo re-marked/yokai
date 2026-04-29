@@ -18,13 +18,13 @@ function App(): React.ReactNode {
   return (
     <AlternateScreen mouseTracking>
       <Box flexDirection="column" width="100%" height="100%">
-        <Draggable initialPos={{ left: 4, top: 2 }} width={10} height={4} backgroundColor="white" />
-        <Draggable initialPos={{ left: 10, top: 3 }} width={10} height={4} backgroundColor="gray" />
+        <Draggable initialPos={{ left: 4, top: 2 }} width={22} height={5} backgroundColor="#a5f3fc" />
+        <Draggable initialPos={{ left: 12, top: 4 }} width={22} height={5} backgroundColor="#22d3ee" />
         <Draggable
-          initialPos={{ left: 16, top: 4 }}
-          width={10}
-          height={4}
-          backgroundColor="blackBright"
+          initialPos={{ left: 20, top: 6 }}
+          width={22}
+          height={5}
+          backgroundColor="#0e7490"
         />
       </Box>
     </AlternateScreen>
