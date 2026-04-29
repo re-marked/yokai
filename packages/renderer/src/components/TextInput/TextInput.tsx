@@ -80,6 +80,22 @@ export type TextInputProps = Except<
    * wrap can set `wrap='none'`.
    */
   wrap?: 'soft' | 'none'
+  /**
+   * When `wrap='soft'`, continuation rows of a wrapped logical line
+   * visually align under the first non-whitespace character of the
+   * original line — vim's `breakindent`, VS Code's "wrap with
+   * indent." Default `true` (enabled), matching what every modern
+   * editor does for prose / list / quote / indented-code content.
+   *
+   * Set `false` for the unindented behavior (continuation rows start
+   * at column 0). Useful when the consumer wants raw column-0 wrap
+   * for terminal-style content like log lines.
+   *
+   * Threshold: indent only applies when the indent leaves at least
+   * width / 2 cells of content room — beyond that the indent gets
+   * abandoned automatically. No-op when `wrap='none'`.
+   */
+  indentedWrap?: boolean
   /** Cap on buffer length in characters. Default unlimited. */
   maxLength?: number
   /** Render placeholder text dimmed when the buffer is empty. */
@@ -182,6 +198,7 @@ export default function TextInput({
   onCancel,
   multiline = false,
   wrap,
+  indentedWrap = true,
   maxLength,
   placeholder,
   password = false,
@@ -214,11 +231,15 @@ export default function TextInput({
   // re-renders-update-state-before-effects round trip. Width is updated
   // separately AFTER `inner` is declared (see the matching mutation in
   // the Scroll section) — `inner.width` isn't in scope yet here.
+  // Wrap-related options (indentedWrap, wordBoundaries, hints) MUST
+  // mirror the renderer's so visual-row Up/Down nav lands where the
+  // user sees the row break.
   optsRef.current = {
     multiline,
     maxLength,
     historyCap,
     width: optsRef.current.width,
+    indentedWrap,
   }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
@@ -359,8 +380,8 @@ export default function TextInput({
         ? inner.width
         : lastValidInnerWidth.current
   const layout = useMemo(
-    () => buildWrapLayout(state.value, { width: layoutWidth }),
-    [state.value, layoutWidth],
+    () => buildWrapLayout(state.value, { width: layoutWidth, indentedWrap }),
+    [state.value, layoutWidth, indentedWrap],
   )
   // Caret in visual cell coords. `col` already includes any indent
   // decoration on continuation rows (display-col convention from

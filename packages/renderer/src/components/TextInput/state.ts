@@ -14,7 +14,12 @@ import {
   wordBoundaryAfter,
   wordBoundaryBefore,
 } from './caret-math.js'
-import { buildWrapLayout, nextVisualRow } from './wrap-math.js'
+import {
+  type WordBoundaryMode,
+  type WrapHint,
+  buildWrapLayout,
+  nextVisualRow,
+} from './wrap-math.js'
 
 /** Selection is anchor (where the user pressed) and focus (where they
  *  moved to). Either order — the helpers normalise via min/max. */
@@ -76,6 +81,17 @@ export type ReducerOptions = {
    *  gracefully — the wrap-math primitive already does so by
    *  returning an empty layout. */
   width: number
+  /** Hanging-indent mode for visual-row nav. Mirrors the renderer's
+   *  `indentedWrap` prop so Up/Down nav rows align with the on-screen
+   *  layout. Default `true` (enabled). */
+  indentedWrap?: boolean
+  /** Word-boundary mode for visual-row nav. Mirrors the renderer's
+   *  `wordBoundaries` prop. Default `'whitespace'`. */
+  wordBoundaries?: WordBoundaryMode
+  /** Programmatic wrap hints for visual-row nav. Mirrors the
+   *  renderer's `wrapHints` prop. Optional — undefined means no
+   *  hints. */
+  hints?: ReadonlyArray<WrapHint>
   /** Maximum entries to keep in history. Older entries drop from
    *  the front. Default 100. */
   historyCap?: number
@@ -367,7 +383,12 @@ function reduceCore(state: TextInputState, action: Action, opts: ReducerOptions)
           nextCaret = moveCaretIndex(state.value, state.caret, action.direction)
           nextPreferredCol = null
         } else {
-          const layout = buildWrapLayout(state.value, { width: opts.width })
+          const layout = buildWrapLayout(state.value, {
+            width: opts.width,
+            indentedWrap: opts.indentedWrap,
+            wordBoundaries: opts.wordBoundaries,
+            hints: opts.hints,
+          })
           // First vertical step in a chain: capture the current display
           // col as the "preferred" column. Subsequent steps reuse the
           // same value so the caret survives passing through rows that
