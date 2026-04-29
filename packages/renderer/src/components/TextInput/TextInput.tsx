@@ -34,7 +34,7 @@ import {
   reduce,
   selectionOrCaretRange,
 } from './state.js'
-import { type WrapLayout, buildWrapLayout } from './wrap-math.js'
+import { type WordBoundaryMode, type WrapLayout, buildWrapLayout } from './wrap-math.js'
 
 export type TextInputProps = Except<
   BoxProps,
@@ -96,6 +96,21 @@ export type TextInputProps = Except<
    * abandoned automatically. No-op when `wrap='none'`.
    */
   indentedWrap?: boolean
+  /**
+   * Word-boundary detection mode for wrap break-points (only applies
+   * when `wrap='soft'`).
+   *
+   * - `'whitespace'` (default): wrap breaks only at standard
+   *   whitespace (space, tab). The simplest, fastest mode — fits
+   *   most prose / chat / form-field content.
+   * - `'identifier'`: also breaks at `_` / `-` boundaries
+   *   (snake_case, kebab-case) and at lowercase→uppercase
+   *   transitions (camelCase, PascalCase). Treats URLs
+   *   (`http(s)://...`) as atomic — never breaks inside them.
+   *   Tuned for code-like + CLI command content (slash commands
+   *   with flags, file paths, identifiers).
+   */
+  wordBoundaries?: WordBoundaryMode
   /** Cap on buffer length in characters. Default unlimited. */
   maxLength?: number
   /** Render placeholder text dimmed when the buffer is empty. */
@@ -199,6 +214,7 @@ export default function TextInput({
   multiline = false,
   wrap,
   indentedWrap = true,
+  wordBoundaries = 'whitespace',
   maxLength,
   placeholder,
   password = false,
@@ -240,6 +256,7 @@ export default function TextInput({
     historyCap,
     width: optsRef.current.width,
     indentedWrap,
+    wordBoundaries,
   }
 
   // Reducer bridge — the React-shape (state, action) => state, closing
@@ -380,8 +397,8 @@ export default function TextInput({
         ? inner.width
         : lastValidInnerWidth.current
   const layout = useMemo(
-    () => buildWrapLayout(state.value, { width: layoutWidth, indentedWrap }),
-    [state.value, layoutWidth, indentedWrap],
+    () => buildWrapLayout(state.value, { width: layoutWidth, indentedWrap, wordBoundaries }),
+    [state.value, layoutWidth, indentedWrap, wordBoundaries],
   )
   // Caret in visual cell coords. `col` already includes any indent
   // decoration on continuation rows (display-col convention from
