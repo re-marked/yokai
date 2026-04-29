@@ -439,6 +439,176 @@ describe('wrapByWords with identifier-aware boundaries', () => {
   })
 })
 
+describe('hanging indent (indentedWrap)', () => {
+  describe('basic indent detection + continuation alignment', () => {
+    it('detects leading whitespace and stores indentCells on continuation rows', () => {
+      // "  hello world hello" indented wrap width 8:
+      //   prefix = "  " (2 cells)
+      //   content = "hello world hello" wrapped at width 6:
+      //     ["hello ", "world ", "hello"]
+      // Visual rows:
+      //   Row 0: text="  hello " (8 chars, includes prefix), indentCells=0
+      //   Row 1: text="world " (6), indentCells=2
+      //   Row 2: text="hello" (5), indentCells=2
+      const layout = buildWrapLayout('  hello world hello', { width: 8, indentedWrap: true })
+      expect(layout.rows).toHaveLength(3)
+      expect(layout.rows[0].text).toBe('  hello ')
+      expect(layout.rows[0].indentCells).toBe(0)
+      expect(layout.rows[1].text).toBe('world ')
+      expect(layout.rows[1].indentCells).toBe(2)
+      expect(layout.rows[2].text).toBe('hello')
+      expect(layout.rows[2].indentCells).toBe(2)
+    })
+
+    it('preserves char-position contiguity (rejoin row texts = original line)', () => {
+      // The rejoin invariant: row texts concatenated equal the
+      // original logical line. Continuation rows DON'T duplicate the
+      // prefix (it's only in the buffer once, at the start).
+      const line = '  hello world hello'
+      const layout = buildWrapLayout(line, { width: 8, indentedWrap: true })
+      expect(layout.rows.map((r) => r.text).join('')).toBe(line)
+    })
+
+    it('startCharIdx + endCharIdx remain contiguous across indent boundary', () => {
+      const layout = buildWrapLayout('  hello world hello', { width: 8, indentedWrap: true })
+      expect(layout.rows[0].startCharIdx).toBe(0)
+      expect(layout.rows[0].endCharIdx).toBe(8) // "  hello " — prefix+6
+      expect(layout.rows[1].startCharIdx).toBe(8)
+      expect(layout.rows[1].endCharIdx).toBe(14)
+      expect(layout.rows[2].startCharIdx).toBe(14)
+      expect(layout.rows[2].endCharIdx).toBe(19)
+    })
+
+    it('tab-only indent does NOT trigger hanging-indent decoration (stringWidth treats \\t as 0 cells)', () => {
+      // Tabs are control chars in stringWidth (width 0). Detecting
+      // them as indent would mean indentCells=0 anyway — no visible
+      // alignment. Future enhancement: configurable `tabWidth` opt
+      // to treat tabs as N visible cells (matching the renderer's
+      // tab handling, when that lands). Until then, tab-only indent
+      // gets no hanging-indent treatment. Mixed tab+space indent
+      // counts only the spaces toward indent cells.
+      const layout = buildWrapLayout('\thello world hello', { width: 8, indentedWrap: true })
+      const continuationRows = layout.rows.filter((r) => r.isWrapContinuation)
+      // Tabs count as 0 cells, so no hanging indent applied.
+      for (const r of continuationRows) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('lines with no leading whitespace get indentCells=0 on all rows', () => {
+      const layout = buildWrapLayout('hello world hello', { width: 8, indentedWrap: true })
+      for (const r of layout.rows) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('non-continuation rows always have indentCells=0', () => {
+      // Even when the next logical line has indent, the FIRST row of
+      // each logical line carries the prefix in its text — indentCells
+      // is purely the "render-decoration" amount for continuation rows.
+      const layout = buildWrapLayout('a\n  b c d e f g h i', {
+        width: 6,
+        indentedWrap: true,
+      })
+      // Row 0: 'a' — no continuation
+      // Row 1: '  b c ' — first of indented line, indentCells=0 (prefix in text)
+      // Row 2: 'd e f ' — continuation, indentCells=2
+      // ...
+      const firstRowOfEachLine = layout.rows.filter((r) => !r.isWrapContinuation)
+      for (const r of firstRowOfEachLine) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('per-line indent is independent (different logical lines, different prefixes)', () => {
+      // Two logical lines with different indents.
+      const layout = buildWrapLayout('  line one wraps here\n    line two wraps deeper', {
+        width: 10,
+        indentedWrap: true,
+      })
+      const line0Rows = layout.rows.filter((r) => r.logicalLine === 0)
+      const line1Rows = layout.rows.filter((r) => r.logicalLine === 1)
+      // Line 0 continuations have indentCells=2; line 1 continuations have 4.
+      const line0Continuations = line0Rows.filter((r) => r.isWrapContinuation)
+      const line1Continuations = line1Rows.filter((r) => r.isWrapContinuation)
+      for (const r of line0Continuations) expect(r.indentCells).toBe(2)
+      for (const r of line1Continuations) expect(r.indentCells).toBe(4)
+    })
+  })
+
+  describe('opt-out + edge cases', () => {
+    it('indentedWrap=false treats continuation rows as starting at col 0 (indentCells=0)', () => {
+      const layout = buildWrapLayout('  hello world hello', { width: 8, indentedWrap: false })
+      for (const r of layout.rows) {
+        expect(r.indentCells).toBe(0)
+      }
+      // All chars still preserved via rejoin
+      expect(layout.rows.map((r) => r.text).join('')).toBe('  hello world hello')
+    })
+
+    it('indented wrap is the default when option is omitted', () => {
+      const layout = buildWrapLayout('  hello world hello', { width: 8 })
+      const continuations = layout.rows.filter((r) => r.isWrapContinuation)
+      // Default indented behavior: continuation rows have indentCells > 0
+      for (const r of continuations) expect(r.indentCells).toBe(2)
+    })
+
+    it('all-whitespace line emits one row with the whitespace as text (caret can sit on it)', () => {
+      const layout = buildWrapLayout('     ', { width: 10, indentedWrap: true })
+      expect(layout.rows).toHaveLength(1)
+      expect(layout.rows[0].text).toBe('     ')
+      expect(layout.rows[0].indentCells).toBe(0)
+    })
+
+    it('lines that happen to fit in one row get indentCells=0 (no continuation)', () => {
+      const layout = buildWrapLayout('  short', { width: 20, indentedWrap: true })
+      expect(layout.rows).toHaveLength(1)
+      expect(layout.rows[0].text).toBe('  short')
+      expect(layout.rows[0].indentCells).toBe(0)
+    })
+  })
+
+  describe('logicalToVisual + indented wrap', () => {
+    it('returns ROW-INTERNAL col (renderer adds indentCells offset for display)', () => {
+      // For "  hello world" width 8:
+      // Row 0: "  hello " (8 chars, indentCells=0)
+      // Row 1: "world" (5 chars, indentCells=2)
+      // Position 8 (start of row 1's content) → row 1 col 0 (NOT col 2).
+      // The renderer is responsible for adding indentCells to display.
+      const layout = buildWrapLayout('  hello world', { width: 8, indentedWrap: true })
+      expect(layout.logicalToVisual(8)).toEqual({ row: 1, col: 0 })
+    })
+  })
+
+  describe('rejoinability invariant (extended for indented wrap)', () => {
+    const cases = [
+      '  hello world',
+      '    deeply indented content here',
+      'mixed\n  one indented\n    two indented\nno indent',
+      '\thello\tworld',
+      `  ${'word '.repeat(10).trim()}`,
+    ]
+    for (const input of cases) {
+      for (const width of [6, 10, 18]) {
+        it(`rejoins for input=${JSON.stringify(input.slice(0, 30))}... width=${width} indented`, () => {
+          const layout = buildWrapLayout(input, { width, indentedWrap: true })
+          // Reconstruct with \n separators between logical lines.
+          let reconstructed = ''
+          let prevLogicalLine: number | null = null
+          for (const r of layout.rows) {
+            if (prevLogicalLine !== null && r.logicalLine !== prevLogicalLine) {
+              reconstructed += '\n'
+            }
+            reconstructed += r.text
+            prevLogicalLine = r.logicalLine
+          }
+          expect(reconstructed).toBe(input)
+        })
+      }
+    }
+  })
+})
+
 describe('wrap hints (programmatic atomic spans)', () => {
   describe('via wrapByWords directly (line-relative spans)', () => {
     it('does NOT break inside a hint-marked range', () => {

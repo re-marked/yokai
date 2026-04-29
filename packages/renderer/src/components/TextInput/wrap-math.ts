@@ -422,6 +422,42 @@ export type VisualRow = {
    *  logical line (vs starting a new logical line via `\n`). The
    *  renderer uses this to draw a wrap-indicator glyph in the gutter. */
   readonly isWrapContinuation: boolean
+  /** Number of cells of indent the renderer should prepend BEFORE
+   *  `text` when displaying this row. Always 0 for non-continuation
+   *  rows (their leading whitespace IS already in `text`). For
+   *  continuation rows under hanging-indent mode, this is the cell
+   *  width of the original logical line's leading whitespace —
+   *  rendering ` `.repeat(indentCells) + text aligns the
+   *  continuation under the first non-whitespace character of the
+   *  original line. The buffer's char positions are unaffected
+   *  (the indent is a render decoration, not in the buffer at this
+   *  position). */
+  readonly indentCells: number
+}
+
+/** Detect the leading-whitespace prefix of a logical line, returning
+ *  both the prefix string (for prepending to continuation rows) and
+ *  its cell width. Stops at the first non-whitespace grapheme.
+ *
+ *  Only ASCII space + tab count (matches `isBreakableWhitespace`'s
+ *  conservative definition — non-breaking space and figure space
+ *  are intentionally NOT treated as indent because they're meant to
+ *  bind tokens, not delimit visual structure).
+ *
+ *  Used by buildWrapLayout for hanging-indent ("breakindent" in
+ *  vim, "indented wrap" in VS Code) — continuation rows of a wrapped
+ *  logical line visually align under the first non-whitespace
+ *  character of the original line.
+ */
+function detectLeadingIndent(line: string): { prefix: string; cells: number } {
+  let prefix = ''
+  let cells = 0
+  for (const { segment } of getGraphemeSegmenter().segment(line)) {
+    if (!isBreakableWhitespace(segment)) break
+    prefix += segment
+    cells += stringWidth(segment)
+  }
+  return { prefix, cells }
 }
 
 /** Output of `buildWrapLayout`. The `rows` array is the rendering
@@ -453,6 +489,16 @@ export type WrapOptions = {
   /** Programmatic wrap hints — buffer-relative atomic spans the
    *  wrap algorithm must NOT break inside. See `WrapHint`. */
   hints?: ReadonlyArray<WrapHint>
+  /** Hanging-indent ("indented wrap" / vim's `breakindent`) — when
+   *  a logical line wraps, continuation rows visually align under
+   *  the first non-whitespace character of the original line. The
+   *  indent isn't inserted into the buffer; the renderer prepends
+   *  spaces at render time using `VisualRow.indentCells`.
+   *
+   *  Default `true` — matches what every modern editor does for
+   *  prose / list / quote / indented-code content. Set `false` for
+   *  the unindented behavior (continuation rows start at column 0). */
+  indentedWrap?: boolean
 }
 
 /**
@@ -472,7 +518,7 @@ export type WrapOptions = {
  * crash.
  */
 export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
-  const { width, wrap = 'word', wordBoundaries = 'whitespace', hints } = opts
+  const { width, wrap = 'word', wordBoundaries = 'whitespace', hints, indentedWrap = true } = opts
   if (width <= 0) {
     return {
       rows: [],
@@ -506,6 +552,7 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
         startCharIdx: bufferPos,
         endCharIdx: bufferPos,
         isWrapContinuation: false,
+        indentCells: 0,
       })
     } else {
       // Translate buffer-relative hints into line-relative atomic
@@ -522,24 +569,68 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
         const spanEnd = Math.min(line.length, h.end - lineStart)
         if (spanEnd > spanStart) lineAtomicSpans.push([spanStart, spanEnd] as const)
       }
+
+      // Hanging indent: detect leading whitespace, wrap CONTENT at
+      // the reduced width. The first row's text includes the prefix
+      // (it's in the buffer at this position); continuation rows
+      // store `indentCells` so the renderer prepends spaces at
+      // render time. Atomic-span positions inside the prefix slice
+      // (rare — would require a hint covering leading whitespace)
+      // are simply offset by -prefix.length when passed to wrap.
+      const indent =
+        indentedWrap && wrap === 'word' ? detectLeadingIndent(line) : { prefix: '', cells: 0 }
+      const usingIndent = indent.cells > 0 && indent.cells < width
+      const contentLine = usingIndent ? line.slice(indent.prefix.length) : line
+      const contentWidth = usingIndent ? width - indent.cells : width
+      // Translate atomic spans to content-relative if we stripped a prefix.
+      const contentSpans: Array<readonly [number, number]> = usingIndent
+        ? lineAtomicSpans
+            .map(
+              ([s, e]) =>
+                [
+                  Math.max(0, s - indent.prefix.length),
+                  Math.max(0, e - indent.prefix.length),
+                ] as const,
+            )
+            .filter(([s, e]) => e > s)
+        : lineAtomicSpans
+
       const wrapped =
         wrap === 'char'
-          ? wrapByCells(line, width)
-          : wrapByWords(line, width, wordBoundaries, lineAtomicSpans)
-      // wrapByWords/wrapByCells return [] for empty input; we
-      // already handled that above. For non-empty input they always
-      // return at least one row.
-      let rowStart = bufferPos
-      for (let i = 0; i < wrapped.length; i++) {
-        const text = wrapped[i]!
+          ? wrapByCells(contentLine, contentWidth)
+          : wrapByWords(contentLine, contentWidth, wordBoundaries, contentSpans)
+
+      // Edge case: all-whitespace line. detectLeadingIndent consumes
+      // everything; contentLine is "". wrapByWords returns []. Emit
+      // one row with the whitespace as text so the caret can sit on it.
+      if (wrapped.length === 0) {
         rows.push({
-          text,
+          text: line,
           logicalLine: lineIdx,
-          startCharIdx: rowStart,
-          endCharIdx: rowStart + text.length,
-          isWrapContinuation: i > 0,
+          startCharIdx: bufferPos,
+          endCharIdx: bufferPos + line.length,
+          isWrapContinuation: false,
+          indentCells: 0,
         })
-        rowStart += text.length
+      } else {
+        let rowStart = bufferPos
+        for (let i = 0; i < wrapped.length; i++) {
+          const contentText = wrapped[i]!
+          // First row: text includes the prefix (prepend it). Indent
+          // cells = 0 because the prefix IS in the text already.
+          // Continuation rows: text is just content; indentCells is
+          // the prefix's cell width (renderer prepends spaces).
+          const text = i === 0 && usingIndent ? indent.prefix + contentText : contentText
+          rows.push({
+            text,
+            logicalLine: lineIdx,
+            startCharIdx: rowStart,
+            endCharIdx: rowStart + text.length,
+            isWrapContinuation: i > 0,
+            indentCells: i === 0 ? 0 : indent.cells,
+          })
+          rowStart += text.length
+        }
       }
     }
     bufferPos += line.length
