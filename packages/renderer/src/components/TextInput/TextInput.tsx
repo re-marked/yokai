@@ -321,10 +321,32 @@ export default function TextInput({
   const [scrollX, _setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
 
-  // Adjust scrollY on every state/size change so the caret's visual
-  // row stays in view. useEffect (not useLayoutEffect) so the next
-  // paint reflects both the new caret AND the new scroll in the same
-  // render — React batches the setState here with the original cause.
+  // Adjust scrollY on every change that could shift the caret's
+  // visual row out of the visible window. Re-fires on:
+  //
+  //   - inner.height — the box's vertical content area changed (the
+  //     window the caret must fit inside grew or shrank).
+  //   - visual.row — the caret's visual position changed. This is
+  //     transitively driven by state.value (typing / pasting / undo),
+  //     state.caret (any caret-moving action), AND inner.width
+  //     (terminal/container resize → wrap layout rebuild → caret
+  //     visual position recomputes via logicalToVisual). One
+  //     dependency captures all three sources because `visual` is a
+  //     useMemo over (layout, state.caret) and `layout` is a useMemo
+  //     over (state.value, inner.width).
+  //   - layout.rows.length — the total row count changed. Catches the
+  //     edge where width changes but visual.row happens to stay the
+  //     same (e.g. caret on row 0, width grows so content needs
+  //     fewer rows): scrollY needs to clamp to the new max.
+  //   - scrollY — needed for the read-modify-write inside the effect.
+  //
+  // useEffect (not useLayoutEffect): the next paint reflects both the
+  // new caret AND the new scroll in the same render — React batches
+  // the setScrollY here with the original cause.
+  //
+  // First-frame note: `inner.height === 0` means yoga hasn't measured
+  // yet. Skip the re-scroll for one frame; the next render with a
+  // measured height triggers via the inner.height dep.
   useEffect(() => {
     if (inner.height > 0) {
       const next = scrollToKeepCaretVisible({
