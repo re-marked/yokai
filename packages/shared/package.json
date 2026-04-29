@@ -1,6 +1,6 @@
 {
   "name": "@yokai/shared",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Serious React TUI renderer for serious CLI apps. Pure TypeScript Yoga layout, diff-based rendering, ScrollBox, alt buffer, mouse events, draggable and resizable components.",
   "license": "MIT",
   "main": "./dist/index.js",
