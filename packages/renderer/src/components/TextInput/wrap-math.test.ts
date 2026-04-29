@@ -536,6 +536,76 @@ describe('hanging indent (indentedWrap)', () => {
     })
   })
 
+  describe('indent-wider-than-width threshold (graceful degrade)', () => {
+    it('falls back to no-indent when indent leaves less than half the width', () => {
+      // width=10, indent=6 → content width = 4, threshold = 5. Below
+      // threshold → no indent applied. Continuation rows get
+      // indentCells=0 (full-row content).
+      const line = `${'      '}hello world hello world hello world` // 6 spaces of indent
+      const layout = buildWrapLayout(line, { width: 10, indentedWrap: true })
+      const continuationRows = layout.rows.filter((r) => r.isWrapContinuation)
+      expect(continuationRows.length).toBeGreaterThan(0)
+      for (const r of continuationRows) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('applies hanging indent when indent is exactly at the threshold', () => {
+      // width=10, indent=5 → content width = 5, threshold = 5. AT
+      // threshold → indent IS applied (>= comparison).
+      const line = `${'     '}hello world hello world hello world` // 5 spaces of indent
+      const layout = buildWrapLayout(line, { width: 10, indentedWrap: true })
+      const continuationRows = layout.rows.filter((r) => r.isWrapContinuation)
+      expect(continuationRows.length).toBeGreaterThan(0)
+      for (const r of continuationRows) {
+        expect(r.indentCells).toBe(5)
+      }
+    })
+
+    it('falls back gracefully when indent equals width', () => {
+      // width=4, indent=4 → content width=0. No indent (would
+      // produce 0-width content). Line wraps normally at col 0.
+      const line = `${'    '}hello world` // 4 spaces of indent
+      const layout = buildWrapLayout(line, { width: 4, indentedWrap: true })
+      // No crash; rejoin still works.
+      expect(layout.rows.map((r) => r.text).join('')).toBe(line)
+      // Continuation rows have indentCells=0.
+      for (const r of layout.rows.filter((r) => r.isWrapContinuation)) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('falls back when indent EXCEEDS width', () => {
+      // width=3, indent=10 → content width = -7. Way below threshold.
+      const line = `${'          '}hello`
+      const layout = buildWrapLayout(line, { width: 3, indentedWrap: true })
+      // No crash; rejoin still works.
+      expect(layout.rows.map((r) => r.text).join('')).toBe(line)
+      for (const r of layout.rows.filter((r) => r.isWrapContinuation)) {
+        expect(r.indentCells).toBe(0)
+      }
+    })
+
+    it('threshold is per-line — different lines can independently degrade', () => {
+      // Line 0 has tiny indent (within threshold), gets indent.
+      // Line 1 has huge indent (over threshold), falls back.
+      const layout = buildWrapLayout(
+        '  short indent text wraps\n          deep indent text wraps too',
+        { width: 12, indentedWrap: true },
+      )
+      const line0Continuations = layout.rows.filter(
+        (r) => r.logicalLine === 0 && r.isWrapContinuation,
+      )
+      const line1Continuations = layout.rows.filter(
+        (r) => r.logicalLine === 1 && r.isWrapContinuation,
+      )
+      // Line 0: indent 2, content width 10, threshold 6. 10 >= 6 → applied.
+      for (const r of line0Continuations) expect(r.indentCells).toBe(2)
+      // Line 1: indent 10, content width 2, threshold 6. 2 < 6 → fallback.
+      for (const r of line1Continuations) expect(r.indentCells).toBe(0)
+    })
+  })
+
   describe('opt-out + edge cases', () => {
     it('indentedWrap=false treats continuation rows as starting at col 0 (indentCells=0)', () => {
       const layout = buildWrapLayout('  hello world hello', { width: 8, indentedWrap: false })

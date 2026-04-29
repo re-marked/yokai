@@ -577,9 +577,19 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
       // render time. Atomic-span positions inside the prefix slice
       // (rare — would require a hint covering leading whitespace)
       // are simply offset by -prefix.length when passed to wrap.
+      //
+      // Threshold: we only apply hanging indent when the indent leaves
+      // at least HALF the row available for content. Beyond that the
+      // continuation rows get so squeezed they'd char-wrap to single-
+      // or two-cell strips — visually worse than just abandoning the
+      // hanging-indent decoration and letting the line wrap normally
+      // at column 0. Same idea as vim's `breakindentopt=min:N` — we
+      // hardcode the threshold to width/2 because exposing it as a
+      // tunable adds API surface without much real-world benefit.
       const indent =
         indentedWrap && wrap === 'word' ? detectLeadingIndent(line) : { prefix: '', cells: 0 }
-      const usingIndent = indent.cells > 0 && indent.cells < width
+      const minContentWidth = Math.ceil(width / 2)
+      const usingIndent = indent.cells > 0 && width - indent.cells >= minContentWidth
       const contentLine = usingIndent ? line.slice(indent.prefix.length) : line
       const contentWidth = usingIndent ? width - indent.cells : width
       // Translate atomic spans to content-relative if we stripped a prefix.
@@ -627,7 +637,11 @@ export function buildWrapLayout(value: string, opts: WrapOptions): WrapLayout {
             startCharIdx: rowStart,
             endCharIdx: rowStart + text.length,
             isWrapContinuation: i > 0,
-            indentCells: i === 0 ? 0 : indent.cells,
+            // Only continuation rows get a render-time indent, AND
+            // only when we actually applied the indent strategy. When
+            // the threshold rejected indent, this stays 0 even though
+            // the detected prefix had cells.
+            indentCells: usingIndent && i > 0 ? indent.cells : 0,
           })
           rowStart += text.length
         }
