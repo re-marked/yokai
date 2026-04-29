@@ -493,6 +493,14 @@ export default function TextInput({
         contentSize: Math.max(rowWidth, visual.col + 1),
       })
       if (next !== scrollX) setScrollX(next)
+    } else if (scrollX !== 0) {
+      // wrap mode left 'none' (toggled at runtime, OR width=0 first
+      // render). Soft-wrap doesn't h-scroll, but the cursor declaration
+      // and click handler still subtract / add scrollX unconditionally
+      // (degenerate to no-op when 0). A stale non-zero scrollX from the
+      // previous wrap='none' epoch would shift cursor and click target
+      // off the rendered text. Reset to keep them aligned.
+      setScrollX(0)
     }
   }, [
     inner.height,
