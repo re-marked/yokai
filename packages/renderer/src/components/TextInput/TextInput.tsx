@@ -290,19 +290,33 @@ export default function TextInput({
   // logicalToVisual for placing the cursor; visualToLogical for
   // mapping clicks back to char indices.
   //
-  // On the very first render (inner.width === 0 because yoga hasn't
-  // measured yet), passing 0 to buildWrapLayout would yield an empty
-  // layout — collapsing the box to zero height for one frame. Fall
-  // back to MAX_SAFE_INTEGER so each logical line emits one row
-  // (effectively no wrap), giving the box content to size against;
-  // the next render rebuilds with the real width and proper wrapping
-  // kicks in. Same one-frame-defer the existing per-line code had.
+  // Width fallback strategy. Two distinct cases produce
+  // `inner.width === 0`, and they need different handling:
+  //
+  //   1. First render before yoga has measured. No prior valid width —
+  //      use a sensible terminal default (80 cells) so the layout
+  //      produces SOMETHING for the box to size against. Next render
+  //      with the real width replaces this.
+  //   2. Subsequent render after yoga measured 0 — happens when the
+  //      terminal shrinks below border + padding (negative inner clamps
+  //      to 0 via `Math.max` in measureInnerSize). Falling back to a
+  //      constant default (or MAX_SAFE_INTEGER) here causes an INFINITE
+  //      LAYOUT LOOP: layout swings between "many narrow rows" (real
+  //      width) and "few huge-content rows" (default width); each Text's
+  //      yoga measurement differs wildly between modes, the Box's
+  //      computed width oscillates, inner.width keeps flipping back and
+  //      forth, and the measure useLayoutEffect's setInner never
+  //      converges. STICKY-VALID-WIDTH ref breaks the cycle: once we've
+  //      measured a positive width, we keep using it as the layout's
+  //      width even if a later measurement reports 0. The box on screen
+  //      may render clipped, but the layout stays stable and React
+  //      doesn't re-render forever.
+  const lastValidInnerWidth = useRef(80)
+  if (inner.width > 0) lastValidInnerWidth.current = inner.width
+  const layoutWidth = inner.width > 0 ? inner.width : lastValidInnerWidth.current
   const layout = useMemo(
-    () =>
-      buildWrapLayout(state.value, {
-        width: inner.width > 0 ? inner.width : Number.MAX_SAFE_INTEGER,
-      }),
-    [state.value, inner.width],
+    () => buildWrapLayout(state.value, { width: layoutWidth }),
+    [state.value, layoutWidth],
   )
   // Caret in visual cell coords. `col` already includes any indent
   // decoration on continuation rows (display-col convention from
