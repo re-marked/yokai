@@ -31,6 +31,10 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `cursorColor` | `Color` | terminal default | Cursor color while focused. OSC 12; supported by xterm/iTerm2/kitty/alacritty/Windows Terminal/VS Code. `ansi256(N)` not supported. |
 | `autoFocus` | `boolean` | `false` | Focus on mount. |
 | `historyCap` | `number` | `100` | Max undo entries. Older entries drop. |
+| `wrap` | `'soft' \| 'none'` | multiline → `'soft'`, single-line → `'none'` | Soft-wrap long lines onto visual rows (`'soft'`) or keep one row per logical line (`'none'`, h-scrolls past width). See [Soft-wrap](#soft-wrap). |
+| `indentedWrap` | `boolean` | `true` | Hanging indent: continuation rows of an indented logical line align under the first non-whitespace char. See [Advanced wrap control](#advanced-wrap-control). |
+| `wordBoundaries` | `'whitespace' \| 'identifier'` | `'whitespace'` | Where wrap is allowed to break. `'identifier'` adds snake_case / kebab-case / camelCase break candidates and treats URLs as atomic. See [Advanced wrap control](#advanced-wrap-control). |
+| `wrapHints` | `ReadonlyArray<WrapHint>` | — | Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Memoize the array reference. See [Advanced wrap control](#advanced-wrap-control). |
 
 ## Examples
 
@@ -109,15 +113,113 @@ const [name, setName] = useState('')
 
 - **Controlled vs uncontrolled.** Pass `value` for controlled mode (parent owns the buffer); pass `defaultValue` for uncontrolled (the input owns it). External `value` changes reset internal state — undo across an external set isn't a useful semantic.
 - **Caret rendering.** The real terminal cursor is positioned at the caret via `useDeclaredCursor`, so IME composition popups and screen readers follow correctly. No synthetic glyph.
+- **Caret is logical.** `state.caret` (and the `value` you receive in `onChange`) are LOGICAL — buffer char indices, wrap-agnostic. The internal layout translates between logical positions and visual rows on each render; consumers never see visual coords.
 - **Smart paste.** Short pastes (≤ `<AlternateScreen pasteThreshold>`, default 32 chars) come through as a stream of keystrokes — they feel like typing. Longer pastes fire `onPaste` and become one undo step.
 - **Single-line + newlines.** Pasting multiline content into a single-line input converts newlines to spaces (the alternative — silently dropping them — would corrupt the user's intent).
 - **Undo grouping.** Consecutive same-kind insertions or deletions merge into one undo step (a typed word is one Ctrl+Z, not N). Pastes are always their own step.
 - **Wide chars.** Caret math counts CJK / wide chars as 2 cells, combining marks as 0. Click positioning snaps to the LEFT edge of a wide char if the click lands mid-glyph.
 
+## Soft-wrap
+
+Multiline TextInput soft-wraps long lines onto VISUAL ROWS by default; single-line stays on one row and scrolls horizontally. Two terms to keep straight:
+
+- **Logical line** — text between two `\n`s (or buffer edges). Owned by `state.value`; what `onChange` reports.
+- **Visual row** — a slice of a logical line that fits on one screen row. Computed each render from the inner width.
+
+The caret moves through visual rows: ↓ takes you to the next visual row even if it's a wrap continuation of the same logical line, not the next `\n`. Selection paints as one continuous stripe across multi-row spans, including the slack at row ends so a multi-row selection reads as one connected block. Empty logical lines (consecutive `\n`s) get a single zero-cell visual row each so the caret can land on them.
+
+### Defaults
+
+| Mode | `wrap` default | What it does |
+|------|----------------|--------------|
+| `multiline` | `'soft'` | Long lines wrap onto continuation rows. Vertical scroll only; no horizontal scroll. |
+| Single-line | `'none'` | Content stays on one row; horizontal scroll keeps the caret in view. |
+
+To override: pass `wrap='none'` on a multiline input to disable wrapping (truncates + h-scrolls per row), or `wrap='soft'` on a single-line input (rare — single-line content rarely benefits).
+
+### Caret nav under soft-wrap
+
+- **↓ / ↑** walk visual rows in display order. A wrapped logical line's continuation row counts as the row below the first row.
+- **Preferred column.** When you press ↓ from a wide row, the column is captured. Subsequent ↓ presses preserve that column even when passing through SHORTER rows that clamp the caret to row end. The first horizontal move (←/→/Home/End/etc.) or any edit resets the captured column.
+- **Home / End** still operate on LOGICAL line boundaries — Home goes to the start of the current logical line (which may be on an earlier visual row if you're on a continuation).
+
+## Advanced wrap control
+
+Three props tune how soft-wrap decides where to break.
+
+### `indentedWrap` (boolean, default `true`)
+
+Hanging indent: when a logical line begins with leading whitespace, continuation rows are decorated with the same indent so wrapped content aligns under the first non-whitespace char of the original line. Mirrors vim's `breakindent`.
+
+```
+*  This is a long bulleted item that wraps onto a continuation row,
+   and the continuation aligns under "This" instead of column 0.
+```
+
+**Threshold.** The indent must leave at least `width / 2` cells of usable content per row. If not (very narrow box or very deep indent), the indent decoration is omitted on continuation rows for that line — graceful degrade rather than producing 1-char-wide rows.
+
+**Tab caveat.** Tab-only indent does NOT trigger hanging indent. `stringWidth` treats `\t` as 0 cells (no width metric available without a configured `tabWidth` — see [Deferred](#deferred)). Mix tab + space and the space portion still drives the indent.
+
+Pass `indentedWrap={false}` to disable globally — continuation rows start at column 0 regardless of leading whitespace.
+
+### `wordBoundaries` (`'whitespace' | 'identifier'`, default `'whitespace'`)
+
+In `'whitespace'` mode, wrap math breaks only at whitespace. In `'identifier'` mode, additional break candidates open up for identifier-shaped tokens:
+
+| Pattern | Break preference |
+|---------|------------------|
+| `snake_case` | break AFTER `_` |
+| `kebab-case` | break AFTER `-` |
+| `camelCase` / `PascalCase` | break BEFORE an uppercase that follows lowercase |
+| URL (`https://…`, `http://…`) | atomic — never break inside |
+
+Whitespace breaks always beat identifier breaks at the same row-end (a hard break is preferred over a preferred break). Reach for `'identifier'` on fields where users type slash commands, identifier names, file paths, or URLs — content that benefits from breaking at semantic boundaries when it overflows instead of mid-token.
+
+```tsx
+<TextInput
+  multiline
+  wordBoundaries="identifier"
+  defaultValue="/sling --target=backend-engineer --link=https://github.com/foo/bar"
+/>
+```
+
+### `wrapHints` (`ReadonlyArray<WrapHint>`, optional)
+
+Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Use for things a parser knows about: mention chips, rich-text tokens, code identifiers, file paths the consumer wants kept whole regardless of boundary heuristics.
+
+```tsx
+import { type WrapHint } from '@yokai-tui/renderer'
+
+const hints = useMemo<ReadonlyArray<WrapHint>>(
+  () => [
+    { start: 0, end: 6 },    // @toast
+    { start: 11, end: 23 },  // chit-abc-123
+  ],
+  [],
+)
+
+<TextInput value={value} onChange={setValue} multiline wrapHints={hints} />
+```
+
+**Memoize the array reference.** `wrapHints` participates in the layout's `useMemo` deps. Passing a fresh array every render forces a layout recompute even when the buffer didn't change. Use `useMemo` (or a ref-stable derive) and let your hint contents change only when the buffer does.
+
+**Span > width.** If a hinted span is wider than the inner cell width, it overflows on its own row rather than splitting — same contract URL detection in `'identifier'` mode follows. The renderer truncates the visible portion at row width; the buffer is intact.
+
+**Hint indices are buffer-relative.** A hint covering `chit-abc-123` at idx 11-23 stops being meaningful after the user inserts characters before idx 11. In a real app, derive hints from a parser running on `state.value` — don't hardcode against the initial value.
+
+The `WrapHint` type accepts an optional `joinWith?: string` field, but it's reserved and not yet implemented (renderer-side glyph injection at wrap continuations — coming in a follow-up).
+
+### Deferred
+
+These are documented gaps, not bugs:
+
+- **`joinWith` on hints** — renderer-side glyph injection at wrap continuations (e.g., showing a `↪` at the start of a wrapped row inside a hint). The type field is accepted but ignored.
+- **Configurable `tabWidth`** — tabs currently report 0 cells via `stringWidth`. A future option would let consumers pick a tab width for measurement (and unblock tab-only hanging indent).
+
 ## Scrolling
 
-- **Single-line**: when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
-- **Multiline**: when content exceeds the box height, the visible window scrolls vertically so the caret line stays in view. Each visible line truncates if it exceeds the inner width.
+- **Single-line** (or multiline with `wrap='none'`): when content exceeds the box width, the visible window scrolls horizontally so the caret stays in view. Wide chars at the visible edges render as spaces to keep cell layout stable; selection highlight on a horizontally-scrolled wide char is rendered approximately.
+- **Multiline with `wrap='soft'`** (the default): content wraps to fit width — no horizontal scroll. When the wrapped content exceeds box height, the visible window scrolls vertically so the caret's visual row stays in view.
 - The inner content area is read from yoga's computed size minus padding + border, so `width` / `height` props refer to the OUTER box. If you don't pass `width` / `height`, no scrolling — content fills the box's natural size.
 
 ## Known limitations
