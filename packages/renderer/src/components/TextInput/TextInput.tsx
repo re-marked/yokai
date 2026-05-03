@@ -202,6 +202,44 @@ export type TextInputProps = Except<
   autoFocus?: boolean
   /** Maximum history entries kept for undo/redo. Default 100. */
   historyCap?: number
+  /**
+   * Validation function. Called with the current buffer on every
+   * render; return a non-empty string to mark the input invalid (the
+   * border swaps to `errorColor` and the message renders below the
+   * input content), or `null` / `''` for valid.
+   *
+   * Validation is purely a RENDER concern — `onSubmit` still fires when
+   * invalid. To block submit on error, check the validation result in
+   * your `onSubmit` handler before acting.
+   *
+   * Runs every render. If the check is expensive, debounce / memoize
+   * inside the function — the component doesn't try to be clever about
+   * skipping calls.
+   *
+   * Empty string is treated as `null` (valid) so consumers can't
+   * accidentally enable error styling with no message — be explicit
+   * and return null when valid.
+   */
+  validate?: (value: string) => string | null
+  /**
+   * Border + default message color when validation fails. Default
+   * `'red'`. Border-color precedence: error > focus > idle.
+   *
+   * Only honored when `validate` is set AND returns a non-empty
+   * message; otherwise the input renders with its normal focus / idle
+   * border color.
+   */
+  errorColor?: Color
+  /**
+   * Custom error-message renderer. When omitted, the message renders
+   * as a dim `<Text color={errorColor}>` below the input content
+   * (inside the bordered box).
+   *
+   * Use for icons (`⚠ ${message}`), multi-line messages, or any layout
+   * the default text node can't express. The function is called only
+   * when `validate` returned a non-null message.
+   */
+  renderError?: (message: string) => React.ReactNode
 }
 
 /**
@@ -253,6 +291,9 @@ export default function TextInput({
   cursorColor,
   autoFocus = false,
   historyCap,
+  validate,
+  errorColor = 'red',
+  renderError,
   ...boxProps
 }: PropsWithChildren<TextInputProps>): React.ReactNode {
   const isControlled = value !== undefined
@@ -767,8 +808,17 @@ export default function TextInput({
   // otherwise fall through to whatever the consumer provided as the
   // idle `borderColor` (or terminal default if undefined). The swap is
   // a no-op when no `borderStyle` is set — there's no border to color.
+  //
+  // Validation precedence: error wins over focus wins over idle. The
+  // non-empty-message coercion below makes empty-string returns from
+  // `validate` indistinguishable from null (valid) — see prop docstring.
   const { borderColor: idleBorderColor, ...restBoxProps } = boxProps
-  const renderedBorderColor = isFocused ? borderColorFocus : idleBorderColor
+  const validationMessage = validate ? validate(state.value) || null : null
+  const renderedBorderColor = validationMessage
+    ? errorColor
+    : isFocused
+      ? borderColorFocus
+      : idleBorderColor
 
   return (
     <Box
@@ -783,6 +833,14 @@ export default function TextInput({
       borderColor={renderedBorderColor}
     >
       {renderedLines}
+      {validationMessage &&
+        (renderError ? (
+          renderError(validationMessage)
+        ) : (
+          <Text color={errorColor} dim>
+            {validationMessage}
+          </Text>
+        ))}
     </Box>
   )
 }
