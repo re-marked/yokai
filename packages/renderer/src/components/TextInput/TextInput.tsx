@@ -203,6 +203,35 @@ export type TextInputProps = Except<
   /** Maximum history entries kept for undo/redo. Default 100. */
   historyCap?: number
   /**
+   * Auto-grow the box height to fit the wrapped content. When `true`
+   * AND `multiline` is set AND no explicit `height` is passed, the box
+   * sizes to the visual-row count (plus border + padding chrome).
+   * Combine with the standard `minHeight` / `maxHeight` yoga style
+   * props to bound growth — beyond `maxHeight`, the existing vertical
+   * scroll kicks in to keep the caret visible.
+   *
+   * Default `false` for backwards compatibility (existing multiline
+   * consumers passing explicit `height` see no change). Single-line
+   * inputs ignore this prop — they're always 1 row.
+   *
+   * Implementation note: row count comes from the wrap-math primitive
+   * directly, not from yoga's measured height — the wrap layout
+   * already knows how many rows the buffer produces at the current
+   * inner width. That sidesteps yoga's "computed-before-render" stale-
+   * measurement problem (the same issue that defeated Resizable's
+   * `autoFit` twice). The only one-frame flash is on initial mount,
+   * before yoga has measured the inner width — the box renders at
+   * minHeight (or yoga's default), then reflows to derived height on
+   * the next frame.
+   *
+   * Chrome computation handles numeric `padding`, `paddingY`,
+   * `paddingTop`, `paddingBottom`, and `borderStyle` (1 cell per
+   * border side). String / percentage padding falls through as 0 cells
+   * — auto-grow assumes cell-based chrome. If you need string padding
+   * with auto-grow, set explicit `height` instead.
+   */
+  autoGrow?: boolean
+  /**
    * Validation function. Called with the current buffer on every
    * render; return a non-empty string to mark the input invalid (the
    * border swaps to `errorColor` and the message renders below the
@@ -291,6 +320,7 @@ export default function TextInput({
   cursorColor,
   autoFocus = false,
   historyCap,
+  autoGrow = false,
   validate,
   errorColor = 'red',
   renderError,
@@ -820,6 +850,20 @@ export default function TextInput({
       ? borderColorFocus
       : idleBorderColor
 
+  // Auto-grow height (multiline only, opt-in, no explicit height). The
+  // wrap layout already knows row count for the current (value, width);
+  // we add the box's vertical chrome (border + padding) to convert from
+  // inner content rows to outer box height. Yoga's existing minHeight /
+  // maxHeight style props (passed through restBoxProps) clamp the
+  // result — beyond maxHeight, scrollY kicks in via the existing scroll
+  // path, so very long content still keeps the caret visible.
+  //
+  // String / percentage padding falls through as 0 cells; auto-grow
+  // assumes cell-based chrome and the docstring documents this gap.
+  const autoGrowActive = autoGrow && multiline && restBoxProps.height === undefined
+  const verticalChrome = autoGrowActive ? computeVerticalChrome(restBoxProps) : 0
+  const autoHeight = autoGrowActive ? Math.max(1, layout.rows.length) + verticalChrome : undefined
+
   return (
     <Box
       {...restBoxProps}
@@ -831,6 +875,7 @@ export default function TextInput({
       onMouseDown={handleMouseDown}
       flexDirection="column"
       borderColor={renderedBorderColor}
+      height={autoHeight ?? restBoxProps.height}
     >
       {renderedLines}
       {validationMessage &&
@@ -843,6 +888,21 @@ export default function TextInput({
         ))}
     </Box>
   )
+}
+
+/**
+ * Vertical chrome (border + padding) the auto-grow path adds to the
+ * inner row count to derive an outer box height. Numeric padding only —
+ * string / percentage falls through as 0 cells. Border counts 1 cell per
+ * side when `borderStyle` is set.
+ */
+function computeVerticalChrome(boxProps: BoxProps): number {
+  const border = boxProps.borderStyle ? 2 : 0
+  const padBase = typeof boxProps.padding === 'number' ? boxProps.padding : 0
+  const padY = typeof boxProps.paddingY === 'number' ? boxProps.paddingY : padBase
+  const padTop = typeof boxProps.paddingTop === 'number' ? boxProps.paddingTop : padY
+  const padBottom = typeof boxProps.paddingBottom === 'number' ? boxProps.paddingBottom : padY
+  return border + padTop + padBottom
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
