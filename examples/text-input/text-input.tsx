@@ -3,7 +3,8 @@
  *
  *   pnpm demo:text-input
  *
- * Five text inputs covering every prop the soft-wrap work added:
+ * Six text inputs covering every prop the soft-wrap + validation work
+ * added:
  *
  *   - Name      single-line. wrap='none' default (h-scroll past width).
  *   - Bio       multiline. wrap='soft' default + hanging indent. Type
@@ -20,6 +21,11 @@
  *               surrounding text would otherwise break inside them.
  *               Hints are hardcoded against the initial value's char
  *               positions; a real app would derive them from a parser.
+ *   - Slug      single-line + validate. Border swaps red and an error
+ *               message renders below the input when the value is
+ *               outside the allowed kebab-case + length window.
+ *               Validation is render-only — the field still submits
+ *               on Enter (consumer is responsible for blocking).
  *   - Password  single-line, masked. wrap='none' default (h-scroll).
  *
  * Tab between fields. Editing: type, Backspace, Delete, Ctrl+W (word
@@ -57,6 +63,7 @@ function App(): React.ReactNode {
   const [bio, setBio] = useState(
     'Multiline soft-wrap. Long lines wrap onto continuation rows; ↓/↑ walk visual rows including wraps.\n  * Hanging indent: continuation rows of an indented line align under the first non-whitespace char.\nShift+arrow extends selection across rows as one continuous stripe.',
   )
+  const [slug, setSlug] = useState('')
   const [command, setCommand] = useState(
     '/sling --target=backend-engineer --chit=chit-abc-123 --link=https://github.com/foo/bar',
   )
@@ -144,6 +151,25 @@ function App(): React.ReactNode {
             />
           </Field>
 
+          <Field label="Slug (single-line + validate — kebab-case lowercase, 3-20 chars)">
+            <TextInput
+              value={slug}
+              onChange={setSlug}
+              placeholder="my-cool-slug"
+              validate={(v) => {
+                if (v.length === 0) return null // don't show error before user types
+                if (v.length < 3) return `${v.length}/3 characters minimum`
+                if (v.length > 20) return `${v.length}/20 characters maximum`
+                if (!/^[a-z0-9-]+$/.test(v)) return 'lowercase letters, digits, and hyphens only'
+                return null
+              }}
+              onSubmit={(v) => setSubmitted(`slug = ${JSON.stringify(v)}`)}
+              borderStyle="round"
+              paddingX={1}
+              width={50}
+            />
+          </Field>
+
           <Field label="Password (single-line, masked — h-scroll default)">
             <TextInput
               value={password}
@@ -170,6 +196,9 @@ function App(): React.ReactNode {
           </Text>
           <Text dim>
             mentions length: <Text bold>{mentions.length}</Text>
+          </Text>
+          <Text dim>
+            slug: <Text bold>{JSON.stringify(slug)}</Text>
           </Text>
           <Text dim>
             password length: <Text bold>{password.length}</Text>
