@@ -3,8 +3,8 @@
  *
  *   pnpm demo:text-input
  *
- * Six text inputs covering every prop the soft-wrap + validation work
- * added:
+ * Seven text inputs covering every prop the soft-wrap + validation +
+ * auto-grow work added:
  *
  *   - Name      single-line. wrap='none' default (h-scroll past width).
  *   - Bio       multiline. wrap='soft' default + hanging indent. Type
@@ -26,6 +26,11 @@
  *               outside the allowed kebab-case + length window.
  *               Validation is render-only — the field still submits
  *               on Enter (consumer is responsible for blocking).
+ *   - Notes     multiline + autoGrow + maxHeight=8. Box height starts
+ *               at one row and grows to fit your content; once you
+ *               cross 8 rows total (border + padding + content), the
+ *               existing scrollY path takes over and the caret stays
+ *               in view as you keep typing.
  *   - Password  single-line, masked. wrap='none' default (h-scroll).
  *
  * Tab between fields. Editing: type, Backspace, Delete, Ctrl+W (word
@@ -64,6 +69,7 @@ function App(): React.ReactNode {
     'Multiline soft-wrap. Long lines wrap onto continuation rows; ↓/↑ walk visual rows including wraps.\n  * Hanging indent: continuation rows of an indented line align under the first non-whitespace char.\nShift+arrow extends selection across rows as one continuous stripe.',
   )
   const [slug, setSlug] = useState('')
+  const [notes, setNotes] = useState('')
   const [command, setCommand] = useState(
     '/sling --target=backend-engineer --chit=chit-abc-123 --link=https://github.com/foo/bar',
   )
@@ -170,6 +176,21 @@ function App(): React.ReactNode {
             />
           </Field>
 
+          <Field label="Notes (multiline + autoGrow — grows from 1 row up to 6 rows of content)">
+            <TextInput
+              value={notes}
+              onChange={setNotes}
+              placeholder="Type something. The box grows to fit your content."
+              multiline
+              autoGrow
+              maxHeight={8}
+              onSubmit={(v) => setSubmitted(`notes length = ${v.length}`)}
+              borderStyle="round"
+              paddingX={1}
+              width={50}
+            />
+          </Field>
+
           <Field label="Password (single-line, masked — h-scroll default)">
             <TextInput
               value={password}
@@ -199,6 +220,9 @@ function App(): React.ReactNode {
           </Text>
           <Text dim>
             slug: <Text bold>{JSON.stringify(slug)}</Text>
+          </Text>
+          <Text dim>
+            notes length: <Text bold>{notes.length}</Text>
           </Text>
           <Text dim>
             password length: <Text bold>{password.length}</Text>
