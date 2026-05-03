@@ -122,6 +122,39 @@ describe('TextInput integration: editing across wrap boundaries', () => {
     expect(layout.rows[1]?.text).toBe('bbbbbccccc')
   })
 
+  it('caret at end of a buffer that fills the last row exactly: visual.col === inner.width', () => {
+    // Pins the wrap-math state that the renderer's "caret past full
+    // row" projection responds to. When the buffer fills the row
+    // exactly and the caret sits at end-of-buffer, wrap-math reports
+    // visual.col === inner.width — past the rightmost rendered cell.
+    // The renderer projects this onto (visual.row + 1, 0) so the
+    // cursor shows where the next typed char will land instead of
+    // clamping onto the last char (which read as a one-cell lag).
+    //
+    // Without the projection, repeatedly typing into a row that's
+    // exactly full would leave the cursor visibly stuck on the last
+    // char until one more char wraps to a new row. autoGrow makes
+    // this especially noticeable because consumers spam content into
+    // the visible area.
+    const value = 'a'.repeat(10) // exactly fills width-10 row
+    let s = initialState(value)
+    // Caret at end of buffer (initialState already places it there,
+    // but be explicit so this stays robust to refactors).
+    s = reduce(s, { type: 'setCaret', charIdx: value.length, extend: false }, W10)
+    expect(s.caret).toBe(s.value.length)
+
+    const layout = layoutOf(s.value, W10)
+    expect(layout.rows.length).toBe(1)
+    const visual = layout.logicalToVisual(s.caret)
+    // The condition the renderer's `isCaretPastFullRow` gate triggers on:
+    //   effectiveWrap === 'soft'
+    //   inner.width > 0
+    //   state.caret === state.value.length
+    //   visual.col >= inner.width
+    expect(visual.col).toBeGreaterThanOrEqual(W10.width)
+    expect(visual.row).toBe(0)
+  })
+
   it('insertText that replaces a multi-row selection: buffer and caret are coherent', () => {
     // 'aaaaaaaaaa bbbbbbbbbb' (21 chars). Width 10 wraps to:
     //   row 0: 'aaaaaaaaaa' (chars 0-10)

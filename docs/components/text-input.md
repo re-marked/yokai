@@ -35,6 +35,7 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `indentedWrap` | `boolean` | `true` | Hanging indent: continuation rows of an indented logical line align under the first non-whitespace char. See [Advanced wrap control](#advanced-wrap-control). |
 | `wordBoundaries` | `'whitespace' \| 'identifier'` | `'whitespace'` | Where wrap is allowed to break. `'identifier'` adds snake_case / kebab-case / camelCase break candidates and treats URLs as atomic. See [Advanced wrap control](#advanced-wrap-control). |
 | `wrapHints` | `ReadonlyArray<WrapHint>` | — | Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Memoize the array reference. See [Advanced wrap control](#advanced-wrap-control). |
+| `autoGrow` | `boolean` | `false` | Multiline only. Box height grows to fit content (visual rows + border + padding). Combine with yoga `maxHeight` to bound. Beyond `maxHeight`, scrollY kicks in. See [Auto-grow](#auto-grow). |
 | `validate` | `(value: string) => string \| null` | — | Validation function. Return a non-empty message to mark the input invalid (border swaps to `errorColor`, message renders below the content). Return `null` or `''` for valid. See [Validation](#validation). |
 | `errorColor` | `Color` | `'red'` | Border + default message color when validation fails. Border-color precedence: error > focus > idle. |
 | `renderError` | `(message: string) => ReactNode` | dim red `<Text>` | Custom error-message renderer. Called only when `validate` returned a non-null message. |
@@ -218,6 +219,44 @@ These are documented gaps, not bugs:
 
 - **`joinWith` on hints** — renderer-side glyph injection at wrap continuations (e.g., showing a `↪` at the start of a wrapped row inside a hint). The type field is accepted but ignored.
 - **Configurable `tabWidth`** — tabs currently report 0 cells via `stringWidth`. A future option would let consumers pick a tab width for measurement (and unblock tab-only hanging indent).
+
+## Auto-grow
+
+Multiline TextInput can grow its box height to fit the wrapped content instead of being pinned to a fixed `height`. Useful for fields where you don't know how much the user will type — comment boxes, notes, message composers.
+
+```tsx
+<TextInput
+  value={notes}
+  onChange={setNotes}
+  multiline
+  autoGrow
+  maxHeight={8}    // grows from 1 row up to 8 outer rows; then scrolls
+  borderStyle="round"
+  paddingX={1}
+  width={50}
+/>
+```
+
+### Behavior
+
+- **Activation.** Auto-grow turns on when `autoGrow={true}` AND `multiline={true}` AND no explicit `height` is passed. If you set `height`, that wins (auto-grow is suppressed) — useful when you want a fixed-size field but accidentally left the prop on a shared TextInput wrapper.
+- **What "outer rows" means.** The derived height is `visual rows + vertical chrome` (border = 1 cell per side when `borderStyle` is set; padding from `padding` / `paddingY` / `paddingTop` / `paddingBottom`). So a 3-row buffer with `borderStyle='round'` + `paddingY={1}` produces a 7-cell-tall outer box (3 content + 2 border + 2 padding).
+- **Bounds via yoga.** Use the standard yoga style props `minHeight` / `maxHeight` to bound growth. They're already on Box; no new props needed. Beyond `maxHeight`, the existing `scrollY` path takes over and the caret stays visible.
+- **Empty buffer.** wrap-math emits one zero-cell row for the empty case, so the auto-grown height is always at least `1 + chrome`. To require a taller minimum (e.g., always show 3 rows even when empty), set `minHeight` to your floor.
+- **Single-line.** Auto-grow is multiline-only; single-line inputs are always 1 row regardless of the prop. Setting `autoGrow={true}` on a single-line input is a no-op (not an error).
+- **Resize behavior.** When the terminal width changes, the wrap layout recomputes and so does the row count — the box rewraps and re-grows in the same frame. One-frame jank is possible on the first paint after a width change; in practice it's invisible.
+- **End-of-buffer on a full row.** When the caret sits at end-of-buffer AND the last visual row is exactly full (its content fills `inner.width`), the box grows one extra row to host the cursor at column 0 of the new row. Without this, the cursor would clamp visually onto the last char of the row (read as a one-cell "lag"). This is a TextInput-wide behavior — not autoGrow-specific — but it's most visible under autoGrow because spam-typing into a sized box hits the "exactly full" boundary repeatedly.
+
+### Why this works (vs. Resizable's autoFit)
+
+`<Resizable>` previously attempted "auto-fit content" twice and reverted both times because it relied on yoga's `getComputedHeight`, which is one frame stale (yoga's `calculateLayout` runs AFTER `useLayoutEffect`). TextInput's auto-grow doesn't have this problem: the wrap-math primitive already knows the row count for any `(value, width)` pair — no yoga round-trip needed for the height.
+
+The cycle is also stable: row count depends on `(value, inner.width)`, not on the box's height. Setting the box's height does not feed back into the row count, so width-independent layouts (the common case — explicit `width`, or column flex) converge in one extra frame and stay there.
+
+### Caveats
+
+- **Numeric chrome only.** The vertical chrome calculation handles numeric `padding` / `paddingY` / `paddingTop` / `paddingBottom`. String / percentage padding falls through as 0 cells — auto-grow assumes cell-based chrome. If you need string padding with auto-grow, set explicit `height` instead.
+- **Per-side borders.** `borderStyle` counts 1 cell per side (top + bottom). Per-side border control is not separately supported in the chrome calc.
 
 ## Validation
 

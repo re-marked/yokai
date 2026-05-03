@@ -141,3 +141,88 @@ describe('TextInput — validation prop surface', () => {
     ).not.toThrow()
   })
 })
+
+describe('TextInput — autoGrow prop surface', () => {
+  it('constructs with autoGrow alone (multiline + no explicit height)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: '',
+        multiline: true,
+        autoGrow: true,
+      }),
+    ).not.toThrow()
+  })
+
+  it('constructs with autoGrow + maxHeight bound (yoga-style passthrough)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: 'a\nb\nc',
+        multiline: true,
+        autoGrow: true,
+        maxHeight: 5,
+      }),
+    ).not.toThrow()
+  })
+
+  it('constructs with autoGrow + minHeight + maxHeight window', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: 'a',
+        multiline: true,
+        autoGrow: true,
+        minHeight: 2,
+        maxHeight: 8,
+      }),
+    ).not.toThrow()
+  })
+
+  it('constructs with autoGrow + border + padding (chrome enters the height calc)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: 'a\nb',
+        multiline: true,
+        autoGrow: true,
+        borderStyle: 'round',
+        paddingX: 1,
+        paddingY: 1,
+      }),
+    ).not.toThrow()
+  })
+
+  it('accepts autoGrow on a single-line input (no-op — single-line is always 1 row)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        value: 'hello',
+        onChange: () => {},
+        autoGrow: true,
+      }),
+    ).not.toThrow()
+  })
+
+  it('accepts autoGrow + explicit height (explicit height wins; autoGrow suppressed)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: 'a',
+        multiline: true,
+        autoGrow: true,
+        height: 4,
+      }),
+    ).not.toThrow()
+  })
+
+  it('composes with the soft-wrap quartet + validation + autoGrow (full prop surface)', () => {
+    expect(() =>
+      React.createElement(TextInput, {
+        defaultValue: '',
+        multiline: true,
+        wrap: 'soft',
+        indentedWrap: true,
+        wordBoundaries: 'identifier',
+        wrapHints: [{ start: 0, end: 0 }],
+        validate: () => null,
+        autoGrow: true,
+        maxHeight: 10,
+      }),
+    ).not.toThrow()
+  })
+})
