@@ -565,10 +565,17 @@ export default function TextInput({
     // visual.row stays the same), and scrollY (read-modify-write).
     if (inner.height > 0) {
       // caretPos accounts for the "past full row" projection so the
-      // virtual row stays in view when the user just wrapped. Bumping
-      // contentSize alongside lets scrollToKeepCaretVisible compute
-      // a target one row past the last layout row.
-      const caretRow = isCaretPastFullRow ? visual.row + 1 : visual.row
+      // virtual row stays in view when the user just wrapped. autoGrow
+      // is intentionally excluded — it grows the box to host the
+      // virtual row directly, so the caret is already in bounds; bumping
+      // caretPos here would over-scroll on the same frame as the height
+      // change (when inner.height is one frame stale from the previous
+      // smaller autoHeight), and the next frame would correct, producing
+      // a one-frame text flicker on every wrap.
+      //
+      // Bumping contentSize alongside lets scrollToKeepCaretVisible
+      // compute a target one row past the last layout row.
+      const caretRow = !autoGrowActive && isCaretPastFullRow ? visual.row + 1 : visual.row
       const next = scrollToKeepCaretVisible({
         scroll: scrollY,
         caretPos: caretRow,
