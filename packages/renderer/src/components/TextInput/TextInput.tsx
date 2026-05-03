@@ -488,6 +488,36 @@ export default function TextInput({
   //      doesn't re-render forever.
   const lastValidInnerWidth = useRef(80)
   if (inner.width > 0) lastValidInnerWidth.current = inner.width
+
+  // Sticky-MAX innerHeight to break a flex-shrink feedback loop.
+  //
+  // The render below slices visible rows by inner.height. If yoga's
+  // flex-shrink transiently reports a smaller inner.height (e.g. when
+  // sibling fields' content demand briefly exceeds the parent's
+  // available space), the slice produces fewer rendered rows, the
+  // box's content size shrinks further, yoga sees slack and grows
+  // siblings back, then shrinks our box again — infinite oscillation
+  // visible as a 30-60 Hz "flicker affecting text + borders," with
+  // both render counts and yoga measurements ping-ponging between
+  // two values per box per cycle.
+  //
+  // The fix: track the MAX inner.height we've seen for the current
+  // layout configuration and use that for the slice. Yoga can still
+  // report smaller transient values; we ignore them. Reset the
+  // sticky max when inner.width changes — that's a real layout
+  // reconfiguration (resize, parent reflow) where the previous max
+  // is no longer meaningful.
+  const lastValidInnerHeight = useRef(0)
+  const lastSeenInnerWidthForHeight = useRef(0)
+  if (inner.width !== lastSeenInnerWidthForHeight.current) {
+    lastSeenInnerWidthForHeight.current = inner.width
+    lastValidInnerHeight.current = 0
+  }
+  if (inner.height > lastValidInnerHeight.current) {
+    lastValidInnerHeight.current = inner.height
+  }
+  const stableInnerHeight =
+    lastValidInnerHeight.current > 0 ? lastValidInnerHeight.current : inner.height
   const layoutWidth =
     effectiveWrap === 'none'
       ? Number.MAX_SAFE_INTEGER
@@ -861,7 +891,10 @@ export default function TextInput({
         placeholder,
         scrollX,
         scrollY,
-        innerHeight: inner.height,
+        // Use the sticky-max innerHeight (above), not raw inner.height,
+        // so a transient yoga flex-shrink doesn't shrink the row slice
+        // and feed back into a render→shrink→remeasure loop.
+        innerHeight: stableInnerHeight,
         innerWidth: inner.width,
         wrap: effectiveWrap,
       }),
@@ -874,7 +907,7 @@ export default function TextInput({
       placeholder,
       scrollX,
       scrollY,
-      inner.height,
+      stableInnerHeight,
       inner.width,
       effectiveWrap,
     ],
