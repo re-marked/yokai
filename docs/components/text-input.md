@@ -35,6 +35,9 @@ Component-specific props. All `<Box>` props are accepted EXCEPT `onKeyDown`, `on
 | `indentedWrap` | `boolean` | `true` | Hanging indent: continuation rows of an indented logical line align under the first non-whitespace char. See [Advanced wrap control](#advanced-wrap-control). |
 | `wordBoundaries` | `'whitespace' \| 'identifier'` | `'whitespace'` | Where wrap is allowed to break. `'identifier'` adds snake_case / kebab-case / camelCase break candidates and treats URLs as atomic. See [Advanced wrap control](#advanced-wrap-control). |
 | `wrapHints` | `ReadonlyArray<WrapHint>` | — | Programmatic atomic spans — buffer-relative ranges the wrap algorithm must NOT break inside. Memoize the array reference. See [Advanced wrap control](#advanced-wrap-control). |
+| `validate` | `(value: string) => string \| null` | — | Validation function. Return a non-empty message to mark the input invalid (border swaps to `errorColor`, message renders below the content). Return `null` or `''` for valid. See [Validation](#validation). |
+| `errorColor` | `Color` | `'red'` | Border + default message color when validation fails. Border-color precedence: error > focus > idle. |
+| `renderError` | `(message: string) => ReactNode` | dim red `<Text>` | Custom error-message renderer. Called only when `validate` returned a non-null message. |
 
 ## Examples
 
@@ -215,6 +218,75 @@ These are documented gaps, not bugs:
 
 - **`joinWith` on hints** — renderer-side glyph injection at wrap continuations (e.g., showing a `↪` at the start of a wrapped row inside a hint). The type field is accepted but ignored.
 - **Configurable `tabWidth`** — tabs currently report 0 cells via `stringWidth`. A future option would let consumers pick a tab width for measurement (and unblock tab-only hanging indent).
+
+## Validation
+
+Pass a `validate` function to mark the input invalid based on its current value. The border swaps to `errorColor` and the message renders below the input content (inside the bordered box, via the input's existing `flexDirection="column"`).
+
+```tsx
+<TextInput
+  value={slug}
+  onChange={setSlug}
+  borderStyle="round"
+  validate={(v) => {
+    if (v.length === 0) return null            // don't show error before user types
+    if (v.length < 3) return `${v.length}/3 characters minimum`
+    if (!/^[a-z0-9-]+$/.test(v)) return 'lowercase letters, digits, and hyphens only'
+    return null
+  }}
+/>
+```
+
+### Behavior
+
+- **Render-only.** `onSubmit` still fires when invalid. To block submit on error, check the validation result in your `onSubmit` handler before acting:
+  ```tsx
+  onSubmit={(v) => {
+    if (validate(v)) return
+    save(v)
+  }}
+  ```
+- **Runs every render.** No internal debounce — if the check is expensive, debounce inside the function (e.g., with a memoized regex) or gate it on a parent state condition.
+- **Empty string is treated as null.** Returning `''` from `validate` does NOT show an error with no message — that's almost always a bug. Be explicit: return `null` when valid.
+- **Border-color precedence**: error > focus > idle. A focused, invalid input keeps the red border (the focus-color swap is suppressed) so the validation state stays visible.
+- **Show-when-touched pattern**: return `null` while the buffer is empty / pristine, then start returning real errors once the user has typed. Yokai doesn't track a "touched" flag for you — manage it in the parent if you need that semantic.
+
+### Custom message rendering
+
+The default message renders as a dim `<Text color={errorColor}>`. Pass `renderError` for full control — icons, multi-line, layout:
+
+```tsx
+<TextInput
+  value={x}
+  onChange={setX}
+  validate={(v) => v.length === 0 ? 'required' : null}
+  renderError={(msg) => (
+    <Text color="red">⚠ {msg}</Text>
+  )}
+/>
+```
+
+For error rendering OUTSIDE the bordered box (above the input, in a sibling status bar, etc.), call `validate` yourself in the parent and render a `<Text>` separately — `validate` on `<TextInput>` is for the inside-the-box default, not a general validation framework.
+
+### Async validation
+
+Not built in. The signature is sync (`string | null`), not `Promise<string | null>`. Async validation needs debouncing, race-condition handling, and a "validating…" intermediate state — those decisions belong in your parent state, not in `<TextInput>`. Pattern:
+
+```tsx
+const [asyncError, setAsyncError] = useState<string | null>(null)
+useEffect(() => {
+  const id = setTimeout(async () => {
+    setAsyncError(await checkAvailability(value))
+  }, 300)
+  return () => clearTimeout(id)
+}, [value])
+
+<TextInput
+  value={value}
+  onChange={setValue}
+  validate={() => asyncError}
+/>
+```
 
 ## Scrolling
 
