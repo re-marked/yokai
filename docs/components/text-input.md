@@ -245,6 +245,7 @@ Multiline TextInput can grow its box height to fit the wrapped content instead o
 - **Empty buffer.** wrap-math emits one zero-cell row for the empty case, so the auto-grown height is always at least `1 + chrome`. To require a taller minimum (e.g., always show 3 rows even when empty), set `minHeight` to your floor.
 - **Single-line.** Auto-grow is multiline-only; single-line inputs are always 1 row regardless of the prop. Setting `autoGrow={true}` on a single-line input is a no-op (not an error).
 - **Resize behavior.** When the terminal width changes, the wrap layout recomputes and so does the row count — the box rewraps and re-grows in the same frame. One-frame jank is possible on the first paint after a width change; in practice it's invisible.
+- **End-of-buffer on a full row.** When the caret sits at end-of-buffer AND the last visual row is exactly full (its content fills `inner.width`), the box grows one extra row to host the cursor at column 0 of the new row. Without this, the cursor would clamp visually onto the last char of the row (read as a one-cell "lag"). This is a TextInput-wide behavior — not autoGrow-specific — but it's most visible under autoGrow because spam-typing into a sized box hits the "exactly full" boundary repeatedly.
 
 ### Why this works (vs. Resizable's autoFit)
 

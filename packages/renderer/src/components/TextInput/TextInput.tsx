@@ -511,6 +511,31 @@ export default function TextInput({
   // arithmetic needed here.
   const visual = useMemo(() => layout.logicalToVisual(state.caret), [layout, state.caret])
 
+  // "Caret past full last row" projection.
+  //
+  // When the user types into a soft-wrap row that fills exactly to
+  // inner.width and the caret lands at end-of-buffer, wrap-math reports
+  // visual.col === inner.width — past the rightmost rendered cell. The
+  // historical clamp (visible immediately below in cursorVisualCol)
+  // pins the cursor onto the last char of the row, which reads as a
+  // one-cell "lag" while the user is typing. The buffer is correct;
+  // only the cursor's screen position lags.
+  //
+  // Project the cursor onto the START of a virtual next row so it shows
+  // where the next typed char will actually land. autoHeight (below)
+  // grows by one extra row to host it; scrollY (above) accepts a
+  // caretPos one past the last layout row via the existing Math.max
+  // bump.
+  //
+  // Gated on `caret === value.length` so this only fires at end-of-
+  // buffer — mid-buffer trailing-whitespace cases (caret between
+  // content and trailing spaces) keep the original clamp semantic.
+  const isCaretPastFullRow =
+    effectiveWrap === 'soft' &&
+    inner.width > 0 &&
+    state.caret === state.value.length &&
+    visual.col >= inner.width
+
   // ── Scroll: keep caret visible inside the visible window ───────────
   //
   // scrollY: visual rows. Always active when innerHeight is bounded.
@@ -539,11 +564,16 @@ export default function TextInput({
     // layout.rows.length (catches the edge where width changes but
     // visual.row stays the same), and scrollY (read-modify-write).
     if (inner.height > 0) {
+      // caretPos accounts for the "past full row" projection so the
+      // virtual row stays in view when the user just wrapped. Bumping
+      // contentSize alongside lets scrollToKeepCaretVisible compute
+      // a target one row past the last layout row.
+      const caretRow = isCaretPastFullRow ? visual.row + 1 : visual.row
       const next = scrollToKeepCaretVisible({
         scroll: scrollY,
-        caretPos: visual.row,
+        caretPos: caretRow,
         windowSize: inner.height,
-        contentSize: Math.max(layout.rows.length, visual.row + 1),
+        contentSize: Math.max(layout.rows.length, caretRow + 1),
       })
       if (next !== scrollY) setScrollY(next)
     }
@@ -583,6 +613,7 @@ export default function TextInput({
     scrollX,
     scrollY,
     effectiveWrap,
+    isCaretPastFullRow,
   ])
 
   // Subscribe to focus state via FocusContext. The earlier shortcut
@@ -627,20 +658,30 @@ export default function TextInput({
   // cursor at the box's outer top-left corner instead of at the
   // caret's actual cell. Visible immediately as a cursor "above" or
   // "to the left of" the text.
-  // Clamp visual.col to the rightmost in-box cell when the buffer
-  // position is past the rendered content (e.g. trailing whitespace
-  // beyond the row's nominal width). Trailing whitespace is invisible
-  // and clipped by the renderer; the cursor would otherwise land past
-  // the box's right border. Logical position stays in state.caret;
-  // this only affects visual placement. Wrap='none' uses scrollX to
-  // keep the caret in view, so the clamp only fires for soft-wrap.
-  const clampedVisualCol =
-    effectiveWrap === 'soft' && inner.width > 0 && visual.col >= inner.width
+  //
+  // Two adjustments to the visual coords land here:
+  //
+  // 1. **Caret-past-full-row projection**: when isCaretPastFullRow
+  //    (computed above), place the cursor on (visual.row + 1, 0) so
+  //    it shows where the next typed char will land. autoHeight grows
+  //    one row to host it; scroll math accepts the +1 caretPos.
+  //
+  // 2. **Clamp visual.col** to the rightmost in-box cell when the
+  //    buffer position is mid-trailing-whitespace (caret < value.length
+  //    but visual.col >= inner.width). The trailing whitespace is
+  //    invisible and clipped by the renderer; without the clamp the
+  //    cursor would land past the box's right border. Logical position
+  //    stays in state.caret. Wrap='none' uses scrollX to keep the
+  //    caret in view, so this clamp only fires for soft-wrap.
+  const cursorVisualRow = isCaretPastFullRow ? visual.row + 1 : visual.row
+  const cursorVisualCol = isCaretPastFullRow
+    ? 0
+    : effectiveWrap === 'soft' && inner.width > 0 && visual.col >= inner.width
       ? Math.max(0, inner.width - 1)
       : visual.col
   const cursorRef = useDeclaredCursor({
-    line: inner.offsetY + visual.row - scrollY,
-    column: inner.offsetX + clampedVisualCol - scrollX,
+    line: inner.offsetY + cursorVisualRow - scrollY,
+    column: inner.offsetX + cursorVisualCol - scrollX,
     active: isFocused,
     style: cursorStyle,
     blink: cursorBlink,
@@ -862,7 +903,11 @@ export default function TextInput({
   // assumes cell-based chrome and the docstring documents this gap.
   const autoGrowActive = autoGrow && multiline && restBoxProps.height === undefined
   const verticalChrome = autoGrowActive ? computeVerticalChrome(restBoxProps) : 0
-  const autoHeight = autoGrowActive ? Math.max(1, layout.rows.length) + verticalChrome : undefined
+  // Include the +1 virtual row when the cursor is projected past a
+  // full last row so the box has a cell to host the cursor; otherwise
+  // the cursor would land on the bottom border / padding.
+  const autoRowCount = layout.rows.length + (isCaretPastFullRow ? 1 : 0)
+  const autoHeight = autoGrowActive ? Math.max(1, autoRowCount) + verticalChrome : undefined
 
   return (
     <Box
