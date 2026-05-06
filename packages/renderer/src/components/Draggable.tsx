@@ -96,6 +96,8 @@ export type DraggableProps = Except<
    * fight every JSX call site. Cast on the receiving side.
    */
   dragData?: unknown
+  /** Children render inside the draggable Box; runtime already forwards them via boxProps. */
+  children?: React.ReactNode
 }
 
 /**

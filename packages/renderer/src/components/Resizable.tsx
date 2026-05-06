@@ -1,5 +1,5 @@
 import type React from 'react'
-import { type PropsWithChildren, useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
 import type { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
 import type { Color } from '../styles.js'
@@ -65,6 +65,8 @@ export type ResizableProps = Except<BoxProps, 'width' | 'height' | 'onMouseDown'
   onResize?: (info: ResizeInfo) => void
   /** Fires once at release if the gesture became a resize. */
   onResizeEnd?: (info: ResizeInfo) => void
+  /** Children render as the resizable content; handles are layered alongside them. */
+  children?: React.ReactNode
 }
 
 /**
@@ -116,7 +118,7 @@ export default function Resizable({
   onResizeEnd,
   children,
   ...boxProps
-}: PropsWithChildren<ResizableProps>): React.ReactNode {
+}: ResizableProps): React.ReactNode {
   const [size, setSize] = useState<ResizeSize>(initialSize)
   const [hoveredHandle, setHoveredHandle] = useState<ResizeHandleDirection | null>(null)
 

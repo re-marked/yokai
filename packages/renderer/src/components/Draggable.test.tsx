@@ -29,10 +29,24 @@ import {
   type DragBounds,
   type DragInfo,
   type DragPos,
+  type DraggableProps,
   _resetDraggableZForTesting,
   computeDraggedPos,
   handleDragPress,
 } from './Draggable.js'
+
+// ── type contract ────────────────────────────────────────────────────
+
+describe('DraggableProps', () => {
+  it('accepts children in the exported prop type', () => {
+    const props = {
+      initialPos: { top: 0, left: 0 },
+      children: 'drag me',
+    } satisfies DraggableProps
+
+    expect(props.children).toBe('drag me')
+  })
+})
 
 // ── pure math ────────────────────────────────────────────────────────
 
