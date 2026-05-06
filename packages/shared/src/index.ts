@@ -1,5 +1,10 @@
 // Debug & logging
-export { logForDebugging, enableDebugLogging, type DebugLogLevel } from './debug'
+export {
+  logForDebugging,
+  enableDebugLogging,
+  disableDebugLogging,
+  type DebugLogLevel,
+} from './debug'
 export { logError } from './log'
 
 // Environment

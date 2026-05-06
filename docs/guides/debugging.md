@@ -21,8 +21,9 @@ tail -f /tmp/yokai.log
 
 `@yokai-tui/shared` exposes `logForDebugging(message, { level })` which is gated on:
 
-- `DEBUG=1` or `DEBUG=true` in the environment
+- truthy `DEBUG` values in the environment (`1`, `true`, `yes`, `on`, trimmed and case-insensitive)
 - `--debug` in `process.argv`
+- `enableDebugLogging()` at runtime
 
 Source: `packages/shared/src/debug.ts`.
 
@@ -30,7 +31,7 @@ Source: `packages/shared/src/debug.ts`.
 DEBUG=1 node app.js 2> /tmp/yokai.log
 ```
 
-Output format: `2026-04-26T12:34:56.789Z [DEBUG] message`. Levels: `verbose`, `debug`, `info`, `warn`, `error`. `enableDebugLogging()` flips the flag at runtime.
+Output format: `2026-04-26T12:34:56.789Z [DEBUG] message`. Levels: `verbose`, `debug`, `info`, `warn`, `error`. `enableDebugLogging()` flips the runtime override on; `disableDebugLogging()` flips that override off. `DEBUG` is read when each log call runs, so long-running processes can enable logging after startup by setting `process.env.DEBUG` before calling `logForDebugging`.
 
 ## Frame capture
 
