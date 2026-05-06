@@ -2,20 +2,29 @@
  * Lightweight debug logging for @yokai packages.
  */
 
+import { isEnvTruthy } from './envUtils'
+
 export type DebugLogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error'
 
-let debugEnabled =
-  process.env.DEBUG === '1' || process.env.DEBUG === 'true' || process.argv.includes('--debug')
+let debugEnabledOverride = false
+
+function isDebugEnabled(): boolean {
+  return debugEnabledOverride || isEnvTruthy(process.env.DEBUG) || process.argv.includes('--debug')
+}
 
 export function enableDebugLogging(): void {
-  debugEnabled = true
+  debugEnabledOverride = true
+}
+
+export function disableDebugLogging(): void {
+  debugEnabledOverride = false
 }
 
 export function logForDebugging(
   message: string,
   { level }: { level: DebugLogLevel } = { level: 'debug' },
 ): void {
-  if (!debugEnabled) return
+  if (!isDebugEnabled()) return
   const timestamp = new Date().toISOString()
   process.stderr.write(`${timestamp} [${level.toUpperCase()}] ${message.trim()}\n`)
 }
