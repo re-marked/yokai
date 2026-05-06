@@ -14,12 +14,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
 import {
+  type ResizableProps,
   type ResizeHandleDirection,
   type ResizeInfo,
   type ResizeSize,
   computeResizedSize,
   handleResizePress,
 } from './Resizable.js'
+
+// ── type contract ────────────────────────────────────────────────────
+
+describe('ResizableProps', () => {
+  it('accepts children in the exported prop type', () => {
+    const props = {
+      initialSize: { width: 10, height: 5 },
+      children: 'resize me',
+    } satisfies ResizableProps
+
+    expect(props.children).toBe('resize me')
+  })
+})
 
 // ── pure math ────────────────────────────────────────────────────────
 
