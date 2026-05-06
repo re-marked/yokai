@@ -80,5 +80,5 @@ See [troubleshooting.md](./troubleshooting.md). The frequent ones:
 - Output mixes with `console.log` → set `patchConsole: true` (default) or write to stderr
 - Mouse events do nothing → wrap the tree in `<AlternateScreen>`
 - `useFocus` reports never-focused → attach `ref` AND pass `tabIndex={0}` on the Box
-- Layout collapses unexpectedly → set `flexShrink={1}` (yokai's default is 0, not 1)
+- Layout chrome collapses unexpectedly -> set `flexShrink={0}` on title bars, footers, and other fixed chrome
 - Ctrl+C does not exit → check `exitOnCtrlC: true` on render options, or that no `useInput` handler is swallowing the event

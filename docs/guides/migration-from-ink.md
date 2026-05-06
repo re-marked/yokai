@@ -69,13 +69,9 @@ Yokai honors `Styles.zIndex` on `position: 'absolute'` nodes. Stacking is per-pa
 
 ### Pure-TS Yoga
 
-Layout runs through `@yokai-tui/shared`'s pure-TypeScript flexbox engine — no WASM, no native binding. One default differs from Ink:
+Layout runs through `@yokai-tui/shared`'s pure-TypeScript flexbox engine — no WASM, no native binding. The low-level Yoga port keeps Yoga's native defaults internally, but the public `<Box>` component applies Ink/CSS-like defaults (`flexDirection="row"`, `flexShrink={1}`).
 
-| Property | Ink default | yokai default |
-|----------|-------------|---------------|
-| `flexShrink` | 1 (CSS) | 0 |
-
-Existing Ink layouts that relied on automatic shrinking need `flexShrink={1}` set explicitly.
+If fixed chrome such as title bars, footers, or sidebars disappears under layout pressure, set `flexShrink={0}` on that chrome.
 
 ## Removed / renamed APIs
 
