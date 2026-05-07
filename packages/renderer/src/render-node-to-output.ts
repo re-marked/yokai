@@ -858,11 +858,16 @@ function renderNodeToOutput(
             const delta = contentCached.y - contentY
             const regionTop = Math.floor(y + contentYoga.getComputedTop())
             const regionBottom = regionTop + innerHeight - 1
+            // DECSTBM and Output.shift both operate on full terminal rows.
+            // A partial-width ScrollBox next to siblings would row-shift
+            // its neighbors too, then rely on a fragile repair repaint.
+            const spansFullRow = Math.floor(x) <= 0 && Math.floor(x + width) >= output.width
             if (
               cached?.y === y &&
               cached.height === height &&
               innerHeight > 0 &&
-              Math.abs(delta) < innerHeight
+              Math.abs(delta) < innerHeight &&
+              spansFullRow
             ) {
               hint = { top: regionTop, bottom: regionBottom, delta }
               scrollHint = hint
