@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+
+- `<ScrollBox>` now defaults to vertical content layout (`flexDirection: 'column'`) so ordinary lists/logs scroll without an explicit workaround.
+- `<ScrollBox>` `scrollTo` / `scrollBy` clamp to content bounds, preventing overscroll into blank space.
+
 Tagged releases of `@yokai-tui/renderer` and `@yokai-tui/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 
 ## v0.6.0 — 2026-04-27
