@@ -5,8 +5,8 @@ import { createNode } from '../dom.js'
 import { type Instance, renderSync } from '../root.js'
 import Box from './Box.js'
 import ScrollBox, {
-  clampScrollTop,
-  computeClampedPendingDelta,
+  computePendingScrollDelta,
+  normalizeScrollTarget,
   type ScrollBoxHandle,
 } from './ScrollBox.js'
 import Text from './Text.js'
@@ -36,21 +36,23 @@ function fakeStdout(columns = 20, rows = 10): NodeJS.WriteStream {
 }
 
 describe('ScrollBox clamp helpers', () => {
-  it('clamps scrollTo targets to the legal scroll range', () => {
-    const node = scrollNode({ scrollHeight: 10, scrollViewportHeight: 3 })
-
-    expect(clampScrollTop(node, -12)).toBe(0)
-    expect(clampScrollTop(node, 4)).toBe(4)
-    expect(clampScrollTop(node, 99)).toBe(7)
+  it('normalizes negative and non-finite scrollTo targets', () => {
+    expect(normalizeScrollTarget(-12)).toBe(0)
+    expect(normalizeScrollTarget(Number.NaN)).toBe(0)
+    expect(normalizeScrollTarget(4.8)).toBe(4)
   })
 
-  it('clamps scrollBy pending deltas against the final target', () => {
+  it('preserves requested scrollTo targets above cached layout bounds', () => {
+    expect(normalizeScrollTarget(99)).toBe(99)
+  })
+
+  it('preserves requested scrollBy deltas above cached layout bounds', () => {
     const node = scrollNode({ scrollTop: 4, scrollHeight: 10, scrollViewportHeight: 3 })
 
-    expect(computeClampedPendingDelta(node, 99)).toBe(3)
+    expect(computePendingScrollDelta(node, 99)).toBe(99)
   })
 
-  it('includes existing pending delta before clamping a new scrollBy', () => {
+  it('includes existing pending delta before computing a new scrollBy target', () => {
     const node = scrollNode({
       scrollTop: 2,
       pendingScrollDelta: 3,
@@ -58,13 +60,13 @@ describe('ScrollBox clamp helpers', () => {
       scrollViewportHeight: 3,
     })
 
-    expect(computeClampedPendingDelta(node, 99)).toBe(5)
+    expect(computePendingScrollDelta(node, 99)).toBe(102)
   })
 
-  it('clears pending delta when the clamped target is the current position', () => {
-    const node = scrollNode({ scrollTop: 7, scrollHeight: 10, scrollViewportHeight: 3 })
+  it('clears pending delta when the normalized target is the current position', () => {
+    const node = scrollNode({ scrollTop: 0 })
 
-    expect(computeClampedPendingDelta(node, 1)).toBeUndefined()
+    expect(computePendingScrollDelta(node, -1)).toBeUndefined()
   })
 })
 

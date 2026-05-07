@@ -68,22 +68,18 @@ export type ScrollBoxProps = Except<Styles, 'textWrap' | 'overflow' | 'overflowX
   stickyScroll?: boolean
 }
 
-export function getScrollMax(el: DOMElement): number {
-  return Math.max(0, (el.scrollHeight ?? 0) - (el.scrollViewportHeight ?? 0))
-}
-
-export function clampScrollTop(el: DOMElement, y: number): number {
+export function normalizeScrollTarget(y: number): number {
   const target = Math.floor(y)
   if (!Number.isFinite(target)) return 0
-  return Math.max(0, Math.min(getScrollMax(el), target))
+  return Math.max(0, target)
 }
 
-export function computeClampedPendingDelta(el: DOMElement, dy: number): number | undefined {
+export function computePendingScrollDelta(el: DOMElement, dy: number): number | undefined {
   const delta = Math.floor(dy)
   if (!Number.isFinite(delta)) return undefined
 
   const current = el.scrollTop ?? 0
-  const target = clampScrollTop(el, current + (el.pendingScrollDelta ?? 0) + delta)
+  const target = normalizeScrollTarget(current + (el.pendingScrollDelta ?? 0) + delta)
   const pending = target - current
   return pending === 0 ? undefined : pending
 }
@@ -145,7 +141,7 @@ function ScrollBox({
         el.stickyScroll = false
         el.pendingScrollDelta = undefined
         el.scrollAnchor = undefined
-        el.scrollTop = clampScrollTop(el, y)
+        el.scrollTop = normalizeScrollTarget(y)
         scrollMutated(el)
       },
       scrollToElement(el: DOMElement, offset = 0) {
@@ -168,7 +164,7 @@ function ScrollBox({
         // Accumulate in pendingScrollDelta; renderer drains it at a capped
         // rate so fast flicks show intermediate frames. Pure accumulator:
         // scroll-up followed by scroll-down naturally cancels.
-        el.pendingScrollDelta = computeClampedPendingDelta(el, dy)
+        el.pendingScrollDelta = computePendingScrollDelta(el, dy)
         scrollMutated(el)
       },
       scrollToBottom() {
