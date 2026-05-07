@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { type DOMElement, appendChildNode, createNode } from '../dom.js'
-import { dispatchMouseDown } from '../hit-test.js'
+import { dispatchMouseDown, dispatchWheel } from '../hit-test.js'
 import { nodeCache } from '../node-cache.js'
 import { MouseDownEvent } from './mouse-event.js'
 
@@ -237,5 +237,157 @@ describe('dispatchMouseDown', () => {
       { who: 'child', localCol: 2, localRow: 1 },
       { who: 'root', localCol: 5, localRow: 3 },
     ])
+  })
+})
+
+describe('dispatchWheel', () => {
+  it('scrolls the nearest ScrollBox ancestor under the cursor', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const outer = createNode('ink-box')
+    outer.attributes.scrollBox = true
+    outer.attributes.scrollWheelStep = 3
+    outer.scrollTop = 0
+    appendChildNode(root, outer)
+    setRect(outer, 0, 0, 20, 10)
+    const child = createNode('ink-box')
+    appendChildNode(outer, child)
+    setRect(child, 1, 1, 10, 4)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(true)
+    expect(outer.pendingScrollDelta).toBe(3)
+    expect(outer.stickyScroll).toBe(false)
+  })
+
+  it('uses the innermost ScrollBox when ScrollBoxes are nested', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const outer = createNode('ink-box')
+    outer.attributes.scrollBox = true
+    outer.attributes.scrollWheelStep = 3
+    outer.scrollTop = 0
+    appendChildNode(root, outer)
+    setRect(outer, 0, 0, 20, 10)
+    const inner = createNode('ink-box')
+    inner.attributes.scrollBox = true
+    inner.attributes.scrollWheelStep = 5
+    inner.scrollTop = 0
+    appendChildNode(outer, inner)
+    setRect(inner, 1, 1, 10, 4)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(true)
+    expect(inner.pendingScrollDelta).toBe(5)
+    expect(outer.pendingScrollDelta).toBeUndefined()
+  })
+
+  it('falls through to an ancestor ScrollBox when the inner one disables wheel', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const outer = createNode('ink-box')
+    outer.attributes.scrollBox = true
+    outer.attributes.scrollWheelStep = 3
+    outer.scrollTop = 0
+    appendChildNode(root, outer)
+    setRect(outer, 0, 0, 20, 10)
+    const inner = createNode('ink-box')
+    inner.attributes.scrollBox = true
+    inner.attributes.disableWheel = true
+    inner.attributes.scrollWheelStep = 5
+    inner.scrollTop = 0
+    appendChildNode(outer, inner)
+    setRect(inner, 1, 1, 10, 4)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(true)
+    expect(inner.pendingScrollDelta).toBeUndefined()
+    expect(outer.pendingScrollDelta).toBe(3)
+  })
+
+  it('does not scroll when no ScrollBox ancestor is under the cursor', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const child = createNode('ink-box')
+    appendChildNode(root, child)
+    setRect(child, 1, 1, 10, 4)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(false)
+  })
+
+  it('normalizes wheel-up at the top to no pending delta', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const box = createNode('ink-box')
+    box.attributes.scrollBox = true
+    box.attributes.scrollWheelStep = 3
+    box.scrollTop = 0
+    appendChildNode(root, box)
+    setRect(box, 0, 0, 20, 10)
+
+    expect(dispatchWheel(root, 2, 2, 'up')).toBe(true)
+    expect(box.pendingScrollDelta).toBeUndefined()
+  })
+
+  it('falls back to the default wheel step when configured step is invalid', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const box = createNode('ink-box')
+    box.attributes.scrollBox = true
+    box.attributes.scrollWheelStep = -1
+    box.scrollTop = 0
+    appendChildNode(root, box)
+    setRect(box, 0, 0, 20, 10)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(true)
+    expect(box.pendingScrollDelta).toBe(3)
+  })
+
+  it('notifies ScrollBox subscribers when wheel changes pending scroll', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const box = createNode('ink-box')
+    box.attributes.scrollBox = true
+    box.attributes.scrollWheelStep = 3
+    box.scrollTop = 0
+    const listener = vi.fn()
+    box.scrollListeners = new Set([listener])
+    appendChildNode(root, box)
+    setRect(box, 0, 0, 20, 10)
+
+    expect(dispatchWheel(root, 2, 2, 'down')).toBe(true)
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not notify subscribers for a wheel that leaves scroll state unchanged', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const box = createNode('ink-box')
+    box.attributes.scrollBox = true
+    box.attributes.scrollWheelStep = 3
+    box.scrollTop = 0
+    const listener = vi.fn()
+    box.scrollListeners = new Set([listener])
+    appendChildNode(root, box)
+    setRect(box, 0, 0, 20, 10)
+
+    expect(dispatchWheel(root, 2, 2, 'up')).toBe(true)
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('notifies subscribers when wheel only breaks sticky state', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 20, 10)
+    const box = createNode('ink-box')
+    box.attributes.scrollBox = true
+    box.attributes.scrollWheelStep = 3
+    box.scrollTop = 0
+    box.stickyScroll = true
+    const listener = vi.fn()
+    box.scrollListeners = new Set([listener])
+    appendChildNode(root, box)
+    setRect(box, 0, 0, 20, 10)
+
+    expect(dispatchWheel(root, 2, 2, 'up')).toBe(true)
+    expect(box.pendingScrollDelta).toBeUndefined()
+    expect(box.stickyScroll).toBe(false)
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })
