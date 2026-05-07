@@ -10,14 +10,16 @@ Percent values (`width: '50%'`, `marginLeft: '10%'`) resolve against the parent'
 
 ## Defaults
 
+These are the consumer-facing defaults applied by `<Box>`. The underlying Yoga port keeps its own native defaults internally, but `<Box>` sets the values most Yokai apps actually see.
+
 | Property | Yokai default | CSS default |
 |---|---|---|
-| `flexDirection` | `'column'` | `'row'` |
-| `flexShrink` | `0` | `1` |
+| `flexDirection` | `'row'` | `'row'` |
+| `flexShrink` | `1` | `1` |
 | `alignItems` | `'stretch'` | `'stretch'` |
 | `display` | `'flex'` | `'inline'` |
 
-`flexDirection: 'column'` matches Yoga's default and aligns with terminal stacking. `flexShrink: 0` is the port's default — children keep their measured size unless the parent overflows. Set `flexShrink={1}` to opt into CSS-style shrink.
+Use `flexDirection="column"` for the common terminal pattern where rows stack vertically. Set `flexShrink={0}` on chrome that must not collapse, such as title bars, footers, and fixed-width sidebars.
 
 ## Spacing
 

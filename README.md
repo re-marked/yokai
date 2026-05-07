@@ -191,7 +191,7 @@ See [release notes](https://github.com/re-marked/yokai/releases) for what's in e
 | `useApp()` | `{ exit }` |
 | `useStdin()` | Stdin stream + `isRawModeSupported` |
 | `useStdout()` | Stdout stream + `write` |
-| `useTerminalViewport()` | `{ columns, rows }`, updates on resize |
+| `useTerminalViewport()` | `[ref, entry]`, where `entry.isVisible` tracks whether the referenced element is currently in the terminal viewport |
 | `useFocus(options?)` | `{ ref, isFocused, focus }` — per-element focus tracking + imperative focus |
 | `useFocusManager()` | `{ focused, focus, focusNext, focusPrevious, blur }` — global focus actions, reactive to changes |
 | `useInterval(fn, ms)` | Stable interval that cleans up on unmount |

@@ -25,9 +25,9 @@ Every property on the `Styles` type. Source: `packages/renderer/src/styles.ts`.
 
 | Prop | Type | Default | Notes |
 |------|------|---------|-------|
-| `flexDirection` | `'row' \| 'column' \| 'row-reverse' \| 'column-reverse'` | `'column'` | Yoga default |
+| `flexDirection` | `'row' \| 'column' \| 'row-reverse' \| 'column-reverse'` | `'row'` | `<Box>` default; pass `'column'` for stacked rows |
 | `flexGrow` | `number` | `0` | |
-| `flexShrink` | `number` | `0` | **Differs from CSS / Ink (which default to 1).** Pass `1` to enable shrinking |
+| `flexShrink` | `number` | `1` | `<Box>` default matches CSS / Ink. Pass `0` for chrome that must not collapse |
 | `flexBasis` | `number \| string` | `NaN` | Cells or percent string |
 | `flexWrap` | `'nowrap' \| 'wrap' \| 'wrap-reverse'` | `'nowrap'` | |
 | `alignItems` | `'flex-start' \| 'center' \| 'flex-end' \| 'stretch'` | `'stretch'` | Cross-axis |

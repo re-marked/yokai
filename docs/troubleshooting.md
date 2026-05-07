@@ -16,11 +16,11 @@ Tab cycling is global; arrow navigation is opt-in. Wrap the focusable region in 
 
 ### Box overflows its parent
 
-Yoga does not shrink children by default. Set `flexShrink={1}` on the child, or `overflow="hidden"` on the parent to clip. For text, also set `wrap="truncate"` or similar.
+`<Box>` children shrink by default (`flexShrink={1}`), matching CSS and Ink. If overflow is intentional chrome, set `flexShrink={0}` on that fixed child; otherwise add `overflow="hidden"` on the parent to clip. For text, also set `wrap="truncate"` or similar.
 
 ### Text is cut off mid-word
 
-Set `wrap="wrap"` on the `<Text>`, or widen the parent container. Wrapping respects terminal width via `useTerminalViewport`. For fixed columns, set `width` on the enclosing Box.
+Set `wrap="wrap"` on the `<Text>`, or widen the parent container. Wrapping follows the terminal width reported through layout/resize; for fixed columns, set `width` on the enclosing Box.
 
 ### Colors don't show
 
@@ -28,7 +28,7 @@ Check the terminal's color capability. Set `FORCE_COLOR=1` to override detection
 
 ### Layout flickers on resize
 
-Debounce reactive reads from `useTerminalViewport`, or batch state changes in a single `setState` call. Resize fires SIGWINCH, which can pulse rapidly during a drag-resize of the terminal window itself.
+Debounce `onResize` work, or batch state changes in a single `setState` call. Resize fires SIGWINCH, which can pulse rapidly during a drag-resize of the terminal window itself. `useTerminalViewport()` tracks referenced-element visibility, not terminal dimensions.
 
 ### Drag handle doesn't respond after I add a wrapper around it
 

@@ -22,7 +22,7 @@ Guide for AI agents writing code that uses yokai. Read this before generating yo
 | `<AlternateScreen mouseTracking pasteThreshold={n}>` | Manually writing `\x1b[?1049h`, `\x1b[?1000h`, `\x1b[?2004h`, parsing `200~`/`201~` for paste |
 | `<ScrollBox stickyScroll>` | Manual scroll-offset tracking + viewport math |
 | `<Link>` | Hand-rolled OSC 8 escape sequences |
-| `useTerminalViewport()` | Reading `process.stdout.columns` directly |
+| `<Box onResize>` / `TerminalSizeContext` | Reading `process.stdout.columns` directly |
 | `useApp().exit()` | `process.exit()` |
 
 The high-level component handles edge cases (lost-release recovery, gesture cancellation on FOCUS_OUT, drag-time z-boost, focus-visible chrome) that hand-rolled equivalents miss.
