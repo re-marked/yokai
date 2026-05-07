@@ -98,12 +98,18 @@ export class MouseDownEvent extends MouseEvent {
    * `handlers.onMove` even when the cursor leaves this element's
    * bounds; release fires `handlers.onUp` and clears the capture.
    *
-   * Calling this multiple times during one onMouseDown dispatch
-   * silently overwrites — last call wins. Matches web pointer-events
-   * `setPointerCapture` semantics.
+   * Calling this multiple times during one onMouseDown dispatch is
+   * first-call-wins: the deepest handler that claims the press owns the
+   * gesture, and later ancestor handlers do not get to steal it.
    */
   captureGesture(handlers: GestureHandlers): void {
+    if (this._capturedHandlers) return
     this._capturedHandlers = handlers
+  }
+
+  /** True once any handler has claimed this press via captureGesture(). */
+  get gestureCaptured(): boolean {
+    return this._capturedHandlers !== null
   }
 }
 

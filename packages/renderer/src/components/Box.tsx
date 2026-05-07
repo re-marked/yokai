@@ -53,8 +53,9 @@ export type Props = Except<Styles, 'textWrap'> & {
    * `event.captureGesture({ onMove, onUp })` to start a drag — the
    * renderer will route subsequent mouse-motion events to your `onMove`
    * handler (instead of extending the text selection) and the eventual
-   * release to `onUp`. Only works inside `<AlternateScreen>` where
-   * mouse tracking is enabled.
+   * release to `onUp`. Capture is first-call-wins: once a descendant
+   * captures the press, ancestors cannot overwrite it. Only works inside
+   * `<AlternateScreen>` where mouse tracking is enabled.
    */
   onMouseDown?: (event: MouseDownEvent) => void
   /**

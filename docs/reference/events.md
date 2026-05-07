@@ -55,11 +55,11 @@ Inherits from internal `MouseEvent` base.
 **Methods**:
 
 - `stopImmediatePropagation()`.
-- `captureGesture(handlers: GestureHandlers): void` — claim subsequent mouse-motion events and the eventual release for this drag. After capture, motion routes to `handlers.onMove` even when the cursor leaves the originally pressed element; release fires `handlers.onUp` and clears the capture. The normal release path (onClick, selection finish) is skipped for that release. Selection extension is suppressed for the gesture's lifetime. Calling multiple times within one dispatch overwrites — last call wins. Cannot be retargeted mid-flight.
+- `captureGesture(handlers: GestureHandlers): void` — claim subsequent mouse-motion events and the eventual release for this drag. After capture, motion routes to `handlers.onMove` even when the cursor leaves the originally pressed element; release fires `handlers.onUp` and clears the capture. The normal release path (onClick, selection finish) is skipped for that release. Selection extension is suppressed for the gesture's lifetime. Capture is first-call-wins within one dispatch: once a descendant claims the press, later calls are ignored and ancestors do not receive the remaining `onMouseDown` bubble.
 
 **Fires when**: mouse press, while mouse tracking is active.
 
-**Propagation**: bubbles from deepest hit node up via `parentNode`.
+**Propagation**: bubbles from deepest hit node up via `parentNode` until `stopImmediatePropagation()` is called or a handler captures the gesture.
 
 ## MouseMoveEvent
 

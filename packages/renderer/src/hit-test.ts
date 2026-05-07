@@ -158,7 +158,8 @@ export function dispatchClick(
  * Hit-test the root at (col, row) and bubble a MouseDownEvent from the
  * deepest containing node up through parentNode. Only nodes with an
  * onMouseDown handler fire. Stops when a handler calls
- * stopImmediatePropagation().
+ * stopImmediatePropagation() or captures the gesture. Capture is
+ * leaf-first so descendants cannot be overwritten by ancestors.
  *
  * Returns the GestureHandlers installed via event.captureGesture() if
  * any handler called it, or null otherwise. The caller (App) is
@@ -191,6 +192,7 @@ export function dispatchMouseDown(
         event.localRow = row - rect.y
       }
       handler(event)
+      if (event.gestureCaptured) break
       if (event.didStopImmediatePropagation()) break
     }
     target = target.parentNode

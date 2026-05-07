@@ -34,15 +34,22 @@ describe('MouseDownEvent', () => {
     expect(e._capturedHandlers?.onUp).toBeUndefined()
   })
 
-  it('last captureGesture call wins when called multiple times', () => {
-    // Matches web pointer-events setPointerCapture semantics — repeat
-    // calls during the same press silently overwrite, no error.
+  it('keeps the first captureGesture call when called multiple times', () => {
+    // The press is claimed once. Later calls during the same dispatch are
+    // ignored so an ancestor cannot steal a descendant's gesture.
     const e = new MouseDownEvent(0, 0, 0)
     const first = vi.fn()
     const second = vi.fn()
     e.captureGesture({ onMove: first })
     e.captureGesture({ onMove: second })
-    expect(e._capturedHandlers?.onMove).toBe(second)
+    expect(e._capturedHandlers?.onMove).toBe(first)
+  })
+
+  it('reports when a gesture has been captured', () => {
+    const e = new MouseDownEvent(0, 0, 0)
+    expect(e.gestureCaptured).toBe(false)
+    e.captureGesture({ onMove: vi.fn() })
+    expect(e.gestureCaptured).toBe(true)
   })
 
   describe('modifier key decoding', () => {
@@ -153,6 +160,26 @@ describe('dispatchMouseDown', () => {
 
     dispatchMouseDown(root, 2, 2, 0)
     expect(order).toEqual(['child', 'root'])
+  })
+
+  it('stops bubbling after the first captured gesture', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 10, 5)
+    const child = createNode('ink-box')
+    appendChildNode(root, child)
+    setRect(child, 0, 0, 5, 5)
+
+    const childMove = vi.fn()
+    const rootMove = vi.fn()
+    const rootHandler = vi.fn((e: MouseDownEvent) => e.captureGesture({ onMove: rootMove }))
+    child._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: childMove }),
+    }
+    root._eventHandlers = { onMouseDown: rootHandler }
+
+    const result = dispatchMouseDown(root, 2, 2, 0)
+    expect(rootHandler).not.toHaveBeenCalled()
+    expect(result?.onMove).toBe(childMove)
   })
 
   it('stops bubbling when a handler calls stopImmediatePropagation', () => {

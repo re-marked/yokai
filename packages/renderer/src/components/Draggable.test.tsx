@@ -17,13 +17,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { type DOMElement, createNode, setStyle } from '../dom.js'
+import { type DOMElement, appendChildNode, createNode, setStyle } from '../dom.js'
 import {
   _resetDragRegistryForTesting,
   registerDropTarget,
   unregisterDropTarget,
 } from '../drag-registry.js'
 import { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
+import { dispatchMouseDown } from '../hit-test.js'
 import { nodeCache } from '../node-cache.js'
 import {
   type DragBounds,
@@ -352,6 +353,31 @@ describe('handleDragPress', () => {
     // No gesture captured → no onUp to call. Sanity-check the contract.
     expect(e._capturedHandlers).toBeNull()
     expect(onDragEnd).not.toHaveBeenCalled()
+  })
+
+  it("does not steal a descendant's captured press", () => {
+    _resetDraggableZForTesting()
+    const root = createNode('ink-root')
+    nodeCache.set(root, { x: 0, y: 0, width: 20, height: 10, top: 0 })
+    const draggable = createNode('ink-box')
+    appendChildNode(root, draggable)
+    nodeCache.set(draggable, { x: 0, y: 0, width: 20, height: 10, top: 0 })
+    const child = createNode('ink-box')
+    appendChildNode(draggable, child)
+    nodeCache.set(child, { x: 1, y: 1, width: 8, height: 3, top: 1 })
+
+    const childMove = vi.fn()
+    const deps = makeDeps()
+    child._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: childMove }),
+    }
+    draggable._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => handleDragPress(e, deps),
+    }
+
+    const captured = dispatchMouseDown(root, 2, 2, 0)
+    expect(captured?.onMove).toBe(childMove)
+    expect(deps.setPersistedZ).not.toHaveBeenCalled()
   })
 })
 

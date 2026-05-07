@@ -41,8 +41,9 @@ export type EventHandlerProps = {
    * `event.captureGesture({ onMove, onUp })` to claim subsequent
    * mouse-motion events and the eventual release for this drag — the
    * renderer will route motion events to your `onMove` handler instead
-   * of extending the text selection. See MouseDownEvent.captureGesture
-   * docs for the full lifecycle.
+   * of extending the text selection. Capture is first-call-wins: once a
+   * descendant captures the press, ancestors cannot overwrite it. See
+   * MouseDownEvent.captureGesture docs for the full lifecycle.
    *
    * Only fires inside `<AlternateScreen>` where mouse tracking is on.
    */
