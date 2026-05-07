@@ -68,6 +68,22 @@ export type ScrollBoxProps = Except<Styles, 'textWrap' | 'overflow' | 'overflowX
   stickyScroll?: boolean
 }
 
+export function normalizeScrollTarget(y: number): number {
+  const target = Math.floor(y)
+  if (!Number.isFinite(target)) return 0
+  return Math.max(0, target)
+}
+
+export function computePendingScrollDelta(el: DOMElement, dy: number): number | undefined {
+  const delta = Math.floor(dy)
+  if (!Number.isFinite(delta)) return undefined
+
+  const current = el.scrollTop ?? 0
+  const target = normalizeScrollTarget(current + (el.pendingScrollDelta ?? 0) + delta)
+  const pending = target - current
+  return pending === 0 ? undefined : pending
+}
+
 /**
  * A Box with `overflow: scroll` and an imperative scroll API.
  *
@@ -125,7 +141,7 @@ function ScrollBox({
         el.stickyScroll = false
         el.pendingScrollDelta = undefined
         el.scrollAnchor = undefined
-        el.scrollTop = Math.max(0, Math.floor(y))
+        el.scrollTop = normalizeScrollTarget(y)
         scrollMutated(el)
       },
       scrollToElement(el: DOMElement, offset = 0) {
@@ -148,7 +164,7 @@ function ScrollBox({
         // Accumulate in pendingScrollDelta; renderer drains it at a capped
         // rate so fast flicks show intermediate frames. Pure accumulator:
         // scroll-up followed by scroll-down naturally cancels.
-        el.pendingScrollDelta = (el.pendingScrollDelta ?? 0) + Math.floor(dy)
+        el.pendingScrollDelta = computePendingScrollDelta(el, dy)
         scrollMutated(el)
       },
       scrollToBottom() {
@@ -224,7 +240,7 @@ function ScrollBox({
       }}
       style={{
         flexWrap: 'nowrap',
-        flexDirection: style.flexDirection ?? 'row',
+        flexDirection: style.flexDirection ?? 'column',
         flexGrow: style.flexGrow ?? 0,
         flexShrink: style.flexShrink ?? 1,
         ...style,
