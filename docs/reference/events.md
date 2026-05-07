@@ -207,7 +207,7 @@ Terminal resize. Source: `events/resize-event.ts`. Extends `Event`.
 
 **Methods**: `stopImmediatePropagation()`.
 
-**Fires when**: SIGWINCH on the controlling stdout. Bound via `onResize` on `<Box>` (bubble only) or read reactively via `useTerminalViewport`.
+**Fires when**: SIGWINCH on the controlling stdout. Bound via `onResize` on `<Box>` (bubble only). `useTerminalViewport()` is a referenced-element visibility hook and does not expose terminal `{ columns, rows }`.
 
 **Propagation**: bubble only.
 

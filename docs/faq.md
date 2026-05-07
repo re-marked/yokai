@@ -8,7 +8,7 @@ Short answers to recurring questions. Each links to the canonical doc page when 
 A React reconciler for the terminal. Pure-TS Yoga flexbox, diff-based screen output, ScrollBox with viewport culling. Mount React components, get ANSI on stdout. See [README](./README.md).
 
 **How is it different from Ink?**
-Forked from Ink via claude-code-kit. Pure-TypeScript Yoga (no WASM), per-cell frame diffing with DECSTBM scroll hints, native ScrollBox with viewport culling, mouse events with gesture capture, drag/drop/resize primitives, focus groups with arrow navigation, alt-screen, z-index for absolutes. `flexShrink` defaults to `0` (matches Yoga, not CSS or Ink).
+Forked from Ink via claude-code-kit. Pure-TypeScript Yoga (no WASM), per-cell frame diffing with DECSTBM scroll hints, native ScrollBox with viewport culling, mouse events with gesture capture, drag/drop/resize primitives, focus groups with arrow navigation, alt-screen, z-index for absolutes. The public `<Box>` component defaults `flexShrink` to `1` (matching CSS and Ink) while the low-level Yoga port keeps Yoga's native defaults internally.
 
 **When NOT to use yokai?**
 For one-shot CLI output (a `--help` screen, a single status line) reach for plain `console.log` or `chalk`. yokai's payoff is interactive trees and sustained renders.
@@ -32,8 +32,8 @@ Standard package install. The build artifacts are emitted by the workspace; no s
 **Why is my Box empty?**
 A Box with no `width`/`height` and no children collapses to zero. Add `flexGrow={1}` to take available space, or set explicit dimensions. See [styles reference](./reference/styles.md).
 
-**Why does flexShrink behave differently from CSS?**
-Yokai inherits Yoga's default of `flexShrink: 0`. CSS and Ink default to `1`. To allow a child to shrink past content size, set `flexShrink={1}` explicitly. See [styles reference](./reference/styles.md).
+**Why does my fixed chrome collapse under layout pressure?**
+`<Box>` defaults to `flexShrink={1}`, matching CSS and Ink. That is usually right for content, but fixed chrome such as title bars, footers, and sidebars should opt out with `flexShrink={0}`. See [styles reference](./reference/styles.md).
 
 **Why is my absolute element not where I put it?**
 `top`/`left`/`right`/`bottom` are relative to the nearest positioned ancestor (the parent Box, in yokai). Percent strings are percent of parent. `zIndex` is honored only on `position: 'absolute'` and only sorts among siblings of the same parent. See [styles reference](./reference/styles.md).
@@ -71,7 +71,7 @@ The capture cannot be released mid-flight (matches `setPointerCapture`). Track a
 ## Resize
 
 **Why does my content get clipped?**
-`<Resizable>` clips overflow by default — content larger than the resized box is hidden. Set the inner content to `flexShrink={1}` or use a ScrollBox inside.
+`<Resizable>` clips overflow by default — content larger than the resized box is hidden. Let flexible inner content keep the default `flexShrink={1}`, mark fixed chrome with `flexShrink={0}`, or use a ScrollBox inside.
 
 **Can I shrink past content size?**
 Yes — pass `minSize={{ width: 1, height: 1 }}` or whatever floor you want. The default min is content size.
@@ -85,4 +85,4 @@ Use `import { logForDebugging } from '@yokai-tui/shared'`. Direct `console.log` 
 Use `renderSync` with a fake `stdout`, then assert on the captured frame. See [testing guide](./guides/testing.md).
 
 **How do I handle terminal resize?**
-Read viewport reactively via `useTerminalViewport()`, or bind `onResize` on a Box. SIGWINCH can pulse rapidly during a window-drag-resize — debounce reactive reads. See [troubleshooting](./troubleshooting.md).
+Bind `onResize` on a Box to receive `{ columns, rows }` from SIGWINCH. `useTerminalViewport()` is for visibility tracking of a referenced element, not terminal dimensions. Resize can pulse rapidly during a window-drag-resize, so debounce expensive state updates. See [troubleshooting](./troubleshooting.md).
