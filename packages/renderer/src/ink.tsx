@@ -21,7 +21,7 @@ import type { GestureHandlers } from './events/mouse-event'
 import { PasteEvent } from './events/paste-event'
 import { FocusManager } from './focus'
 import { type Frame, type FrameEvent, emptyFrame } from './frame'
-import { dispatchClick, dispatchHover, dispatchMouseDown } from './hit-test'
+import { dispatchClick, dispatchHover, dispatchMouseDown, dispatchWheel } from './hit-test'
 import instances from './instances'
 import { noop, throttle } from './lodash-replacements'
 import { LogUpdate } from './log-update'
@@ -1552,6 +1552,10 @@ export default class Ink {
     if (!this.altScreenActive) return
     dispatchHover(this.rootNode, col, row, this.hoveredNodes)
   }
+  dispatchWheel(col: number, row: number, direction: 'up' | 'down'): boolean {
+    if (!this.altScreenActive) return false
+    return dispatchWheel(this.rootNode, col, row, direction)
+  }
   dispatchKeyboardEvent(parsedKey: ParsedKey): KeyboardEvent {
     const target = this.focusManager.activeElement ?? this.rootNode
     const event = new KeyboardEvent(parsedKey)
@@ -1835,6 +1839,7 @@ export default class Ink {
         onClickAt={this.dispatchClick}
         onMouseDownAt={this.dispatchMouseDown}
         onHoverAt={this.dispatchHover}
+        onWheelAt={this.dispatchWheel}
         getHyperlinkAt={this.getHyperlinkAt}
         onOpenHyperlink={this.openHyperlink}
         onMultiClick={this.handleMultiClick}

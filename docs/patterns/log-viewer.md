@@ -129,7 +129,7 @@ render(<App />)
 
 1. **`useInterval` produces fake lines at 250ms**: stand-in for whatever real source you'd attach (subprocess stdout, websocket, file tail). Lines are immutable and id-keyed so React diffs cheaply.
 2. **Bounded buffer**: the producer caps `lines` at 5000 entries by slicing the tail. Without this, a long-lived viewer grows the React tree unbounded; viewport culling makes it cheap to render but the tree itself still costs memory.
-3. **`<ScrollBox stickyScroll>` auto-follows**: while sticky, every new line pushes the viewport down so the latest entry stays visible. Manual `scrollBy` from the wheel detaches sticky automatically — the user scrolls up to inspect, the tail pauses on its own, scrolling back to the bottom re-pins.
+3. **`<ScrollBox stickyScroll>` auto-follows**: while sticky, every new line pushes the viewport down so the latest entry stays visible. A wheel scroll detaches sticky automatically — the user scrolls up to inspect, the tail pauses on its own, scrolling back to the bottom re-pins.
 4. **Pause / resume is imperative**: `togglePause` calls `scrollTo(getScrollTop())` to break stickiness without moving the view, and `scrollToBottom()` to re-engage it. The `stickyScroll={!paused}` prop reflects state so the prop and the imperative call agree.
 5. **Level color via lookup**: `LEVEL_COLOR` keeps the row branch-free; padding the level name to 5 chars keeps columns aligned without a fixed-width Box.
 6. **`useSearchHighlight().setQuery` inverts matches**: every visible occurrence of the current query is highlighted via SGR 7 on the next frame. Empty string clears. Effect cleanup clears on unmount so the highlight doesn't outlive the viewer.

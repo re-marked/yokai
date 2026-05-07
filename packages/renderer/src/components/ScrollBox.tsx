@@ -63,9 +63,18 @@ export type ScrollBoxProps = Except<Styles, 'textWrap' | 'overflow' | 'overflowX
   ref?: Ref<ScrollBoxHandle>
   /**
    * When true, automatically pins scroll position to the bottom when content
-   * grows. Unset manually via scrollTo/scrollBy to break the stickiness.
+   * grows. Unset by scrollTo/scrollBy or built-in wheel scrolling.
    */
   stickyScroll?: boolean
+  /**
+   * Disable the built-in mouse-wheel binding. Use this when a consumer owns
+   * wheel input manually via useInput or wants a non-scrolling wheel gesture.
+   */
+  disableWheel?: boolean
+  /**
+   * Rows to scroll per terminal wheel tick.
+   */
+  wheelStep?: number
 }
 
 export function normalizeScrollTarget(y: number): number {
@@ -98,6 +107,8 @@ function ScrollBox({
   children,
   ref,
   stickyScroll,
+  disableWheel,
+  wheelStep = 3,
   ...style
 }: PropsWithChildren<ScrollBoxProps>): React.ReactNode {
   const domRef = useRef<DOMElement>(null)
@@ -112,8 +123,9 @@ function ScrollBox({
   const [, forceRender] = useState(0)
   const listenersRef = useRef(new Set<() => void>())
   const renderQueuedRef = useRef(false)
-  const notify = () => {
-    for (const l of listenersRef.current) l()
+  const notify = (el?: DOMElement) => {
+    const listeners = el?.scrollListeners ?? listenersRef.current
+    for (const l of listeners) l()
   }
   function scrollMutated(el: DOMElement): void {
     // Signal background intervals (IDE poll, LSP poll, GCS fetch, orphan
@@ -121,7 +133,7 @@ function ScrollBox({
     // contributed to 1402ms max frame gaps during scroll drain.
     markDirty(el)
     markCommitStart()
-    notify()
+    notify(el)
     if (renderQueuedRef.current) return
     renderQueuedRef.current = true
     queueMicrotask(() => {
@@ -236,7 +248,10 @@ function ScrollBox({
     <ink-box
       ref={(el) => {
         domRef.current = el
-        if (el) el.scrollTop ??= 0
+        if (el) {
+          el.scrollTop ??= 0
+          el.scrollListeners = listenersRef.current
+        }
       }}
       style={{
         flexWrap: 'nowrap',
@@ -252,6 +267,9 @@ function ScrollBox({
             stickyScroll: true,
           }
         : {})}
+      scrollBox
+      disableWheel={disableWheel}
+      scrollWheelStep={wheelStep}
     >
       <Box flexDirection="column" flexGrow={1} flexShrink={0} width="100%">
         {children}

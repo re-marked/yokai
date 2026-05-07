@@ -530,6 +530,11 @@ export type ParsedKey = {
   raw: string | undefined
   code?: string
   isPasted: boolean
+  mouse?: {
+    button: number
+    col: number
+    row: number
+  }
 }
 
 /** A terminal response sequence (DECRPM, DA1, OSC reply, etc.) parsed
@@ -657,8 +662,13 @@ function parseKeypress(s = ''): ParsedKey {
   // should still be recognized as wheelup/wheeldown.
   if ((match = SGR_MOUSE_RE.exec(s))) {
     const button = Number.parseInt(match[1]!, 10)
-    if ((button & 0x43) === 0x40) return createNavKey(s, 'wheelup', false)
-    if ((button & 0x43) === 0x41) return createNavKey(s, 'wheeldown', false)
+    const mouse = {
+      button,
+      col: Number.parseInt(match[2]!, 10),
+      row: Number.parseInt(match[3]!, 10),
+    }
+    if ((button & 0x43) === 0x40) return createNavKey(s, 'wheelup', false, mouse)
+    if ((button & 0x43) === 0x41) return createNavKey(s, 'wheeldown', false, mouse)
     // Shouldn't reach here (parseMouseEvent catches non-wheel) but be safe
     return createNavKey(s, 'mouse', false)
   }
@@ -670,8 +680,13 @@ function parseKeypress(s = ''): ParsedKey {
   // tracking in alt-screen and only need wheel for ScrollBox.
   if (s.length === 6 && s.startsWith('\x1b[M')) {
     const button = s.charCodeAt(3) - 32
-    if ((button & 0x43) === 0x40) return createNavKey(s, 'wheelup', false)
-    if ((button & 0x43) === 0x41) return createNavKey(s, 'wheeldown', false)
+    const mouse = {
+      button,
+      col: s.charCodeAt(4) - 32,
+      row: s.charCodeAt(5) - 32,
+    }
+    if ((button & 0x43) === 0x40) return createNavKey(s, 'wheelup', false, mouse)
+    if ((button & 0x43) === 0x41) return createNavKey(s, 'wheeldown', false, mouse)
     return createNavKey(s, 'mouse', false)
   }
 
@@ -759,7 +774,12 @@ function parseKeypress(s = ''): ParsedKey {
   return key
 }
 
-function createNavKey(s: string, name: string, ctrl: boolean): ParsedKey {
+function createNavKey(
+  s: string,
+  name: string,
+  ctrl: boolean,
+  mouse?: ParsedKey['mouse'],
+): ParsedKey {
   return {
     kind: 'key',
     name,
@@ -772,5 +792,6 @@ function createNavKey(s: string, name: string, ctrl: boolean): ParsedKey {
     sequence: s,
     raw: s,
     isPasted: false,
+    ...(mouse ? { mouse } : {}),
   }
 }

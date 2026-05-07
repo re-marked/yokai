@@ -14,7 +14,9 @@ All `<Box>` props are accepted (see [Box](box.md)) except `textWrap`, `overflow`
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `ref` | `Ref<ScrollBoxHandle>` | — | Imperative handle — see API below |
-| `stickyScroll` | `boolean` | `false` | Auto-pin to bottom when content grows; cleared by manual `scrollTo` / `scrollBy` |
+| `stickyScroll` | `boolean` | `false` | Auto-pin to bottom when content grows; cleared by `scrollTo` / `scrollBy` / built-in wheel scrolling |
+| `disableWheel` | `boolean` | `false` | Disable built-in wheel scrolling, useful when a consumer owns wheel input manually |
+| `wheelStep` | `number` | `3` | Rows to scroll per terminal wheel tick |
 
 ## ScrollBoxHandle
 
@@ -64,11 +66,12 @@ boxRef.current?.scrollToElement(itemRef.current!, -1)
 
 - `scrollTo` / `scrollBy` mutate the DOM node directly and bypass React; updates are coalesced via microtask before scheduling a render.
 - Imperative scroll targets are preserved until render time, then clamped against fresh Yoga bounds (`[0, scrollHeight - viewportHeight]`); callers do not need to duplicate bounds checks.
+- Mouse wheel events scroll the nearest ScrollBox under the cursor by `wheelStep` rows. Nested ScrollBoxes prefer the innermost ScrollBox; if it has `disableWheel`, the event falls through to an ancestor ScrollBox.
 - Only children intersecting `[scrollTop, scrollTop + height]` are emitted to the screen buffer (viewport culling).
 - Inner content uses `flexGrow: 1, flexShrink: 0, width: '100%'` so flexbox spacers can pin children to the bottom of the viewport.
 - `stickyScroll` is set as a DOM attribute so the first frame already knows it; ref callbacks fire too late.
 - `scrollToBottom` and explicit `scrollToElement` cancel any in-flight `pendingScrollDelta`.
-- Mouse-wheel events are dispatched as `ParsedKey` wheel events when inside `<AlternateScreen>` with mouse tracking; the consumer wires them to `scrollBy`.
+- Mouse-wheel events are still dispatched as `ParsedKey` wheel events for `useInput` compatibility. If you already wire `key.wheelUp` / `key.wheelDown` manually for a ScrollBox, set `disableWheel` to avoid double-scrolling.
 - `setClampBounds` lets a consumer pin the scroll range to a specific bound, useful when virtualising long lists where the natural max scroll lags React's async re-render.
 
 ## Related

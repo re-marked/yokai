@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest'
 import { type DOMElement, appendChildNode, createNode, createTextNode, setStyle } from './dom.js'
 import Output from './output.js'
-import renderNodeToOutput from './render-node-to-output.js'
+import renderNodeToOutput, { getScrollHint, resetScrollHint } from './render-node-to-output.js'
 import { CharPool, HyperlinkPool, type Screen, StylePool, cellAt, createScreen } from './screen.js'
 import applyStyles, { type Styles } from './styles.js'
 
@@ -56,6 +56,24 @@ function buildRow(width: number, height: number, ...children: DOMElement[]): DOM
   for (const child of children) appendChildNode(root, child)
   root.yogaNode!.calculateLayout(width, height)
   return root
+}
+
+function scrollBox(width: number, height: number, rows: string[]): DOMElement {
+  const box = el('ink-box', {
+    width,
+    height,
+    overflow: 'scroll',
+    flexDirection: 'column',
+  })
+  const content = el('ink-box', {
+    width: '100%',
+    flexDirection: 'column',
+    flexShrink: 0,
+  })
+  for (const row of rows) appendChildNode(content, txt(row))
+  appendChildNode(box, content)
+  box.scrollTop = 0
+  return box
 }
 
 /**
@@ -161,6 +179,38 @@ function renderNFrames(
 }
 
 // ── baseline: paint order before any z-index logic ───────────────────
+
+describe('renderNodeToOutput - ScrollBox scroll hints', () => {
+  it('does not use the full-row scroll fast path for side-by-side ScrollBoxes', () => {
+    const left = scrollBox(10, 4, ['L0', 'L1', 'L2', 'L3', 'L4', 'L5'])
+    const right = scrollBox(10, 4, ['R0', 'R1', 'R2', 'R3', 'R4', 'R5'])
+    const root = buildRow(20, 4, left, right)
+
+    const stylePool = new StylePool()
+    const charPool = new CharPool()
+    const hyperlinkPool = new HyperlinkPool()
+    const screenA = createScreen(20, 4, stylePool, charPool, hyperlinkPool)
+    const screenB = createScreen(20, 4, stylePool, charPool, hyperlinkPool)
+    const output = new Output({ width: 20, height: 4, stylePool, screen: screenA })
+
+    resetScrollHint()
+    renderNodeToOutput(root, output, { prevScreen: undefined })
+    const frameA = output.get()
+
+    right.scrollTop = 1
+    root.yogaNode!.calculateLayout(20, 4)
+    output.reset(20, 4, screenB)
+    resetScrollHint()
+    renderNodeToOutput(root, output, { prevScreen: frameA })
+    const frameB = output.get()
+
+    expect(getScrollHint()).toBeNull()
+    expect(rowText(frameB, 0).startsWith('L0')).toBe(true)
+    expect(rowText(frameB, 1).startsWith('L1')).toBe(true)
+    expect(rowText(frameB, 2).startsWith('L2')).toBe(true)
+    expect(rowText(frameB, 3).startsWith('L3')).toBe(true)
+  })
+})
 
 describe('renderNodeToOutput — paint order baseline (no zIndex)', () => {
   it('paints a single text node at its computed position', () => {

@@ -6,6 +6,7 @@
 
 - `<ScrollBox>` now defaults to vertical content layout (`flexDirection: 'column'`) so ordinary lists/logs scroll without an explicit workaround.
 - `<ScrollBox>` `scrollTo` / `scrollBy` clamp to content bounds, preventing overscroll into blank space.
+- `<ScrollBox>` now auto-scrolls on mouse wheel when the cursor is over the box, with `wheelStep` and `disableWheel` props for tuning/opt-out.
 
 Tagged releases of `@yokai-tui/renderer` and `@yokai-tui/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 

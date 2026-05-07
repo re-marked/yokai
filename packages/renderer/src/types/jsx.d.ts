@@ -26,6 +26,9 @@ type InkBoxProps = {
   onPaste?: (event: PasteEvent) => void
   onPasteCapture?: (event: PasteEvent) => void
   stickyScroll?: boolean
+  scrollBox?: boolean
+  disableWheel?: boolean
+  scrollWheelStep?: number
   children?: ReactNode
 }
 

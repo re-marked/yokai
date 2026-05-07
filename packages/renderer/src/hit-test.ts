@@ -1,8 +1,11 @@
-import type { DOMElement } from './dom'
+import { type DOMElement, markDirty, scheduleRenderFrom } from './dom'
 import { ClickEvent } from './events/click-event'
 import type { EventHandlerProps } from './events/event-handlers'
 import { type GestureHandlers, MouseDownEvent } from './events/mouse-event'
 import { nodeCache } from './node-cache'
+import { markCommitStart } from './reconciler'
+
+const DEFAULT_WHEEL_STEP = 3
 
 /** Effective z-index for hit-testing — mirrors the renderer's
  *  effectiveZ in render-node-to-output.ts. Only absolutes participate
@@ -193,6 +196,79 @@ export function dispatchMouseDown(
     target = target.parentNode
   }
   return event._capturedHandlers
+}
+
+function scrollBoxWheelStep(node: DOMElement): number {
+  const raw = node.attributes.scrollWheelStep
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return DEFAULT_WHEEL_STEP
+  return Math.floor(raw)
+}
+
+function scrollBoxAcceptsWheel(node: DOMElement): boolean {
+  return node.attributes.scrollBox === true && node.attributes.disableWheel !== true
+}
+
+function scheduleScrollRender(node: DOMElement): void {
+  if (node.scrollRenderQueued) return
+  node.scrollRenderQueued = true
+  queueMicrotask(() => {
+    node.scrollRenderQueued = false
+    scheduleRenderFrom(node)
+  })
+}
+
+function notifyScrollListeners(node: DOMElement): void {
+  for (const listener of node.scrollListeners ?? []) listener()
+}
+
+function applyWheelScroll(node: DOMElement, dy: number): void {
+  const previousSticky = node.stickyScroll
+  const wasSticky = previousSticky ?? Boolean(node.attributes.stickyScroll)
+  const previousAnchor = node.scrollAnchor
+  node.stickyScroll = false
+  node.scrollAnchor = undefined
+  const current = node.scrollTop ?? 0
+  const delta = Math.floor(dy)
+  if (!Number.isFinite(delta)) return
+
+  const target = Math.max(0, current + (node.pendingScrollDelta ?? 0) + delta)
+  const pending = target - current
+  const previousPending = node.pendingScrollDelta
+  node.pendingScrollDelta = pending === 0 ? undefined : pending
+  const stateChanged =
+    node.pendingScrollDelta !== previousPending || wasSticky || previousAnchor !== undefined
+  if (!stateChanged) return
+
+  markDirty(node)
+  markCommitStart()
+  notifyScrollListeners(node)
+  scheduleScrollRender(node)
+}
+
+/**
+ * Hit-test a terminal wheel event and apply the default ScrollBox behavior.
+ *
+ * Wheel remains a ParsedKey for `useInput` backwards compatibility, but the
+ * default scroll target is spatial: the nearest ScrollBox viewport under the
+ * cursor should scroll, with nested ScrollBoxes naturally winning over
+ * ancestors. Returns true when a ScrollBox accepted the wheel.
+ */
+export function dispatchWheel(
+  root: DOMElement,
+  col: number,
+  row: number,
+  direction: 'up' | 'down',
+): boolean {
+  let target: DOMElement | undefined = hitTest(root, col, row) ?? undefined
+  while (target) {
+    if (scrollBoxAcceptsWheel(target)) {
+      const step = scrollBoxWheelStep(target)
+      applyWheelScroll(target, direction === 'up' ? -step : step)
+      return true
+    }
+    target = target.parentNode
+  }
+  return false
 }
 
 /**

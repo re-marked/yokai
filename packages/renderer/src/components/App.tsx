@@ -77,6 +77,10 @@ type Props = {
   // DOM elements. Called for mode-1003 motion events with no button held.
   // No-op outside fullscreen (Ink.dispatchHover gates on altScreenActive).
   readonly onHoverAt: (col: number, row: number) => void
+  // Apply default wheel behavior at (col, row). Wheel remains a ParsedKey
+  // for useInput compatibility, but ScrollBox's built-in wheel binding is
+  // spatial and follows the box under the cursor.
+  readonly onWheelAt: (col: number, row: number, direction: 'up' | 'down') => boolean
   // Look up the OSC 8 hyperlink at (col, row) synchronously at click
   // time. Returns the URL or undefined. The browser-open is deferred by
   // MULTI_CLICK_TIMEOUT_MS so double-click can cancel it.
@@ -699,6 +703,14 @@ function processKeysInBatch(
     // descendant preventDefault — they're a global subscription, not a
     // targeted handler. App-level shortcuts (Ctrl+C exit, Ctrl+Z
     // suspend) DO defer.
+    if ((item.name === 'wheelup' || item.name === 'wheeldown') && item.mouse) {
+      app.props.onWheelAt(
+        item.mouse.col - 1,
+        item.mouse.row - 1,
+        item.name === 'wheelup' ? 'up' : 'down',
+      )
+    }
+
     const inputEvent = new InputEvent(item)
     app.internal_eventEmitter.emit('input', inputEvent)
     const keyboardEvent = app.props.dispatchKeyboardEvent(item)
