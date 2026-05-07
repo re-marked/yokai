@@ -21,6 +21,7 @@
     "demo:focus-nav": "pnpm --filter @yokai-example/focus-nav start",
     "demo:text-input": "pnpm --filter @yokai-example/text-input start",
     "demo:cursor-styles": "pnpm --filter @yokai-example/cursor-styles start",
+    "demo:gesture-capture": "pnpm --filter @yokai-example/gesture-capture start",
     "demo:scrollbox-wheel": "pnpm --filter @yokai-example/scrollbox-wheel start",
     "demo:scratchpad": "pnpm --filter @yokai-example/scratchpad start"
   },

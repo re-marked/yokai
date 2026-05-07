@@ -75,7 +75,7 @@ Layout props (all Yoga flexbox properties: `width`, `height`, `flexDirection`, `
 - `onClick` and `onMouseDown` bubble; call `event.stopImmediatePropagation()` to halt.
 - `onMouseEnter` / `onMouseLeave` do not bubble — moving between children does not re-fire on the parent.
 - `zIndex` only applies to nodes with `position: 'absolute'`; it is silently ignored on in-flow children (a dev-mode warning fires). Stacking is flat per parent — siblings sort against each other, not against arbitrarily distant cousins.
-- Inside an `onMouseDown` handler, calling `event.captureGesture({ onMove, onUp })` claims subsequent motion and the release for that drag, suppressing selection extension.
+- Inside an `onMouseDown` handler, calling `event.captureGesture({ onMove, onUp })` claims subsequent motion and the release for that drag, suppressing selection extension. Capture is first-call-wins: a descendant that captures the press prevents ancestors from stealing it.
 - `overflowX` and `overflowY` fall back to `overflow` if unset, then to `'visible'`.
 
 ## Related
