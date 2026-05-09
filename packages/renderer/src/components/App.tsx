@@ -15,6 +15,7 @@ import {
   type ParsedMouse,
   parseMultipleKeypresses,
 } from '../parse-keypress'
+import { computePressIntent } from '../press-intent'
 import reconciler from '../reconciler'
 import {
   type SelectionState,
@@ -266,6 +267,29 @@ export default class App extends PureComponent<Props, State> {
   // doesn't intercept hover meant for drop targets underneath — see
   // the dispatch site for the rationale.
   activeGestureSource: DOMElement | null = null
+
+  // True between a left-press classified as 'click' intent
+  // (computePressIntent: hit chain has onClick, no gesture captured,
+  // no force-select modifier) and the next left-release. While set:
+  //
+  //   - selection-start is skipped at press time, so accidental motion
+  //     between press and release can't escalate this press into a
+  //     text-selection drag (the historical B8 bug — issue #61).
+  //   - drag-motion events are no-ops (selection extension is suppressed
+  //     even though startSelection was never called, defensively, in
+  //     case a future change makes updateSelection drag-active).
+  //   - the multi-click chain is NOT updated by this press, so two
+  //     button clicks in quick succession remain two clicks rather than
+  //     escalating to onMultiClick (word/line select is a text-selection
+  //     concept, not a clickable concept).
+  //   - on release, onClickAt fires + the hyperlink path runs (for
+  //     OSC 8 links inside a clickable region), then this flag clears
+  //     and the normal release path is skipped (no selection to finish).
+  //
+  // Cleared on FOCUS_OUT and on no-button-motion lost-release recovery
+  // alongside the gesture cleanup, so an interrupted click intent
+  // can't survive to taint the next press.
+  pressIntentClick = false
 
   // Timestamp of last stdin chunk. Used to detect long gaps (tmux attach,
   // ssh reconnect, laptop wake) and trigger terminal mode re-assert.
@@ -669,6 +693,11 @@ function processKeysInBatch(
         app.activeGestureTentative = false
         app.activeGestureSource = null
       }
+      // Same recovery for a click-intent press: terminal lost focus
+      // mid-press → the click is implicitly cancelled (we don't know
+      // where the release went). Clear the flag so the next press
+      // when focus returns starts cleanly.
+      app.pressIntentClick = false
       const event = new TerminalFocusEvent('terminalblur')
       app.internal_eventEmitter.emit('terminalblur', event)
       continue
@@ -805,6 +834,12 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
         app.activeGestureTentative = false
         app.activeGestureSource = null
       }
+      // Same lost-release drain for a click-intent press: cursor is
+      // back in the window with no button held → the press is over.
+      // No onClickAt fires (the release event itself is missing — we
+      // don't know if the user actually released over the original
+      // target or somewhere else off-screen).
+      app.pressIntentClick = false
       if (col === app.lastHoverCol && row === app.lastHoverRow) return
       app.lastHoverCol = col
       app.lastHoverRow = row
@@ -867,6 +902,19 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
         }
         return
       }
+      if (app.pressIntentClick) {
+        // Click intent suppresses selection-drag for the lifetime of
+        // this press — accidental motion between press and release
+        // shouldn't escalate the click into a text-selection drag
+        // (B8 — issue #61). updateSelection would no-op anyway because
+        // startSelection was never called (sel.isDragging=false), but
+        // the explicit return keeps intent clear and protects the
+        // suppression from a future change to selection internals.
+        // Also do NOT dispatch hover here: a button-held cursor moving
+        // mid-press shouldn't shuffle hover styles, mirroring browser
+        // behavior where hover is sticky during a press.
+        return
+      }
       // onSelectionDrag calls notifySelectionChange internally — no extra
       // onSelectionChange.
       app.props.onSelectionDrag(col, row)
@@ -895,21 +943,47 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       app.activeGestureTentative = false
       app.activeGestureSource = null
     }
-    // Dispatch onMouseDown to the DOM tree. If a handler called
-    // event.captureGesture(...) (confirmed) or .captureGestureTentatively
-    // (deferred), store the handlers as the active gesture. For
-    // CONFIRMED captures: short-circuit — no multi-click bookkeeping,
-    // no selection start, no click on release. For TENTATIVE captures:
-    // ALSO run selection-start + multi-click below, so click dispatch
-    // works on release-without-motion. The first motion event promotes
-    // tentative→confirmed and cancels the in-progress selection (see
-    // motion handler above).
-    // C2 plumbing: dispatch returns { gesture, clickable }; only the
-    // gesture half is consumed at this commit. C3 will read `clickable`
-    // to derive press intent and route the click-vs-select fork.
+    // Lost-release drain for a stale click-intent press from a prior
+    // press whose release we missed. Don't fire onClickAt — we don't
+    // know if the user actually released over the target. Just clear
+    // the flag so this fresh press starts cleanly.
+    app.pressIntentClick = false
+    // Dispatch onMouseDown to the DOM tree. The dispatch reports BOTH
+    // the captured gesture (if any handler called captureGesture /
+    // captureGestureTentatively) AND whether the press hit a subtree
+    // containing onClick. computePressIntent reduces those signals plus
+    // the modifier state to a single named intent so the press routing
+    // below is one switch instead of overlapping flags.
+    //
+    //   gesture-confirmed → install gesture, short-circuit (no
+    //     selection, no click on release; release fires onUp).
+    //   gesture-tentative → install gesture but ALSO start selection +
+    //     run multi-click below, so a press-without-motion still
+    //     produces a click on release; first motion promotes the
+    //     gesture and cancels the in-progress selection.
+    //   click            → no capture, but the press hit a clickable
+    //     subtree without a force-select modifier. SKIP selection-start
+    //     and SKIP multi-click escalation; release dispatches onClickAt.
+    //     Without this, accidental motion between press and release
+    //     would escalate the press into a selection drag and eat the
+    //     click (B8 — issue #61). Force-select modifier (Shift / Alt)
+    //     demotes click → select so consumers can still highlight text
+    //     inside a clickable region (Button label, link anchor text).
+    //   select           → existing default: anchor selection, run
+    //     multi-click, motion extends.
     const dispatch = app.props.onMouseDownAt(col, row, m.button)
     const gesture = dispatch.gesture
-    if (gesture && !gesture.tentative) {
+    const intent = computePressIntent({
+      gesture: gesture ? (gesture.tentative ? 'tentative' : 'confirmed') : null,
+      clickable: dispatch.clickable,
+      // SGR button bits: 0x04 = shift, 0x08 = alt. Both signal "I want
+      // text selection over a clickable region" — Shift mirrors the
+      // browser convention, Alt mirrors xterm's force-select escape
+      // hatch (already wired to lastPressHadAlt below for the footer
+      // hint on macOS xterm.js).
+      forceSelect: (m.button & 0x04) !== 0 || (m.button & 0x08) !== 0,
+    })
+    if (intent === 'gesture-confirmed' && gesture) {
       app.activeGesture = gesture.handlers
       app.activeGestureTentative = false
       app.activeGestureSource = gesture.sourceNode
@@ -919,19 +993,32 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       app.clickCount = 0
       return
     }
-    if (gesture) {
-      // Tentative capture path: install the gesture but DON'T short-
-      // circuit. Selection-start + multi-click below run normally so
-      // a press-without-motion still produces a valid click on release.
+    if (intent === 'gesture-tentative' && gesture) {
+      // Install the gesture but DON'T short-circuit. Selection-start +
+      // multi-click below run normally so a press-without-motion still
+      // produces a valid click on release.
       app.activeGesture = gesture.handlers
       app.activeGestureTentative = true
       app.activeGestureSource = gesture.sourceNode
     }
-    // Fresh left press. Detect multi-click HERE (not on release) so the
-    // word/line highlight appears immediately and a subsequent drag can
-    // extend by word/line like native macOS. Previously detected on
-    // release, which meant (a) visible latency before the word highlights
-    // and (b) double-click+drag fell through to char-mode selection.
+    if (intent === 'click') {
+      // Click intent: no selection, no multi-click escalation. The
+      // release path consumes pressIntentClick to dispatch onClickAt
+      // directly. Reset the multi-click chain so this click-intent
+      // press doesn't count toward a subsequent select-intent press
+      // at the same cell — clicking a button shouldn't preload a
+      // multi-click on adjacent text.
+      app.pressIntentClick = true
+      app.clickCount = 0
+      return
+    }
+    // Fresh left press for SELECT intent (or fall-through from
+    // gesture-tentative). Detect multi-click HERE (not on release) so
+    // the word/line highlight appears immediately and a subsequent
+    // drag can extend by word/line like native macOS. Previously
+    // detected on release, which meant (a) visible latency before the
+    // word highlights and (b) double-click+drag fell through to
+    // char-mode selection.
     const now = Date.now()
     const nearLast =
       now - app.lastClickTime < MULTI_CLICK_TIMEOUT_MS &&
@@ -987,6 +1074,41 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     app.activeGesture = null
     app.activeGestureTentative = false
     app.activeGestureSource = null
+  }
+  if (app.pressIntentClick) {
+    // Click intent: dispatch onClickAt at the release coords (matching
+    // the existing click-on-release semantics; no selection was started
+    // so the normal `!hasSelection && sel.anchor` guard wouldn't fire).
+    // Skip selection-finish — there's nothing to finish — and skip the
+    // multi-click cleanup; click-intent presses don't participate.
+    // Run the same hyperlink fallback as the select path so OSC 8 links
+    // inside a clickable region still open in the browser when the
+    // DOM-level onClick chooses not to consume the click.
+    //
+    // Non-zero base button on this release is impossible to reach here:
+    // press-time refused to set pressIntentClick for non-left presses
+    // (baseButton !== 0 returns early), and right/middle releases don't
+    // touch the flag. So we treat any release that arrives with the
+    // flag set as the matching left release.
+    app.pressIntentClick = false
+    if (!app.props.onClickAt(col, row)) {
+      const url = app.props.getHyperlinkAt(col, row)
+      if (url && process.env.TERM_PROGRAM !== 'vscode' && !isXtermJs()) {
+        if (app.pendingHyperlinkTimer) {
+          clearTimeout(app.pendingHyperlinkTimer)
+        }
+        app.pendingHyperlinkTimer = setTimeout(
+          (app, url) => {
+            app.pendingHyperlinkTimer = null
+            app.props.onOpenHyperlink(url)
+          },
+          MULTI_CLICK_TIMEOUT_MS,
+          app,
+          url,
+        )
+      }
+    }
+    return
   }
   // Release: end the drag even for non-zero button codes. Some terminals
   // encode release with the motion bit or button=3 "no button" (carried
