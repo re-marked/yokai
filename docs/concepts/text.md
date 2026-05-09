@@ -38,6 +38,35 @@ Width is measured per grapheme cluster, not per code point. Combining marks (`é
 
 CJK ideographs, fullwidth forms, and most emoji are width 2. The screen buffer stores them as a `WideHead` cell followed by a `SpacerTail` cell, so a single grapheme occupies exactly two columns. Hit-testing, hyperlink lookup, and selection unify the pair: clicking the spacer resolves to the head cell.
 
+## Nested vs sibling Text
+
+When you nest `<Text>` inside `<Text>`, the inner one is NOT a separate flex child of the outer. The reconciler rewrites it (`packages/renderer/src/reconciler.ts:289-310`): an `ink-text` whose `hostContext.isInsideText` is true becomes `ink-virtual-text`. Virtual-text has no Yoga node — it contributes neither flex basis nor measurement of its own. The whole nested-Text tree is one Yoga leaf, sized by squashing all descendant text into a single string.
+
+Concretely, `squashTextNodesToSegments` walks the tree, collects every `#text` value, and merges sibling-and-descendant style stacks into per-segment styles. Measurement then runs once on the joined string with the merged style attribution applied at render time.
+
+Two consequences worth keeping in mind:
+
+1. **Nested `<Text>` is for STYLE SPANS, not for layout.** Use it when you want a colored / bold / dimmed run inline within larger text:
+   ```tsx
+   <Text>
+     <Text bold>error: </Text>
+     something failed
+   </Text>
+   ```
+   The result is one styled string. The outer Text wraps the whole thing; you can't make the inner runs lay out independently or take part in flex math.
+
+2. **For independent layout, use sibling Texts in a Box.** When you want each text fragment to be its own flex child (for `gap`, `justifyContent`, individual `flexShrink`, hit-testing as separate elements), reach for sibling Texts inside a `<Box flexDirection="row">`:
+   ```tsx
+   <Box flexDirection="row" gap={1}>
+     <Text bold>13:47:04</Text>
+     <Text>·</Text>
+     <Text>May 3</Text>
+   </Box>
+   ```
+   Each `<Text>` is now an independent flex child with its own natural width and measure call. `gap` applies between them. Yoga can distribute / shrink each one independently.
+
+**Known issue:** under certain flex configurations (parent has slack, multiple competing siblings), a nested-Text outer can be measured at sub-natural width during yoga's basis pass, then truncated silently. See [issue #51](https://github.com/re-marked/yokai/issues/51). Until that's fixed, prefer the sibling-Text-in-a-Box pattern when the inner fragments matter.
+
 ## ANSI passthrough
 
 Pre-rendered ANSI strings should use `<RawAnsi>`:
