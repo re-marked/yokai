@@ -18,10 +18,11 @@ import type { DragPos, DragBounds, DragInfo } from '@yokai-tui/renderer'
 | `onDragStart` | `(info: DragInfo) => void` | — | Fires once on first cursor motion after press (not on press itself). |
 | `onDrag` | `(info: DragInfo) => void` | — | Fires on every cell-crossing motion, after internal pos state updates. |
 | `onDragEnd` | `(info: DragInfo) => void` | — | Fires once at release if the gesture became a drag. `info.dropped` is `true` if a `<DropTarget>` accepted. |
+| `onMouseDown` | `(event: MouseDownEvent) => void` | — | Optional consumer press handler. Fires BEFORE Draggable's internal drag wiring — useful for "raise window on press" / app-level focus updates. Consumer may call `event.captureGesture(...)` to preempt the drag (first-call-wins per [`MouseDownEvent`](../reference/events.md#mousedownevent)). The press-time z-bump still fires either way; use `disabled` to suppress press behavior entirely. |
 
 `DragInfo`: `{ pos, startPos, delta: { dx, dy }, dropped? }`. `delta` is screen-space cell delta from press point, not from previous frame.
 
-All `<Box>` props are accepted except `position`, `top`, `left`, `onMouseDown` (owned internally). See [box.md](./box.md).
+All `<Box>` props are accepted except `position`, `top`, `left` (owned internally). `onMouseDown` IS forwarded; see the row above for the chain semantics. See [box.md](./box.md) for the rest.
 
 ## Examples
 ### Bounded drag with persistence

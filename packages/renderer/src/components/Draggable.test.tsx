@@ -47,7 +47,44 @@ describe('DraggableProps', () => {
 
     expect(props.children).toBe('drag me')
   })
+
+  it('accepts onMouseDown in the exported prop type (chainable consumer handler)', () => {
+    // Compile-time: the type must include onMouseDown (was previously
+    // stripped via Except). Runtime: the satisfies check is enough.
+    const props = {
+      initialPos: { top: 0, left: 0 },
+      onMouseDown: (e: MouseDownEvent) => {
+        // Consumer handler may inspect coords, claim the gesture, etc.
+        void e.col
+      },
+    } satisfies DraggableProps
+
+    expect(props.onMouseDown).toBeTypeOf('function')
+  })
 })
+
+// ── component wrapper: chainable onMouseDown ─────────────────────────
+//
+// The component's handleMouseDown calls the consumer's onMouseDown
+// FIRST (before delegating to handleDragPress). The integration is
+// thin (one ref read + one call) so we test it inline against the
+// component's documented contract rather than spinning up React. The
+// chain order matters because:
+//   - Consumer's onMouseDown can call event.captureGesture(...) to
+//     preempt Draggable. Per A21 (PR #81), captureGesture is
+//     first-call-wins, so consumer wins iff they go first.
+//   - Draggable's press-time z-bump still fires AFTER the consumer
+//     returns, regardless of preemption — "press is press."
+//
+// Direct unit test of the ordering would require rendering the
+// component and dispatching a real MouseDownEvent through React's
+// commit phase. The Draggable test file deliberately skips React
+// (per the file header). Component-level integration is exercised
+// by the `pnpm demo:drag` and `pnpm demo:scratchpad` smoke tests.
+// What we CAN pin here without React is the type contract above
+// + the underlying captureGesture first-call-wins semantic that
+// makes consumer preemption work — covered by mouse-event.test.ts
+// (PR #81's "first call wins" tests).
 
 // ── pure math ────────────────────────────────────────────────────────
 
