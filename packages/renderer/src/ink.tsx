@@ -15,6 +15,7 @@ import type {
   CursorDeclarationSetter,
 } from './components/CursorDeclarationContext'
 import { FRAME_INTERVAL_MS } from './constants'
+import { isCursorVisibleAt } from './cursor-visibility'
 import * as dom from './dom'
 import { KeyboardEvent } from './events/keyboard-event'
 import { PasteEvent } from './events/paste-event'
@@ -844,13 +845,44 @@ export default class Ink {
     // and no move is emitted.
     const decl = this.cursorDeclaration
     const rect = decl !== null ? nodeCache.get(decl.node) : undefined
-    const target =
+    let target =
       decl !== null && rect !== undefined
         ? {
             x: rect.x + decl.relativeX,
             y: rect.y + decl.relativeY,
           }
         : null
+    // Z-stacking suppression: the cursor is a paint primitive and should
+    // follow the same paint order as the cells it sits on. If a higher-z
+    // subtree (modal, tooltip, drag preview) paints over the declared
+    // cell, the cursor underneath should be suppressed too — otherwise
+    // a TextInput's bar/block cursor visibly bleeds through any modal
+    // dialog that doesn't itself contain a focused input.
+    //
+    // hitTest at the declared cell uses the same z-aware paint sort the
+    // renderer uses, so the element it returns matches what the user
+    // sees painted there. If that element is the declared node itself
+    // OR a descendant of it, the declared subtree owns the cell —
+    // park the cursor. Otherwise something else paints on top — suppress.
+    if (target !== null && decl !== null) {
+      // Screen-painted predicate uses the freshly-rendered front frame
+      // (this finalize block runs after the diff). Empty cells can't
+      // occlude — a transparent absolute layout wrapper that didn't
+      // paint anything won't suppress the cursor below it (codex
+      // review on PR #86 / A24).
+      const screen = frame.screen
+      if (
+        !isCursorVisibleAt(
+          this.rootNode,
+          decl.node,
+          target.x,
+          target.y,
+          (c, r) => !isEmptyCellAt(screen, c, r),
+        )
+      ) {
+        target = null
+      }
+    }
     const parked = this.displayCursor
 
     // DECSCUSR style + blink override. `desiredStyleCode` is null when
