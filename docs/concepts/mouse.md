@@ -58,6 +58,41 @@ The active gesture lives on `App.activeGesture`. It is drained on `FOCUS_OUT` an
 
 `MouseMoveEvent` and `MouseUpEvent` do NOT bubble — they go directly to the captured handler.
 
+`onMouseEnter` / `onMouseLeave` continue to fire normally during a captured gesture: they are side-effect-only and don't compete with `onMove` for the input. A `<DropTarget>` (or any other passive observer) sitting under the cursor mid-drag can react to the cursor entering it without the gesture initiator coordinating anything.
+
+## Tentative capture
+
+Use `event.captureGestureTentatively(...)` when a press might be a click OR a drag and you want actual motion to disambiguate.
+
+```tsx
+<Box onMouseDown={(e) => {
+  e.captureGestureTentatively({
+    onMove: (move) => { /* fires only after first motion */ },
+    onUp: (up) => { /* fires only if the gesture promoted */ },
+  })
+}} />
+```
+
+- **Press**: gesture installs, but selection-start + multi-click still run normally so click dispatch on release works.
+- **First motion**: PROMOTES the gesture. Cancels any in-progress selection; clears the tentative flag; fires `onMove`.
+- **Release without motion**: DROPS the gesture silently — `onUp` does NOT fire — and falls through to normal click dispatch. Descendants with `onClick` get their click.
+
+`<Draggable>` uses this so a press-and-release on a descendant `<Button>` reliably reaches the button's `onClick`. Confirmed `captureGesture` (always-immediate) and tentative capture share the same first-call-wins slot — descendants and ancestors can't override each other.
+
+## Programmatic hit-testing
+
+Inside a captured gesture's `onMove`, call `hitTest(rootElement, col, row)` to resolve "what element is at this cursor right now?" The same z-aware paint-order sort the renderer uses; the element returned matches what's painted at that cell. Useful for custom drop-target detection, drag-ghost positioning, hover-during-drag UX.
+
+```tsx
+import { hitTest } from '@yokai-tui/renderer'
+
+// Inside your gesture's onMove:
+const target = hitTest(rootRef.current, move.col, move.row)
+if (target?.attributes.dropZone === 'inbox') {
+  setHoveredInbox(true)
+}
+```
+
 ## See also
 - [Events](../concepts/events.md)
 - [Box](../components/box.md)

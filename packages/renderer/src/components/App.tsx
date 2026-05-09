@@ -827,6 +827,19 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
           app.clickCount = 0
         }
         app.activeGesture.onMove?.(new MouseMoveEvent(col, row, m.button))
+        // Also dispatch hover during the captured drag. onMouseEnter /
+        // onMouseLeave are side-effect-only — they don't compete with
+        // the gesture's onMove for the input — so a drop target sitting
+        // under the cursor mid-drag can react to the cursor entering
+        // it (border highlight, insertion indicator, etc.) without the
+        // consumer reinventing hit-testing inside the gesture handler.
+        // dispatchHover dedupes via the hoveredNodes Set internally;
+        // same-cell calls are no-ops.
+        if (col !== app.lastHoverCol || row !== app.lastHoverRow) {
+          app.lastHoverCol = col
+          app.lastHoverRow = row
+          app.props.onHoverAt(col, row)
+        }
         return
       }
       // onSelectionDrag calls notifySelectionChange internally — no extra

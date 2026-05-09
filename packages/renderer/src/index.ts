@@ -85,6 +85,13 @@ export { default as measureElement } from './measure-element'
 export { stringWidth } from './stringWidth'
 export { wrapAnsi } from './wrapAnsi'
 
+// Hit-testing — exposed so consumers can resolve "what element is at
+// this cursor?" from inside a captured gesture's onMove handler (drop
+// target detection, custom hover semantics, drag ghost positioning).
+// Uses the same z-aware paint-order sort the renderer uses, so the
+// element returned matches what's painted at that cell.
+export { hitTest } from './hit-test'
+
 // Color utilities
 export { colorize, applyTextStyles, applyColor } from './colorize'
 export type { ColorType } from './colorize'
