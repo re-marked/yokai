@@ -277,6 +277,41 @@ describe('dispatchMouseDown', () => {
     expect(result?.tentative).toBe(true)
   })
 
+  it('CapturedGesture carries the sourceNode that fired captureGesture', () => {
+    // Used by App-level coordinator to exclude the dragged element from
+    // drag-time hover hit-testing — without sourceNode the dragged box
+    // (with its drag-time z boost) would intercept hover meant for
+    // drop targets underneath.
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 10, 5)
+    const child = createNode('ink-box')
+    appendChildNode(root, child)
+    setRect(child, 0, 0, 5, 5)
+    child._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
+    }
+    const result = dispatchMouseDown(root, 2, 2, 0)
+    expect(result?.sourceNode).toBe(child)
+  })
+
+  it('CapturedGesture sourceNode reflects the FIRST capturer (descendant beats ancestor)', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 10, 5)
+    const child = createNode('ink-box')
+    appendChildNode(root, child)
+    setRect(child, 0, 0, 5, 5)
+    // Child captures first; ancestor's later captureGesture is a no-op
+    // (first-call-wins). sourceNode must be child.
+    child._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
+    }
+    root._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
+    }
+    const result = dispatchMouseDown(root, 2, 2, 0)
+    expect(result?.sourceNode).toBe(child)
+  })
+
   it('passes (col, row, button) into the event for handlers to read', () => {
     const root = createNode('ink-root')
     setRect(root, 0, 0, 10, 5)

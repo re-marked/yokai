@@ -83,7 +83,14 @@ type Props = {
   // Dispatch hover (onMouseEnter/onMouseLeave) as the pointer moves over
   // DOM elements. Called for mode-1003 motion events with no button held.
   // No-op outside fullscreen (Ink.dispatchHover gates on altScreenActive).
-  readonly onHoverAt: (col: number, row: number) => void
+  //
+  // The optional `exclude` arg lets the App skip a subtree during hit-
+  // testing — used during a captured drag to make the dragged element
+  // invisible to drop-target detection (otherwise its drag-time z boost
+  // would make it the topmost painted node under the cursor and the
+  // hover would resolve to the draggable itself instead of the drop
+  // zone underneath).
+  readonly onHoverAt: (col: number, row: number, exclude?: DOMElement | null) => void
   // Apply default wheel behavior at (col, row). Wheel remains a ParsedKey
   // for useInput compatibility, but ScrollBox's built-in wheel binding is
   // spatial and follows the box under the cursor.
@@ -251,6 +258,12 @@ export default class App extends PureComponent<Props, State> {
   // window doesn't leave a dangling capture.
   activeGesture: GestureHandlers | null = null
   activeGestureTentative = false
+  // The DOM element whose onMouseDown handler captured the active
+  // gesture (the gesture "source"). Recorded by dispatchMouseDown.
+  // Used during drag-time hover dispatch so the dragged element itself
+  // doesn't intercept hover meant for drop targets underneath — see
+  // the dispatch site for the rationale.
+  activeGestureSource: DOMElement | null = null
 
   // Timestamp of last stdin chunk. Used to detect long gaps (tmux attach,
   // ssh reconnect, laptop wake) and trigger terminal mode re-assert.
@@ -652,6 +665,7 @@ function processKeysInBatch(
         }
         app.activeGesture = null
         app.activeGestureTentative = false
+        app.activeGestureSource = null
       }
       const event = new TerminalFocusEvent('terminalblur')
       app.internal_eventEmitter.emit('terminalblur', event)
@@ -787,6 +801,7 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
         }
         app.activeGesture = null
         app.activeGestureTentative = false
+        app.activeGestureSource = null
       }
       if (col === app.lastHoverCol && row === app.lastHoverRow) return
       app.lastHoverCol = col
@@ -813,6 +828,8 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
         // capture.
         if (app.activeGestureTentative) {
           app.activeGestureTentative = false
+          // sourceNode stays — promotion keeps the same gesture, only
+          // the tentative-vs-confirmed status changes.
           if (sel.isDragging || sel.anchor) {
             clearSelection(sel)
             app.props.onSelectionChange()
@@ -827,6 +844,25 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
           app.clickCount = 0
         }
         app.activeGesture.onMove?.(new MouseMoveEvent(col, row, m.button))
+        // Also dispatch hover during the captured drag. onMouseEnter /
+        // onMouseLeave are side-effect-only — they don't compete with
+        // the gesture's onMove for the input — so a drop target sitting
+        // under the cursor mid-drag can react to the cursor entering
+        // it (border highlight, insertion indicator, etc.) without the
+        // consumer reinventing hit-testing inside the gesture handler.
+        // dispatchHover dedupes via the hoveredNodes Set internally;
+        // same-cell calls are no-ops.
+        //
+        // Exclude the gesture source from hit-testing. <Draggable>
+        // gives itself a drag-time z boost so the dragged box paints
+        // above siblings; without exclusion the hit-test would resolve
+        // to the dragged box itself instead of the drop zone underneath.
+        // (Codex review on PR #85 / A20.)
+        if (col !== app.lastHoverCol || row !== app.lastHoverRow) {
+          app.lastHoverCol = col
+          app.lastHoverRow = row
+          app.props.onHoverAt(col, row, app.activeGestureSource)
+        }
         return
       }
       // onSelectionDrag calls notifySelectionChange internally — no extra
@@ -855,6 +891,7 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       }
       app.activeGesture = null
       app.activeGestureTentative = false
+      app.activeGestureSource = null
     }
     // Dispatch onMouseDown to the DOM tree. If a handler called
     // event.captureGesture(...) (confirmed) or .captureGestureTentatively
@@ -869,6 +906,7 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     if (gesture && !gesture.tentative) {
       app.activeGesture = gesture.handlers
       app.activeGestureTentative = false
+      app.activeGestureSource = gesture.sourceNode
       // Reset multi-click chain too — a captured gesture interrupts
       // any in-flight click cadence (releasing a drag at the same cell
       // as a prior click shouldn't compose into a double-click).
@@ -881,6 +919,7 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       // a press-without-motion still produces a valid click on release.
       app.activeGesture = gesture.handlers
       app.activeGestureTentative = true
+      app.activeGestureSource = gesture.sourceNode
     }
     // Fresh left press. Detect multi-click HERE (not on release) so the
     // word/line highlight appears immediately and a subsequent drag can
@@ -935,11 +974,13 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
       app.activeGesture = null
       app.activeGestureTentative = false
+      app.activeGestureSource = null
       return
     }
     // Tentative + no motion → drop and fall through to normal release.
     app.activeGesture = null
     app.activeGestureTentative = false
+    app.activeGestureSource = null
   }
   // Release: end the drag even for non-zero button codes. Some terminals
   // encode release with the motion bit or button=3 "no button" (carried

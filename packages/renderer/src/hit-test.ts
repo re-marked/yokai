@@ -43,6 +43,26 @@ function effectiveZ(node: DOMElement): number {
  * via parentNode to find handlers.
  */
 export function hitTest(node: DOMElement, col: number, row: number): DOMElement | null {
+  return hitTestExcluding(node, col, row, null)
+}
+
+/**
+ * Same as `hitTest`, but skips `exclude` and its entire subtree as if
+ * they weren't painted. Use during a captured drag's hover dispatch to
+ * make the dragged element invisible to drop-target detection — without
+ * this, the drag-time z boost on `<Draggable>` makes it the topmost
+ * painted node under the cursor, and `dispatchHover` resolves to the
+ * draggable itself instead of the drop zone underneath.
+ *
+ * Pass `null` for no exclusion (equivalent to `hitTest`).
+ */
+export function hitTestExcluding(
+  node: DOMElement,
+  col: number,
+  row: number,
+  exclude: DOMElement | null,
+): DOMElement | null {
+  if (exclude !== null && node === exclude) return null
   const rect = nodeCache.get(node)
   if (!rect) return null
   const inBounds =
@@ -87,7 +107,7 @@ export function hitTest(node: DOMElement, col: number, row: number): DOMElement 
     // area). Skipping them when out-of-bounds avoids quadratic walks
     // through deep in-flow subtrees that can never contain the click.
     if (!inBounds && childElem.style.position !== 'absolute') continue
-    const hit = hitTest(childElem, col, row)
+    const hit = hitTestExcluding(childElem, col, row, exclude)
     if (hit) return hit
   }
   // Self only matches if the click is actually within our own rect.
@@ -156,12 +176,19 @@ export function dispatchClick(
 
 /**
  * Captured-gesture record returned by dispatchMouseDown. Carries the
- * handlers AND whether the capture is tentative (only commits on
- * motion); see MouseDownEvent.captureGestureTentatively.
+ * handlers, whether the capture is tentative (only commits on motion;
+ * see MouseDownEvent.captureGestureTentatively), and the DOM node that
+ * fired the captureGesture call (the gesture "source"). The source is
+ * used by the App-level coordinator to exclude the dragged element
+ * from drag-time hover hit-testing — without that, the dragged
+ * element's drag-time z boost makes it the topmost painted node under
+ * the cursor and `dispatchHover` resolves to it instead of the drop
+ * zone underneath.
  */
 export type CapturedGesture = {
   handlers: GestureHandlers
   tentative: boolean
+  sourceNode: DOMElement | null
 }
 
 /**
@@ -192,6 +219,7 @@ export function dispatchMouseDown(
   if (!target) return null
 
   const event = new MouseDownEvent(col, row, button)
+  let captureSource: DOMElement | null = null
   while (target) {
     const handler = target._eventHandlers?.onMouseDown as
       | ((event: MouseDownEvent) => void)
@@ -203,13 +231,23 @@ export function dispatchMouseDown(
         event.localRow = row - rect.y
       }
       handler(event)
-      if (event.gestureCaptured) break
+      if (event.gestureCaptured) {
+        // First-call-wins on the capture (see MouseDownEvent), so the
+        // first node that captured is the source. Capture the target at
+        // THIS iteration so we don't reassign across the bubble loop.
+        captureSource = target
+        break
+      }
       if (event.didStopImmediatePropagation()) break
     }
     target = target.parentNode
   }
   if (!event._capturedHandlers) return null
-  return { handlers: event._capturedHandlers, tentative: event._tentative }
+  return {
+    handlers: event._capturedHandlers,
+    tentative: event._tentative,
+    sourceNode: captureSource,
+  }
 }
 
 function scrollBoxWheelStep(node: DOMElement): number {
@@ -301,9 +339,10 @@ export function dispatchHover(
   col: number,
   row: number,
   hovered: Set<DOMElement>,
+  exclude: DOMElement | null = null,
 ): void {
   const next = new Set<DOMElement>()
-  let node: DOMElement | undefined = hitTest(root, col, row) ?? undefined
+  let node: DOMElement | undefined = hitTestExcluding(root, col, row, exclude) ?? undefined
   while (node) {
     const h = node._eventHandlers as EventHandlerProps | undefined
     if (h?.onMouseEnter || h?.onMouseLeave) next.add(node)

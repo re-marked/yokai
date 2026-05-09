@@ -11,8 +11,9 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { type DOMElement, appendChildNode, createNode, setAttribute } from './dom.js'
+import type { EventHandlerProps } from './events/event-handlers.js'
 import { FocusManager } from './focus.js'
-import { dispatchClick } from './hit-test.js'
+import { dispatchClick, dispatchHover, hitTest } from './hit-test.js'
 import { nodeCache } from './node-cache.js'
 
 function setRect(node: DOMElement, x: number, y: number, w: number, h: number): void {
@@ -116,5 +117,143 @@ describe('dispatchClick → click-to-focus', () => {
     dispatchClick(root, 15, 12)
     // Walks up past inner (no tabIndex), finds outer, focuses it.
     expect(focus).toHaveBeenCalledWith(outer)
+  })
+})
+
+// ── hitTest as a public consumer API ─────────────────────────────────
+//
+// hitTest is re-exported from the package index (PR for A20). Consumers
+// inside a captured gesture's onMove handler can call it to resolve
+// "what element is at this cursor right now?" without reinventing
+// hit-testing — the canonical use is drop-target detection during
+// custom drag flows.
+
+describe('hitTest', () => {
+  function root() {
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    return r
+  }
+
+  it('returns the deepest element containing the cursor', () => {
+    const r = root()
+    const outer = createNode('ink-box')
+    setRect(outer, 10, 10, 30, 10)
+    appendChildNode(r, outer)
+    const inner = createNode('ink-box')
+    setRect(inner, 15, 12, 10, 5)
+    appendChildNode(outer, inner)
+
+    expect(hitTest(r, 17, 14)).toBe(inner)
+  })
+
+  it('returns null when the cursor is past the root rect', () => {
+    expect(hitTest(root(), 200, 200)).toBeNull()
+  })
+
+  it('walks up through siblings to find the cell-containing node', () => {
+    const r = root()
+    const outer = createNode('ink-box')
+    setRect(outer, 10, 10, 30, 10)
+    appendChildNode(r, outer)
+    // Cursor lands inside outer's rect but not on any inner child.
+    expect(hitTest(r, 12, 11)).toBe(outer)
+  })
+})
+
+// ── dispatchHover enter/leave diff ───────────────────────────────────
+//
+// Used by the App-level mouse routing AND now (post-A20) called even
+// during captured gestures so drop targets can react to cursor entry.
+// Pure-helper test — drives dispatchHover with a held `hovered` Set
+// across calls and asserts enter/leave fire correctly on diffs.
+
+describe('dispatchHover', () => {
+  it('fires onMouseEnter for newly-hovered nodes', () => {
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    const target = createNode('ink-box')
+    setRect(target, 10, 10, 20, 5)
+    appendChildNode(r, target)
+    const onMouseEnter = vi.fn()
+    target._eventHandlers = { onMouseEnter } as EventHandlerProps
+
+    const hovered = new Set<DOMElement>()
+    dispatchHover(r, 15, 12, hovered)
+    expect(onMouseEnter).toHaveBeenCalledTimes(1)
+    expect(hovered.has(target)).toBe(true)
+  })
+
+  it('fires onMouseLeave when cursor exits the hovered rect', () => {
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    const target = createNode('ink-box')
+    setRect(target, 10, 10, 20, 5)
+    appendChildNode(r, target)
+    const onMouseEnter = vi.fn()
+    const onMouseLeave = vi.fn()
+    target._eventHandlers = { onMouseEnter, onMouseLeave } as EventHandlerProps
+
+    const hovered = new Set<DOMElement>()
+    dispatchHover(r, 15, 12, hovered)
+    dispatchHover(r, 50, 50, hovered) // off the target
+    expect(onMouseLeave).toHaveBeenCalledTimes(1)
+    expect(hovered.has(target)).toBe(false)
+  })
+
+  it('idempotent on same-cell calls (no enter/leave when nothing changed)', () => {
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    const target = createNode('ink-box')
+    setRect(target, 10, 10, 20, 5)
+    appendChildNode(r, target)
+    const onMouseEnter = vi.fn()
+    const onMouseLeave = vi.fn()
+    target._eventHandlers = { onMouseEnter, onMouseLeave } as EventHandlerProps
+
+    const hovered = new Set<DOMElement>()
+    dispatchHover(r, 15, 12, hovered)
+    dispatchHover(r, 15, 12, hovered)
+    dispatchHover(r, 15, 12, hovered)
+    // First call entered. Subsequent same-cell calls dedupe.
+    expect(onMouseEnter).toHaveBeenCalledTimes(1)
+    expect(onMouseLeave).not.toHaveBeenCalled()
+  })
+
+  it('exclude param skips a subtree, hit-test resolves to next-topmost', () => {
+    // Setup mirrors the drag-over-sibling case: an absolute z-boosted
+    // "drag ghost" sits over a sibling drop zone. Without exclusion the
+    // hover hit-tests resolve to the ghost (it's on top); with the
+    // ghost excluded, hover correctly resolves to the drop zone.
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    const dropZone = createNode('ink-box')
+    setRect(dropZone, 10, 10, 30, 10)
+    appendChildNode(r, dropZone)
+    const dropEnter = vi.fn()
+    dropZone._eventHandlers = { onMouseEnter: dropEnter } as EventHandlerProps
+
+    // Drag ghost: absolute, high zIndex, OVER the drop zone.
+    const ghost = createNode('ink-box')
+    ghost.style = { position: 'absolute', zIndex: 100 }
+    setRect(ghost, 15, 12, 5, 3)
+    appendChildNode(r, ghost)
+    const ghostEnter = vi.fn()
+    ghost._eventHandlers = { onMouseEnter: ghostEnter } as EventHandlerProps
+
+    const hovered = new Set<DOMElement>()
+
+    // No exclude: ghost wins (it's on top).
+    dispatchHover(r, 17, 13, hovered)
+    expect(ghostEnter).toHaveBeenCalledTimes(1)
+    expect(dropEnter).not.toHaveBeenCalled()
+
+    // Reset and re-test with ghost excluded — drop zone wins instead.
+    hovered.clear()
+    ghostEnter.mockClear()
+    dropEnter.mockClear()
+    dispatchHover(r, 17, 13, hovered, ghost)
+    expect(ghostEnter).not.toHaveBeenCalled()
+    expect(dropEnter).toHaveBeenCalledTimes(1)
   })
 })
