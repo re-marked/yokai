@@ -865,7 +865,21 @@ export default class Ink {
     // OR a descendant of it, the declared subtree owns the cell —
     // park the cursor. Otherwise something else paints on top — suppress.
     if (target !== null && decl !== null) {
-      if (!isCursorVisibleAt(this.rootNode, decl.node, target.x, target.y)) {
+      // Screen-painted predicate uses the freshly-rendered front frame
+      // (this finalize block runs after the diff). Empty cells can't
+      // occlude — a transparent absolute layout wrapper that didn't
+      // paint anything won't suppress the cursor below it (codex
+      // review on PR #86 / A24).
+      const screen = frame.screen
+      if (
+        !isCursorVisibleAt(
+          this.rootNode,
+          decl.node,
+          target.x,
+          target.y,
+          (c, r) => !isEmptyCellAt(screen, c, r),
+        )
+      ) {
         target = null
       }
     }

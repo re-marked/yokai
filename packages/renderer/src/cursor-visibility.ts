@@ -30,19 +30,40 @@ export function isDescendantOrSelf(node: DOMElement, ancestor: DOMElement): bool
 
 /**
  * True if a cursor declared by `declaredNode` at screen cell (col, row)
- * should be visually rendered. Uses `hitTest` (the renderer's z-aware
- * paint-order resolver) at the cell — if the topmost element is the
- * declarer or a descendant of it, the declarer's subtree owns the
- * cell visually and the cursor should park. Otherwise something else
- * paints on top (modal, tooltip, drag preview) and the cursor must be
- * suppressed to match what the user sees.
+ * should be visually rendered.
+ *
+ * Two-stage check:
+ *
+ * 1. **Cell painted?** — `isCellPainted(col, row)` asks the screen
+ *    buffer whether anything was actually written to the cell this
+ *    frame. An empty cell can't occlude — even if a higher-z layout
+ *    wrapper's rect contains the cell, it didn't paint anything
+ *    visible, so the declarer's subtree (or just blank space) shows
+ *    through and the cursor should render. Without this guard, an
+ *    empty `<Box position="absolute" zIndex={100}>` overlay covering
+ *    the screen would suppress every cursor below it (codex review
+ *    on PR #86).
+ *
+ * 2. **Topmost layout owner is the declarer?** — `hitTest` returns
+ *    the topmost paint-order element whose layout rect contains the
+ *    cell. If it's the declarer or a descendant, the declarer owns
+ *    the cell visually and the cursor parks. Otherwise something
+ *    above the declarer wrote into this cell and the cursor must be
+ *    suppressed to match what the user sees.
+ *
+ * The screen-buffer check via `isCellPainted` is provided by the
+ * caller (ink.tsx wraps `screen.isEmptyCellAt`) so this module stays
+ * dependency-light and unit-testable against stubbed cells.
  */
 export function isCursorVisibleAt(
   root: DOMElement,
   declaredNode: DOMElement,
   col: number,
   row: number,
+  isCellPainted: (col: number, row: number) => boolean,
 ): boolean {
+  // Empty cells can never occlude. Cursor renders.
+  if (!isCellPainted(col, row)) return true
   const hit = hitTest(root, col, row)
   if (hit === null) return false
   return isDescendantOrSelf(hit, declaredNode)

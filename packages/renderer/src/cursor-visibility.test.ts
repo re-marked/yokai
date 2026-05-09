@@ -52,6 +52,15 @@ describe('isDescendantOrSelf', () => {
 })
 
 describe('isCursorVisibleAt', () => {
+  // Helpers — the screen-painted predicate is provided by the caller.
+  // Tests pass a stub that either reports all cells painted (modal has
+  // background / border / text) or all cells empty (transparent layout
+  // wrapper).
+  const allPainted = () => true
+  const allEmpty = () => false
+  const paintedAt = (cells: Array<[number, number]>) => (c: number, r: number) =>
+    cells.some(([cx, cy]) => cx === c && cy === r)
+
   it('returns true when the declared cell is on the declared node', () => {
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
@@ -60,13 +69,10 @@ describe('isCursorVisibleAt', () => {
     appendChildNode(root, input)
 
     // Cursor declared at input's caret cell (15, 12) — input owns it.
-    expect(isCursorVisibleAt(root, input, 15, 12)).toBe(true)
+    expect(isCursorVisibleAt(root, input, 15, 12, allPainted)).toBe(true)
   })
 
   it('returns true when the declared cell is on a descendant of the declared node', () => {
-    // Common case: declaration attached to a Box that wraps a TextInput;
-    // the actual caret cell lands on the inner Text. Both are visually
-    // owned by the declared subtree.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
     const wrapper = createNode('ink-box')
@@ -76,32 +82,70 @@ describe('isCursorVisibleAt', () => {
     setRect(innerText, 12, 11, 20, 1)
     appendChildNode(wrapper, innerText)
 
-    expect(isCursorVisibleAt(root, wrapper, 15, 11)).toBe(true)
+    expect(isCursorVisibleAt(root, wrapper, 15, 11, allPainted)).toBe(true)
   })
 
   it('returns FALSE when a higher-z modal paints over the declared cell (A24 repro)', () => {
-    // Background TextInput-like Box declares the cursor.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
     const input = createNode('ink-box')
     setRect(input, 10, 10, 30, 5)
     appendChildNode(root, input)
 
-    // Modal on top, absolute + zIndex, COVERING the cursor cell.
+    // Modal on top, absolute + zIndex, COVERING the cursor cell, AND
+    // it actually painted (background/border/text). Cursor suppressed.
     const modal = createNode('ink-box')
     modal.style = { position: 'absolute', zIndex: 100 }
     setRect(modal, 5, 5, 50, 20)
     appendChildNode(root, modal)
 
-    // Cursor declared at (15, 12) — inside both rects, but modal paints
-    // on top with higher z. Without suppression the cursor would render
-    // through the modal frame; with suppression it goes away.
-    expect(isCursorVisibleAt(root, input, 15, 12)).toBe(false)
+    expect(isCursorVisibleAt(root, input, 15, 12, allPainted)).toBe(false)
+  })
+
+  it('returns TRUE when a transparent layout-only Box overlays the cell (codex review)', () => {
+    // The codex P2: an empty absolute Box with no background / no border
+    // / no text covers the input's cell at the layout level but never
+    // wrote to the screen. hit-test resolves to the layout Box, but the
+    // cell's screen contents are blank → NOT occluded → cursor visible.
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 100, 100)
+    const input = createNode('ink-box')
+    setRect(input, 10, 10, 30, 5)
+    appendChildNode(root, input)
+
+    const transparentOverlay = createNode('ink-box')
+    transparentOverlay.style = { position: 'absolute', zIndex: 100 }
+    setRect(transparentOverlay, 0, 0, 100, 100)
+    appendChildNode(root, transparentOverlay)
+
+    // Cell at (15, 12) is empty in the screen buffer (overlay never
+    // painted). isCellPainted returns false → suppression skipped →
+    // cursor visible.
+    expect(isCursorVisibleAt(root, input, 15, 12, allEmpty)).toBe(true)
+  })
+
+  it('mixed: overlay only paints part of its rect — cursor under painted region suppressed, under empty region visible', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 100, 100)
+    const input = createNode('ink-box')
+    setRect(input, 10, 10, 50, 5)
+    appendChildNode(root, input)
+
+    // Overlay covers the input area at the layout level; in the screen
+    // buffer it actually painted only at (20, 12) — say, a single
+    // glyph. The other cells are blank (consumer used it as a positioning
+    // wrapper around a small visible element).
+    const overlay = createNode('ink-box')
+    overlay.style = { position: 'absolute', zIndex: 100 }
+    setRect(overlay, 10, 10, 50, 5)
+    appendChildNode(root, overlay)
+
+    const painted = paintedAt([[20, 12]])
+    expect(isCursorVisibleAt(root, input, 20, 12, painted)).toBe(false) // painted cell → occluded
+    expect(isCursorVisibleAt(root, input, 15, 12, painted)).toBe(true) // empty cell → visible
   })
 
   it('returns true when the modal covers a different cell than the cursor', () => {
-    // Negative case: modal exists but doesn't actually cover the cursor
-    // cell. Cursor stays visible.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
     const input = createNode('ink-box')
@@ -109,17 +153,13 @@ describe('isCursorVisibleAt', () => {
     appendChildNode(root, input)
     const modal = createNode('ink-box')
     modal.style = { position: 'absolute', zIndex: 100 }
-    setRect(modal, 50, 50, 30, 10) // off to the side
+    setRect(modal, 50, 50, 30, 10)
     appendChildNode(root, modal)
 
-    expect(isCursorVisibleAt(root, input, 15, 12)).toBe(true)
+    expect(isCursorVisibleAt(root, input, 15, 12, allPainted)).toBe(true)
   })
 
   it('returns true when the declared cell is inside a focused TextInput inside the modal', () => {
-    // Modal on top contains its own focused input. The DECLARED node IS
-    // that inner input (its useDeclaredCursor wins last-write-wins).
-    // hit-test at the cell returns the inner input → descendant of itself →
-    // visible. The bug never manifests because the declared subtree wins.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
     const bgInput = createNode('ink-box')
@@ -135,12 +175,7 @@ describe('isCursorVisibleAt', () => {
     setRect(modalInput, 15, 15, 30, 5)
     appendChildNode(modal, modalInput)
 
-    // Cursor declared at modalInput's caret. Modal paints on top with
-    // high z, but the inner input is a descendant of the modal — so
-    // hit-test at the cell returns the inner input (or modal itself,
-    // both descendants of the modal subtree). The declared node is
-    // modalInput; hit must be modalInput or a descendant of modalInput.
-    expect(isCursorVisibleAt(root, modalInput, 17, 16)).toBe(true)
+    expect(isCursorVisibleAt(root, modalInput, 17, 16, allPainted)).toBe(true)
   })
 
   it('returns false when the cell is off any rendered element', () => {
@@ -150,13 +185,10 @@ describe('isCursorVisibleAt', () => {
     setRect(input, 10, 10, 30, 5)
     appendChildNode(root, input)
 
-    // Cursor declared way outside any rendered rect.
-    expect(isCursorVisibleAt(root, input, 200, 200)).toBe(false)
+    expect(isCursorVisibleAt(root, input, 200, 200, allPainted)).toBe(false)
   })
 
   it('returns true for a sibling that has higher z but DOES NOT cover the cursor cell', () => {
-    // Edge: another absolute z=100 sibling exists but its rect doesn't
-    // contain the cursor. hit-test must resolve to the declared subtree.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 100, 100)
     const input = createNode('ink-box')
@@ -167,6 +199,6 @@ describe('isCursorVisibleAt', () => {
     setRect(otherModal, 60, 60, 30, 10)
     appendChildNode(root, otherModal)
 
-    expect(isCursorVisibleAt(root, input, 15, 12)).toBe(true)
+    expect(isCursorVisibleAt(root, input, 15, 12, allPainted)).toBe(true)
   })
 })
