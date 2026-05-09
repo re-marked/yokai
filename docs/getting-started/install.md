@@ -6,15 +6,18 @@ Install yokai in a consumer project.
 
 | Package | Version |
 |---------|---------|
-| `react` | `^19.2.5` |
+| `react` | `>=19.0.0` |
+| `react-reconciler` | `>=0.33.0` |
 | `node`  | `>=22`  |
+
+`react-reconciler` is required at runtime (the renderer wires React's commit phase through it directly, see `packages/renderer/src/reconciler.ts`). pnpm doesn't auto-install peer deps and npm only installs them on a clean install — always pass both peers to your install command, or pin them in your `package.json`.
 
 ## From npm (canonical)
 
 ```sh
-pnpm add @yokai-tui/renderer react
+pnpm add @yokai-tui/renderer react react-reconciler
 # or
-npm install @yokai-tui/renderer react
+npm install @yokai-tui/renderer react react-reconciler
 ```
 
 `@yokai-tui/shared` is pulled in transitively. Add it explicitly only if you import its symbols directly.
@@ -29,7 +32,8 @@ If you prefer pinning to source instead of npm:
 {
   "dependencies": {
     "@yokai-tui/renderer": "github:re-marked/yokai#v0.7.1",
-    "react": "^19.2.5"
+    "react": "^19.2.5",
+    "react-reconciler": "^0.33.0"
   }
 }
 ```

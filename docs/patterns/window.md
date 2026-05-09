@@ -118,7 +118,15 @@ render(<App />)
 - **Different titlebar content**: replace the `<Text dim>` with breadcrumbs, tab bar, status indicators, etc. As long as one element captures the close-or-equivalent action via `onMouseDown` + `e.captureGesture`, the rest can stay clickable.
 - **Multiple windows**: render N `<Draggable>` siblings. Each owns its own z-index (Draggable bumps `persistedZ` on press for raise-on-press). The most-recently-pressed window stays in front of the others.
 - **Constrained drag**: pass `bounds={{ width, height }}` so the window can't be dragged past viewport edges. Useful when the WM should keep windows reachable.
-- **Modal mode**: combine with the [Modal](./modal.md) pattern's backdrop — render a full-viewport `<Box position="absolute" backgroundColor="black" zIndex={100}>` behind the window's `<Draggable zIndex={101}>`.
+- **Modal mode**: combine with the [Modal](./modal.md) pattern's backdrop. Note that `<Draggable>` owns its own `zIndex` internally (it bumps `persistedZ` on press, starting around 10 and growing), so passing `zIndex` as a prop is ignored. To put a Draggable above a backdrop, give the BACKDROP a low absolute `zIndex` (e.g. `zIndex={1}`) and let the Draggable's natural press-bumped z float above it. Pressing the window once bumps it well above any low backdrop value:
+  ```tsx
+  {/* Backdrop sits at z=1; press-bumped Draggable lives at z >= 10 */}
+  <Box position="absolute" top={0} left={0} width="100%" height="100%" backgroundColor="black" zIndex={1} />
+  <Draggable initialPos={...} width={W} height={H} borderStyle="single">
+    {/* window content */}
+  </Draggable>
+  ```
+  If you need a guaranteed-stacking ordering without relying on press-bump, track a related issue on yokai for an explicit `baseZIndex` prop on Draggable.
 - **Resizable corners**: not supported in this interim pattern. For resize, you'd compose `<Resizable>` inside `<Draggable>`, but the two don't currently combine cleanly (drag math vs. resize math fight over the rect). Tracked as part of the `<Window>` primitive (issue #56).
 
 ## Known caveats
