@@ -175,12 +175,12 @@ export function dispatchClick(
 }
 
 /**
- * Captured-gesture record returned by dispatchMouseDown. Carries the
- * handlers, whether the capture is tentative (only commits on motion;
- * see MouseDownEvent.captureGestureTentatively), and the DOM node that
- * fired the captureGesture call (the gesture "source"). The source is
- * used by the App-level coordinator to exclude the dragged element
- * from drag-time hover hit-testing — without that, the dragged
+ * Captured-gesture record returned inside MouseDownDispatch. Carries
+ * the handlers, whether the capture is tentative (only commits on
+ * motion; see MouseDownEvent.captureGestureTentatively), and the DOM
+ * node that fired the captureGesture call (the gesture "source"). The
+ * source is used by the App-level coordinator to exclude the dragged
+ * element from drag-time hover hit-testing — without that, the dragged
  * element's drag-time z boost makes it the topmost painted node under
  * the cursor and `dispatchHover` resolves to it instead of the drop
  * zone underneath.
@@ -192,62 +192,108 @@ export type CapturedGesture = {
 }
 
 /**
+ * What `dispatchMouseDown` reports back to the App-level coordinator.
+ *
+ * `gesture` carries the captured handlers if any node called
+ * captureGesture / captureGestureTentatively, or null. Existing
+ * semantics — see CapturedGesture.
+ *
+ * `clickable` is set when ANY node in the press's bubble chain (the
+ * deepest hit + every ancestor up to root) has an `onClick` handler
+ * attached. Used by `App.handleMouseEvent` to classify the press as
+ * click-intent vs. select-intent so that pressing on a Box that
+ * declares `onClick` (without also calling captureGesture) doesn't
+ * start a text-selection drag — the press is meant to be a click,
+ * accidental motion shouldn't escalate it. See computePressIntent.
+ *
+ * Detection is independent of dispatch flow control: even when an
+ * onMouseDown handler captures a gesture or calls
+ * stopImmediatePropagation, the walk continues to enumerate `onClick`
+ * handlers further up the tree. `gesture` always wins in
+ * computePressIntent so the extra signal is only consulted when no
+ * gesture was captured, but reporting it accurately keeps the
+ * function easy to reason about.
+ */
+export type MouseDownDispatch = {
+  gesture: CapturedGesture | null
+  clickable: boolean
+}
+
+/**
  * Hit-test the root at (col, row) and bubble a MouseDownEvent from the
  * deepest containing node up through parentNode. Only nodes with an
- * onMouseDown handler fire. Stops when a handler calls
- * stopImmediatePropagation() or captures the gesture. Capture is
- * leaf-first so descendants cannot be overwritten by ancestors.
+ * onMouseDown handler fire. onMouseDown dispatch stops when a handler
+ * calls stopImmediatePropagation() or captures the gesture; gesture
+ * capture is leaf-first so descendants cannot be overwritten by
+ * ancestors. The walk itself does NOT stop — it continues past the
+ * dispatch terminator to detect `onClick` handlers anywhere in the
+ * chain (the App's press-intent classifier consumes that signal).
  *
- * Returns a CapturedGesture if any handler called captureGesture or
- * captureGestureTentatively, or null otherwise. The caller (App) is
- * responsible for storing the handlers as the active gesture, applying
- * the tentative-vs-confirmed semantics, and routing subsequent motion
- * + release events.
+ * Returns the dispatch result (always a value, never null): `gesture`
+ * is the CapturedGesture if any handler called captureGesture or
+ * captureGestureTentatively, otherwise null; `clickable` is true if
+ * any node in the bubble chain has an onClick handler. The caller
+ * (App) is responsible for storing the gesture handlers, applying the
+ * tentative-vs-confirmed semantics, routing subsequent motion +
+ * release events, and reading `clickable` to derive press intent.
  *
  * Unlike dispatchClick, this does NOT trigger click-to-focus. Focus
  * still moves on click (i.e. on release after a non-drag press), so
  * the focus side-effect remains tied to the user's intent of "I
  * pressed and released here without dragging."
+ *
+ * When the press hits no rendered element (cursor outside any rect),
+ * returns `{ gesture: null, clickable: false }` and dispatches
+ * nothing.
  */
 export function dispatchMouseDown(
   root: DOMElement,
   col: number,
   row: number,
   button: number,
-): CapturedGesture | null {
-  let target: DOMElement | undefined = hitTest(root, col, row) ?? undefined
-  if (!target) return null
+): MouseDownDispatch {
+  const hit = hitTest(root, col, row)
+  if (!hit) return { gesture: null, clickable: false }
 
   const event = new MouseDownEvent(col, row, button)
   let captureSource: DOMElement | null = null
+  let clickable = false
+  // `dispatching` flips to false the moment a handler captures or stops
+  // propagation; the walk keeps going to harvest `onClick` handlers up
+  // to the root, but no further onMouseDown handlers fire.
+  let dispatching = true
+  let target: DOMElement | undefined = hit
   while (target) {
-    const handler = target._eventHandlers?.onMouseDown as
-      | ((event: MouseDownEvent) => void)
-      | undefined
-    if (handler) {
+    const handlers = target._eventHandlers
+    if (handlers?.onClick) clickable = true
+    if (dispatching && handlers?.onMouseDown) {
+      const handler = handlers.onMouseDown as (event: MouseDownEvent) => void
       const rect = nodeCache.get(target)
       if (rect) {
         event.localCol = col - rect.x
         event.localRow = row - rect.y
       }
       handler(event)
-      if (event.gestureCaptured) {
+      if (event.gestureCaptured && captureSource === null) {
         // First-call-wins on the capture (see MouseDownEvent), so the
-        // first node that captured is the source. Capture the target at
-        // THIS iteration so we don't reassign across the bubble loop.
+        // first node that captured is the source. Record it at THIS
+        // iteration before any further bubbling.
         captureSource = target
-        break
+        dispatching = false
+      } else if (event.didStopImmediatePropagation()) {
+        dispatching = false
       }
-      if (event.didStopImmediatePropagation()) break
     }
     target = target.parentNode
   }
-  if (!event._capturedHandlers) return null
-  return {
-    handlers: event._capturedHandlers,
-    tentative: event._tentative,
-    sourceNode: captureSource,
-  }
+  const gesture: CapturedGesture | null = event._capturedHandlers
+    ? {
+        handlers: event._capturedHandlers,
+        tentative: event._tentative,
+        sourceNode: captureSource,
+      }
+    : null
+  return { gesture, clickable }
 }
 
 function scrollBoxWheelStep(node: DOMElement): number {

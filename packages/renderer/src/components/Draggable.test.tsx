@@ -418,7 +418,7 @@ describe('handleDragPress', () => {
     }
 
     const captured = dispatchMouseDown(root, 2, 2, 0)
-    expect(captured?.handlers.onMove).toBe(childMove)
+    expect(captured.gesture?.handlers.onMove).toBe(childMove)
     expect(deps.setPersistedZ).not.toHaveBeenCalled()
   })
 })

@@ -7,7 +7,7 @@ import type { KeyboardEvent } from '../events/keyboard-event'
 import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
 import type { FocusManager } from '../focus'
-import type { CapturedGesture } from '../hit-test'
+import type { MouseDownDispatch } from '../hit-test'
 import {
   INITIAL_STATE,
   type ParsedInput,
@@ -76,10 +76,12 @@ type Props = {
   // gates on altScreenActive).
   readonly onClickAt: (col: number, row: number) => boolean
   // Dispatch a mousedown at (col, row) — hit-tests the DOM tree and
-  // bubbles onMouseDown handlers. Returns the GestureHandlers if any
-  // handler called event.captureGesture(...) (or .captureGestureTentatively),
-  // or null. Returns null (no-op) outside fullscreen.
-  readonly onMouseDownAt: (col: number, row: number, button: number) => CapturedGesture | null
+  // bubbles onMouseDown handlers. Returns the dispatch result: `gesture`
+  // is the captured handlers (confirmed or tentative) if any handler
+  // called captureGesture, else null; `clickable` is true if any node
+  // in the bubble chain has an onClick handler. Outside fullscreen
+  // returns `{ gesture: null, clickable: false }` (no-op).
+  readonly onMouseDownAt: (col: number, row: number, button: number) => MouseDownDispatch
   // Dispatch hover (onMouseEnter/onMouseLeave) as the pointer moves over
   // DOM elements. Called for mode-1003 motion events with no button held.
   // No-op outside fullscreen (Ink.dispatchHover gates on altScreenActive).
@@ -902,7 +904,11 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     // works on release-without-motion. The first motion event promotes
     // tentative→confirmed and cancels the in-progress selection (see
     // motion handler above).
-    const gesture = app.props.onMouseDownAt(col, row, m.button)
+    // C2 plumbing: dispatch returns { gesture, clickable }; only the
+    // gesture half is consumed at this commit. C3 will read `clickable`
+    // to derive press intent and route the click-vs-select fork.
+    const dispatch = app.props.onMouseDownAt(col, row, m.button)
+    const gesture = dispatch.gesture
     if (gesture && !gesture.tentative) {
       app.activeGesture = gesture.handlers
       app.activeGestureTentative = false

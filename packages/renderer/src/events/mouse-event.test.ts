@@ -114,25 +114,25 @@ describe('MouseDownEvent', () => {
 })
 
 describe('dispatchMouseDown', () => {
-  it('returns null when nothing is under the cursor', () => {
+  it('returns gesture=null, clickable=false when nothing is under the cursor', () => {
     const root = createNode('ink-root')
     setRect(root, 0, 0, 10, 5)
-    expect(dispatchMouseDown(root, 100, 100, 0)).toBeNull()
+    expect(dispatchMouseDown(root, 100, 100, 0)).toEqual({ gesture: null, clickable: false })
   })
 
-  it('returns null when the hit element has no onMouseDown handler', () => {
+  it('returns gesture=null when the hit element has no onMouseDown handler', () => {
     const root = createNode('ink-root')
     setRect(root, 0, 0, 10, 5)
     const child = createNode('ink-box')
     appendChildNode(root, child)
     setRect(child, 0, 0, 5, 5)
-    expect(dispatchMouseDown(root, 2, 2, 0)).toBeNull()
+    expect(dispatchMouseDown(root, 2, 2, 0).gesture).toBeNull()
   })
 
-  it('returns null when the handler runs but does not call captureGesture', () => {
+  it('returns gesture=null when the handler runs but does not call captureGesture', () => {
     // Handler ran (we can verify via the spy) but didn't capture →
-    // dispatch returns null and the App falls through to default
-    // selection behavior.
+    // dispatch returns gesture=null and the App falls through to
+    // default selection behavior.
     const root = createNode('ink-root')
     setRect(root, 0, 0, 10, 5)
     const child = createNode('ink-box')
@@ -143,7 +143,7 @@ describe('dispatchMouseDown', () => {
 
     const result = dispatchMouseDown(root, 2, 2, 0)
     expect(handler).toHaveBeenCalledTimes(1)
-    expect(result).toBeNull()
+    expect(result.gesture).toBeNull()
   })
 
   it('returns the captured handlers when the handler calls captureGesture', () => {
@@ -159,8 +159,8 @@ describe('dispatchMouseDown', () => {
     }
 
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.handlers.onMove).toBe(onMove)
-    expect(result?.handlers.onUp).toBe(onUp)
+    expect(result.gesture?.handlers.onMove).toBe(onMove)
+    expect(result.gesture?.handlers.onUp).toBe(onUp)
   })
 
   it('bubbles to ancestors when the deepest hit has no handler', () => {
@@ -197,7 +197,7 @@ describe('dispatchMouseDown', () => {
     expect(order).toEqual(['child', 'root'])
   })
 
-  it('stops bubbling after the first captured gesture', () => {
+  it('stops onMouseDown dispatch after the first captured gesture', () => {
     const root = createNode('ink-root')
     setRect(root, 0, 0, 10, 5)
     const child = createNode('ink-box')
@@ -214,7 +214,7 @@ describe('dispatchMouseDown', () => {
 
     const result = dispatchMouseDown(root, 2, 2, 0)
     expect(rootHandler).not.toHaveBeenCalled()
-    expect(result?.handlers.onMove).toBe(childMove)
+    expect(result.gesture?.handlers.onMove).toBe(childMove)
   })
 
   it('stops bubbling when a handler calls stopImmediatePropagation', () => {
@@ -254,7 +254,7 @@ describe('dispatchMouseDown', () => {
 
     const result = dispatchMouseDown(root, 2, 2, 0)
     expect(rootHandler).not.toHaveBeenCalled()
-    expect(result?.handlers.onMove).toBe(onMove)
+    expect(result.gesture?.handlers.onMove).toBe(onMove)
   })
 
   it('CapturedGesture carries tentative=false for confirmed captures', () => {
@@ -264,7 +264,7 @@ describe('dispatchMouseDown', () => {
       onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
     }
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.tentative).toBe(false)
+    expect(result.gesture?.tentative).toBe(false)
   })
 
   it('CapturedGesture carries tentative=true for tentative captures', () => {
@@ -274,7 +274,7 @@ describe('dispatchMouseDown', () => {
       onMouseDown: (e: MouseDownEvent) => e.captureGestureTentatively({ onMove: vi.fn() }),
     }
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.tentative).toBe(true)
+    expect(result.gesture?.tentative).toBe(true)
   })
 
   it('CapturedGesture carries the sourceNode that fired captureGesture', () => {
@@ -291,7 +291,7 @@ describe('dispatchMouseDown', () => {
       onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
     }
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.sourceNode).toBe(child)
+    expect(result.gesture?.sourceNode).toBe(child)
   })
 
   it('CapturedGesture sourceNode reflects the FIRST capturer (descendant beats ancestor)', () => {
@@ -309,7 +309,101 @@ describe('dispatchMouseDown', () => {
       onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
     }
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.sourceNode).toBe(child)
+    expect(result.gesture?.sourceNode).toBe(child)
+  })
+
+  describe('clickable detection', () => {
+    // The classifier in App.handleMouseEvent uses `clickable` to decide
+    // whether to treat a non-capturing press as click-intent (suppress
+    // selection) or select-intent (default). These tests cover the
+    // ground-truth signal that classifier consumes.
+
+    it('clickable=false when no node in the chain has onClick', () => {
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      const child = createNode('ink-box')
+      appendChildNode(root, child)
+      setRect(child, 0, 0, 5, 5)
+      expect(dispatchMouseDown(root, 2, 2, 0).clickable).toBe(false)
+    })
+
+    it('clickable=true when the deepest hit has onClick', () => {
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      const child = createNode('ink-box')
+      appendChildNode(root, child)
+      setRect(child, 0, 0, 5, 5)
+      child._eventHandlers = { onClick: vi.fn() }
+      expect(dispatchMouseDown(root, 2, 2, 0).clickable).toBe(true)
+    })
+
+    it('clickable=true when an ancestor has onClick (bubbles like dispatchClick)', () => {
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      const child = createNode('ink-box')
+      appendChildNode(root, child)
+      setRect(child, 0, 0, 5, 5)
+      const grandchild = createNode('ink-box')
+      appendChildNode(child, grandchild)
+      setRect(grandchild, 1, 1, 2, 2)
+      // onClick is on the root only — clickable should still be true
+      // for a press on the deepest descendant. Mirrors how dispatchClick
+      // bubbles up the parent chain.
+      root._eventHandlers = { onClick: vi.fn() }
+      expect(dispatchMouseDown(root, 2, 2, 0).clickable).toBe(true)
+    })
+
+    it('clickable=true even when an onMouseDown handler captured the gesture', () => {
+      // Edge case: captureGesture stops onMouseDown dispatch but the
+      // walk continues to detect onClick handlers above — keeps the
+      // signal accurate regardless of dispatch flow control.
+      // computePressIntent always prefers gesture over clickable so
+      // this is moot for behavior, but keeping the field truthful
+      // makes the function easier to reason about and prevents
+      // a future caller from being misled.
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      const child = createNode('ink-box')
+      appendChildNode(root, child)
+      setRect(child, 0, 0, 5, 5)
+      root._eventHandlers = { onClick: vi.fn() }
+      child._eventHandlers = {
+        onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
+      }
+      const result = dispatchMouseDown(root, 2, 2, 0)
+      expect(result.gesture).not.toBeNull()
+      expect(result.clickable).toBe(true)
+    })
+
+    it('clickable=true when an ancestor has onClick AND a closer ancestor stopped propagation', () => {
+      // stopImmediatePropagation halts onMouseDown dispatch but does
+      // NOT halt clickable detection — the walk continues looking for
+      // onClick handlers further up. Keeps clickable a property of the
+      // tree at this point, not of the dispatch flow.
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      const middle = createNode('ink-box')
+      appendChildNode(root, middle)
+      setRect(middle, 0, 0, 5, 5)
+      const child = createNode('ink-box')
+      appendChildNode(middle, child)
+      setRect(child, 0, 0, 3, 3)
+      child._eventHandlers = {
+        onMouseDown: (e: MouseDownEvent) => e.stopImmediatePropagation(),
+      }
+      root._eventHandlers = { onClick: vi.fn() }
+      expect(dispatchMouseDown(root, 1, 1, 0).clickable).toBe(true)
+    })
+
+    it('clickable=false when the press hits no rendered element', () => {
+      const root = createNode('ink-root')
+      setRect(root, 0, 0, 10, 5)
+      root._eventHandlers = { onClick: vi.fn() }
+      // (100, 100) is outside the root rect → hit returns null →
+      // dispatch returns clickable=false even though root has onClick.
+      // Matches dispatchClick's behavior: no hit, no click.
+      expect(dispatchMouseDown(root, 100, 100, 0).clickable).toBe(false)
+    })
   })
 
   it('passes (col, row, button) into the event for handlers to read', () => {
