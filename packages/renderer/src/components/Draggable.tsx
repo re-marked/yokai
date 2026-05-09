@@ -37,10 +37,11 @@ export type DragInfo = {
 
 export type DraggableProps = Except<
   BoxProps,
-  // We own placement and the press handler. Letting the user override
-  // `position` would break drag math; overriding `top`/`left` would
-  // fight the internal pos state every render.
-  'position' | 'top' | 'left' | 'onMouseDown'
+  // We own placement. Letting the user override `position` would break
+  // drag math; overriding `top`/`left` would fight the internal pos
+  // state every render. `onMouseDown` IS forwarded — see the prop's own
+  // docstring below for the chain semantics.
+  'position' | 'top' | 'left'
 > & {
   /**
    * Where the draggable sits before the user moves it. Cell offsets
@@ -98,6 +99,29 @@ export type DraggableProps = Except<
   dragData?: unknown
   /** Children render inside the draggable Box; runtime already forwards them via boxProps. */
   children?: React.ReactNode
+  /**
+   * Optional consumer-supplied press handler. Fires synchronously BEFORE
+   * Draggable's internal drag wiring runs — useful for "raise window
+   * on press" / "focus this widget on click" / app-level analytics that
+   * want to observe every press regardless of whether it becomes a
+   * drag.
+   *
+   * The consumer's handler can claim the gesture by calling
+   * `event.captureGesture(...)` itself. captureGesture is first-call-
+   * wins (see MouseDownEvent docs), so a consumer that captures here
+   * preempts Draggable — Draggable's internal captureGesture call
+   * becomes a no-op, no drag will start, and the consumer owns the
+   * subsequent motion + release events.
+   *
+   * Side effects that fire BEFORE the consumer's gesture decision:
+   * none. Side effects that fire AFTER (regardless of preemption):
+   * the press-time z-index bump (raise on press) — pressing always
+   * raises, even when the consumer redirects the gesture, because
+   * "press" is a UI signal independent of "is this becoming a drag."
+   * To suppress all press behavior including the z-bump, set
+   * `disabled` instead.
+   */
+  onMouseDown?: (event: MouseDownEvent) => void
 }
 
 /**
@@ -137,6 +161,7 @@ export default function Draggable({
   onDragStart,
   onDrag,
   onDragEnd,
+  onMouseDown: userOnMouseDown,
   dragData,
   ...boxProps
 }: DraggableProps): React.ReactNode {
@@ -179,8 +204,28 @@ export default function Draggable({
   widthRef.current = typeof boxProps.width === 'number' ? boxProps.width : undefined
   heightRef.current = typeof boxProps.height === 'number' ? boxProps.height : undefined
 
+  // Stash the consumer's onMouseDown in a ref so handleMouseDown's
+  // useCallback identity stays stable across renders that only change
+  // the user handler — same pattern as the onDragStart/onDrag/onDragEnd
+  // refs above. Also lets the handler read the freshest closure each
+  // press without the parent having to memoize.
+  const userOnMouseDownRef = useRef(userOnMouseDown)
+  userOnMouseDownRef.current = userOnMouseDown
+
   const handleMouseDown = useCallback(
     (e: MouseDownEvent): void => {
+      // Run consumer's onMouseDown FIRST. They may call
+      // event.captureGesture(...) themselves to claim the press —
+      // captureGesture is first-call-wins (see MouseDownEvent docs and
+      // PR #81 / A21), so a consumer that captures here preempts
+      // Draggable's internal capture below.
+      //
+      // Either way, handleDragPress runs after — its own captureGesture
+      // call no-ops if the consumer already captured, but its
+      // press-time z-bump (raise on press) still fires unconditionally.
+      // That matches the documented prop contract: "press is press."
+      // Consumers who want NO press behavior set `disabled` instead.
+      userOnMouseDownRef.current?.(e)
       handleDragPress(e, {
         startPos: pos,
         disabled,

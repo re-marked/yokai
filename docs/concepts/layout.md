@@ -50,6 +50,38 @@ Absolute children are removed from flow and positioned against the nearest posit
 
 `overflow: 'hidden'` clips children to the container's content box. `overflow: 'scroll'` additionally constrains the container's measured size against its children, enabling `<ScrollBox>` virtualization. Per-axis variants `overflowX` / `overflowY` exist; layout uses the union.
 
+## Layout pitfalls
+
+### Chrome rows disappear when content has large natural size
+
+`<Box>` defaults to `flexShrink: 1` (matches CSS-flex spec). In a container with both a small "chrome" element (titlebar, footer, status row) and a large content area, yoga distributes any deficit proportionally to `size × flexShrink`. The chrome element is the small one — it shrinks faster, often to zero, and disappears.
+
+```tsx
+// ❌ Titlebar silently disappears when content's natural width is large.
+<Box flexDirection="column" height="100%">
+  <Box height={1}>
+    <Text>my app</Text>
+  </Box>
+  <ChatLog />  {/* huge natural content */}
+</Box>
+```
+
+The titlebar's `Box` inherits `flexShrink: 1`. The chat log's natural size dominates the deficit calculation; yoga shrinks the chrome to zero rather than push the chat log past viewport. From the consumer's side it looks like the titlebar wasn't rendered.
+
+```tsx
+// ✅ Pin the chrome row out of the shrink pool.
+<Box flexDirection="column" height="100%">
+  <Box height={1} flexShrink={0}>
+    <Text>my app</Text>
+  </Box>
+  <ChatLog />
+</Box>
+```
+
+Apply this on any element that should always render at its natural size — title bars, status bars, footers, fixed-width sidebars, button rows, search affordances. A good heuristic: if collapsing the element would make the UI broken or unrecognizable, it should be `flexShrink={0}`.
+
+The same pitfall applies to `<Text>` (which yokai's component overlays a flex layer on; see [Text component docs](../components/text.md)). When a wrapping `<Text>` sits in a container with a larger sibling, yoga can shrink it below natural width, wrapping the content to a 2nd line that's invisible if the parent has fixed `height: 1`. Same fix: `flexShrink={0}` on the wrapping container.
+
 ## See also
 - [Rendering](../concepts/rendering.md)
 - [Box](../components/box.md)

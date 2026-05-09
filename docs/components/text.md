@@ -44,6 +44,8 @@ import { Text } from '@yokai-tui/renderer'
 </Text>
 ```
 
+Nested `<Text>` is for STYLE SPANS, not for layout. The inner Text becomes `ink-virtual-text` with no Yoga node — the entire nested tree is one flex leaf. For independent layout (each fragment as its own flex child with `gap`, individual `flexShrink`, etc.), use sibling `<Text>` inside a `<Box flexDirection="row">`. See [text concepts: Nested vs sibling Text](../concepts/text.md#nested-vs-sibling-text) for the full explanation and known-issue caveat.
+
 ## Behavior
 
 - String / number children may only appear inside `<Text>`; the reconciler rejects them elsewhere.
