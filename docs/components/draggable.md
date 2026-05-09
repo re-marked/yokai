@@ -51,6 +51,7 @@ Gesture capture suppresses `onClick` for the press that initiated the drag. A pr
 ## Related
 - [`DropTarget`](./drop-target.md)
 - [`Box`](./box.md)
+- [Window pattern](../patterns/window.md) — interim recipe for building draggable window-shaped UIs on top of `<Draggable>`
 
 ## Source
 [`packages/renderer/src/components/Draggable.tsx`](../../packages/renderer/src/components/Draggable.tsx)
