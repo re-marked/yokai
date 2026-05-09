@@ -817,6 +817,14 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
             clearSelection(sel)
             app.props.onSelectionChange()
           }
+          // Reset the multi-click chain. The tentative press updated
+          // clickCount on press (so click dispatch on release-without-
+          // motion works); now that motion proved this is a drag, those
+          // multi-click bits would otherwise count this press toward the
+          // next quick click, dispatching onMultiClick instead of
+          // onClick. Mirror what confirmed captures do at the press
+          // path.
+          app.clickCount = 0
         }
         app.activeGesture.onMove?.(new MouseMoveEvent(col, row, m.button))
         return
