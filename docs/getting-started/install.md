@@ -64,6 +64,50 @@ pnpm build
 
 Subsequent `pnpm build` runs are incremental.
 
+## Local-checkout development (`link:`)
+
+If you're developing a consumer app side-by-side with a local yokai checkout (not a monorepo workspace, not an npm install), use `link:` paths in your consumer's `package.json`:
+
+```jsonc
+{
+  "dependencies": {
+    "@yokai-tui/renderer": "link:../yokai/packages/renderer",
+    "@yokai-tui/shared": "link:../yokai/packages/shared",
+    // CRITICAL — also link react and react-reconciler from yokai's
+    // node_modules. See the "React singleton" note below.
+    "react": "link:../yokai/packages/renderer/node_modules/react",
+    "react-reconciler": "link:../yokai/packages/renderer/node_modules/react-reconciler"
+  }
+}
+```
+
+### Why the explicit react / react-reconciler link
+
+Yokai's renderer declares `react` and `react-reconciler` as PEER dependencies. With a normal npm install, the consumer's app and yokai resolve to the SAME `react` instance (npm dedups peers). With `link:`, they resolve to DIFFERENT module instances — the consumer's `node_modules/react` and yokai's `node_modules/react` are two separate copies.
+
+React enforces a per-module-instance dispatcher singleton. When yokai's renderer creates a Context (`FocusContext`, `TerminalSizeContext`, etc.) using its copy of `react`, and the consumer's component reads it via `useContext` using the consumer's copy of `react`, the singletons don't match — `useContext` returns `null` for everything yokai-provided. Symptoms:
+
+- `useFocus` returns `{ ref: <noop>, isFocused: false, focus: <noop> }`
+- `useTerminalViewport` returns no dimensions
+- Cursor declarations don't fire
+- `<FocusGroup>` doesn't cycle on Tab
+
+The fix is to force the consumer's `react` and `react-reconciler` to resolve to yokai's copies via the explicit `link:` paths above. After this, both sides share one module instance and React's internal checks pass.
+
+### Verify the fix worked
+
+After `pnpm install`, check:
+
+```sh
+ls -la node_modules/react node_modules/@yokai-tui/renderer/node_modules/react
+```
+
+Both should be symlinks pointing to the same target (yokai's `react`). If they're separate directories, the dedup didn't take — re-check the `link:` paths.
+
+### Real-world example
+
+Termos (the testbed app) uses exactly this shape — see [`termos/package.json`](https://github.com/re-marked/termos/blob/main/package.json) for a working reference.
+
 ## Next
 
 - [Your first app](your-first-app.md)
