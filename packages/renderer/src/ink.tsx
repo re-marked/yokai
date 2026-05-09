@@ -1553,9 +1553,9 @@ export default class Ink {
     if (!this.altScreenActive) return null
     return dispatchMouseDown(this.rootNode, col, row, button)
   }
-  dispatchHover(col: number, row: number): void {
+  dispatchHover(col: number, row: number, exclude: dom.DOMElement | null = null): void {
     if (!this.altScreenActive) return
-    dispatchHover(this.rootNode, col, row, this.hoveredNodes)
+    dispatchHover(this.rootNode, col, row, this.hoveredNodes, exclude)
   }
   dispatchWheel(col: number, row: number, direction: 'up' | 'down'): boolean {
     if (!this.altScreenActive) return false

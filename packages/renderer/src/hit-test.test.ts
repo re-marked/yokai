@@ -219,4 +219,41 @@ describe('dispatchHover', () => {
     expect(onMouseEnter).toHaveBeenCalledTimes(1)
     expect(onMouseLeave).not.toHaveBeenCalled()
   })
+
+  it('exclude param skips a subtree, hit-test resolves to next-topmost', () => {
+    // Setup mirrors the drag-over-sibling case: an absolute z-boosted
+    // "drag ghost" sits over a sibling drop zone. Without exclusion the
+    // hover hit-tests resolve to the ghost (it's on top); with the
+    // ghost excluded, hover correctly resolves to the drop zone.
+    const r = createNode('ink-root')
+    setRect(r, 0, 0, 100, 100)
+    const dropZone = createNode('ink-box')
+    setRect(dropZone, 10, 10, 30, 10)
+    appendChildNode(r, dropZone)
+    const dropEnter = vi.fn()
+    dropZone._eventHandlers = { onMouseEnter: dropEnter } as EventHandlerProps
+
+    // Drag ghost: absolute, high zIndex, OVER the drop zone.
+    const ghost = createNode('ink-box')
+    ghost.style = { position: 'absolute', zIndex: 100 }
+    setRect(ghost, 15, 12, 5, 3)
+    appendChildNode(r, ghost)
+    const ghostEnter = vi.fn()
+    ghost._eventHandlers = { onMouseEnter: ghostEnter } as EventHandlerProps
+
+    const hovered = new Set<DOMElement>()
+
+    // No exclude: ghost wins (it's on top).
+    dispatchHover(r, 17, 13, hovered)
+    expect(ghostEnter).toHaveBeenCalledTimes(1)
+    expect(dropEnter).not.toHaveBeenCalled()
+
+    // Reset and re-test with ghost excluded — drop zone wins instead.
+    hovered.clear()
+    ghostEnter.mockClear()
+    dropEnter.mockClear()
+    dispatchHover(r, 17, 13, hovered, ghost)
+    expect(ghostEnter).not.toHaveBeenCalled()
+    expect(dropEnter).toHaveBeenCalledTimes(1)
+  })
 })
