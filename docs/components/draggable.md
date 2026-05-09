@@ -45,8 +45,10 @@ All `<Box>` props are accepted except `position`, `top`, `left` (owned internall
 - **Drop integration**: `startDrag` engages on first motion, `tickDrag` fires after each `setPos`, `dispatchDrop` runs at release before `endDrag`.
 - **Press without motion is not a drag**: `onDragStart` / `onDragEnd` only fire if the cursor moves.
 
-### Known limitation
-Gesture capture suppresses `onClick` for the press that initiated the drag. A press-and-release with no motion does not capture the gesture and `onClick` fires normally; once motion begins, the gesture owns the release.
+### Click vs. drag disambiguation
+Draggable installs a TENTATIVE gesture on press. The gesture is committed only when actual motion follows; a press-and-release with no motion silently drops the gesture and falls through to normal click dispatch. Practical effect: a `<Box onClick>` (or `<TextInput>`, `<Button>`, etc.) inside a `<Draggable>` reliably receives its click on a press-without-motion — no `stopImmediatePropagation` boilerplate required.
+
+Once motion begins, the gesture is promoted: any in-progress text selection from the press is cancelled, `onMove` fires, and the release goes to `onUp` instead of being dispatched as a click.
 
 ## Related
 - [`DropTarget`](./drop-target.md)

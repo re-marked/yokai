@@ -306,7 +306,13 @@ export function handleDragPress(e: MouseDownEvent, deps: DragPressDeps): void {
   // above siblings is the right affordance.
   deps.setPersistedZ(takeNextZ())
 
-  e.captureGesture({
+  // Tentative capture: claim the gesture, but only commit if motion
+  // follows. A press-without-motion is not a drag — the App-level
+  // coordinator will drop the gesture silently on release and let
+  // normal click dispatch run, so descendants with `onClick` actually
+  // get clicked. The first MouseMoveEvent promotes the gesture (see
+  // App.tsx — cancelSelection + clear tentative + fire onMove).
+  e.captureGestureTentatively({
     onMove(m: MouseMoveEvent) {
       const dx = m.col - startCol
       const dy = m.row - startRow

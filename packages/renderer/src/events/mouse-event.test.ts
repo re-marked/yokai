@@ -52,6 +52,41 @@ describe('MouseDownEvent', () => {
     expect(e.gestureCaptured).toBe(true)
   })
 
+  describe('captureGestureTentatively', () => {
+    it('captures handlers and marks the event as tentative', () => {
+      const e = new MouseDownEvent(0, 0, 0)
+      const onMove = vi.fn()
+      e.captureGestureTentatively({ onMove })
+      expect(e.gestureCaptured).toBe(true)
+      expect(e.gestureTentative).toBe(true)
+      expect(e._capturedHandlers?.onMove).toBe(onMove)
+    })
+
+    it('confirmed capture is NOT tentative', () => {
+      const e = new MouseDownEvent(0, 0, 0)
+      e.captureGesture({ onMove: vi.fn() })
+      expect(e.gestureTentative).toBe(false)
+    })
+
+    it('first-call-wins applies across confirmed and tentative', () => {
+      // Tentative-then-confirmed: tentative wins, stays tentative.
+      const e1 = new MouseDownEvent(0, 0, 0)
+      const tentMove = vi.fn()
+      const confMove = vi.fn()
+      e1.captureGestureTentatively({ onMove: tentMove })
+      e1.captureGesture({ onMove: confMove })
+      expect(e1._capturedHandlers?.onMove).toBe(tentMove)
+      expect(e1.gestureTentative).toBe(true)
+
+      // Confirmed-then-tentative: confirmed wins, stays confirmed.
+      const e2 = new MouseDownEvent(0, 0, 0)
+      e2.captureGesture({ onMove: confMove })
+      e2.captureGestureTentatively({ onMove: tentMove })
+      expect(e2._capturedHandlers?.onMove).toBe(confMove)
+      expect(e2.gestureTentative).toBe(false)
+    })
+  })
+
   describe('modifier key decoding', () => {
     it('reads shift from button bit 0x04', () => {
       expect(new MouseDownEvent(0, 0, 0).shiftKey).toBe(false)
@@ -124,8 +159,8 @@ describe('dispatchMouseDown', () => {
     }
 
     const result = dispatchMouseDown(root, 2, 2, 0)
-    expect(result?.onMove).toBe(onMove)
-    expect(result?.onUp).toBe(onUp)
+    expect(result?.handlers.onMove).toBe(onMove)
+    expect(result?.handlers.onUp).toBe(onUp)
   })
 
   it('bubbles to ancestors when the deepest hit has no handler', () => {
@@ -179,7 +214,7 @@ describe('dispatchMouseDown', () => {
 
     const result = dispatchMouseDown(root, 2, 2, 0)
     expect(rootHandler).not.toHaveBeenCalled()
-    expect(result?.onMove).toBe(childMove)
+    expect(result?.handlers.onMove).toBe(childMove)
   })
 
   it('stops bubbling when a handler calls stopImmediatePropagation', () => {
@@ -219,7 +254,27 @@ describe('dispatchMouseDown', () => {
 
     const result = dispatchMouseDown(root, 2, 2, 0)
     expect(rootHandler).not.toHaveBeenCalled()
-    expect(result?.onMove).toBe(onMove)
+    expect(result?.handlers.onMove).toBe(onMove)
+  })
+
+  it('CapturedGesture carries tentative=false for confirmed captures', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 10, 5)
+    root._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGesture({ onMove: vi.fn() }),
+    }
+    const result = dispatchMouseDown(root, 2, 2, 0)
+    expect(result?.tentative).toBe(false)
+  })
+
+  it('CapturedGesture carries tentative=true for tentative captures', () => {
+    const root = createNode('ink-root')
+    setRect(root, 0, 0, 10, 5)
+    root._eventHandlers = {
+      onMouseDown: (e: MouseDownEvent) => e.captureGestureTentatively({ onMove: vi.fn() }),
+    }
+    const result = dispatchMouseDown(root, 2, 2, 0)
+    expect(result?.tentative).toBe(true)
   })
 
   it('passes (col, row, button) into the event for handlers to read', () => {

@@ -17,11 +17,16 @@ import type {
 import { FRAME_INTERVAL_MS } from './constants'
 import * as dom from './dom'
 import { KeyboardEvent } from './events/keyboard-event'
-import type { GestureHandlers } from './events/mouse-event'
 import { PasteEvent } from './events/paste-event'
 import { FocusManager } from './focus'
 import { type Frame, type FrameEvent, emptyFrame } from './frame'
-import { dispatchClick, dispatchHover, dispatchMouseDown, dispatchWheel } from './hit-test'
+import {
+  type CapturedGesture,
+  dispatchClick,
+  dispatchHover,
+  dispatchMouseDown,
+  dispatchWheel,
+} from './hit-test'
 import instances from './instances'
 import { noop, throttle } from './lodash-replacements'
 import { LogUpdate } from './log-update'
@@ -1540,7 +1545,7 @@ export default class Ink {
     const blank = isEmptyCellAt(this.frontFrame.screen, col, row)
     return dispatchClick(this.rootNode, col, row, blank)
   }
-  dispatchMouseDown(col: number, row: number, button: number): GestureHandlers | null {
+  dispatchMouseDown(col: number, row: number, button: number): CapturedGesture | null {
     // Same alt-screen gate as dispatchClick — mouse tracking is only
     // enabled inside <AlternateScreen>, so onMouseDown handlers
     // shouldn't fire on main-screen renders even if the parser
