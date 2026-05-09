@@ -15,7 +15,7 @@ Layout props (all Yoga flexbox properties: `width`, `height`, `flexDirection`, `
 |------|------|---------|-------------|
 | `flexDirection` | `'row' \| 'column' \| ...` | `'row'` | Main axis direction |
 | `flexGrow` | `number` | `0` | Yoga flex-grow |
-| `flexShrink` | `number` | `1` | Yoga flex-shrink |
+| `flexShrink` | `number` | `1` | Yoga flex-shrink. Set `flexShrink={0}` on chrome (titlebars, footers, status rows) that should always render — see [layout pitfalls](../concepts/layout.md#chrome-rows-disappear-when-content-has-large-natural-size). |
 | `flexWrap` | `'nowrap' \| 'wrap' \| 'wrap-reverse'` | `'nowrap'` | Wrap behavior |
 | `tabIndex` | `number` | — | `>= 0` joins Tab cycle; `-1` is programmatically focusable only |
 | `autoFocus` | `boolean` | — | Focus on mount (during reconciler `commitMount`) |
