@@ -194,13 +194,18 @@ function makeDeps(
 }
 
 describe('handleDragPress', () => {
-  it('captures a gesture on press', () => {
+  it('captures a gesture on press (tentatively — committed on first motion)', () => {
     _resetDraggableZForTesting()
     const e = new MouseDownEvent(5, 1, 0)
     handleDragPress(e, makeDeps())
     expect(e._capturedHandlers).not.toBeNull()
     expect(e._capturedHandlers?.onMove).toBeTypeOf('function')
     expect(e._capturedHandlers?.onUp).toBeTypeOf('function')
+    // A22: capture is TENTATIVE, so the App-level coordinator drops the
+    // gesture silently on release-without-motion and falls through to
+    // normal click dispatch — descendants with `onClick` still get
+    // their click on a press-and-release.
+    expect(e.gestureTentative).toBe(true)
   })
 
   it('bumps persisted z on press, even with no motion', () => {
@@ -413,7 +418,7 @@ describe('handleDragPress', () => {
     }
 
     const captured = dispatchMouseDown(root, 2, 2, 0)
-    expect(captured?.onMove).toBe(childMove)
+    expect(captured?.handlers.onMove).toBe(childMove)
     expect(deps.setPersistedZ).not.toHaveBeenCalled()
   })
 })

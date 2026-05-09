@@ -155,16 +155,27 @@ export function dispatchClick(
 }
 
 /**
+ * Captured-gesture record returned by dispatchMouseDown. Carries the
+ * handlers AND whether the capture is tentative (only commits on
+ * motion); see MouseDownEvent.captureGestureTentatively.
+ */
+export type CapturedGesture = {
+  handlers: GestureHandlers
+  tentative: boolean
+}
+
+/**
  * Hit-test the root at (col, row) and bubble a MouseDownEvent from the
  * deepest containing node up through parentNode. Only nodes with an
  * onMouseDown handler fire. Stops when a handler calls
  * stopImmediatePropagation() or captures the gesture. Capture is
  * leaf-first so descendants cannot be overwritten by ancestors.
  *
- * Returns the GestureHandlers installed via event.captureGesture() if
- * any handler called it, or null otherwise. The caller (App) is
- * responsible for storing those handlers as the active gesture and
- * routing subsequent motion + release events to them.
+ * Returns a CapturedGesture if any handler called captureGesture or
+ * captureGestureTentatively, or null otherwise. The caller (App) is
+ * responsible for storing the handlers as the active gesture, applying
+ * the tentative-vs-confirmed semantics, and routing subsequent motion
+ * + release events.
  *
  * Unlike dispatchClick, this does NOT trigger click-to-focus. Focus
  * still moves on click (i.e. on release after a non-drag press), so
@@ -176,7 +187,7 @@ export function dispatchMouseDown(
   col: number,
   row: number,
   button: number,
-): GestureHandlers | null {
+): CapturedGesture | null {
   let target: DOMElement | undefined = hitTest(root, col, row) ?? undefined
   if (!target) return null
 
@@ -197,7 +208,8 @@ export function dispatchMouseDown(
     }
     target = target.parentNode
   }
-  return event._capturedHandlers
+  if (!event._capturedHandlers) return null
+  return { handlers: event._capturedHandlers, tentative: event._tentative }
 }
 
 function scrollBoxWheelStep(node: DOMElement): number {

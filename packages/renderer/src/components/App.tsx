@@ -7,6 +7,7 @@ import type { KeyboardEvent } from '../events/keyboard-event'
 import { type GestureHandlers, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event'
 import { TerminalFocusEvent } from '../events/terminal-focus-event'
 import type { FocusManager } from '../focus'
+import type { CapturedGesture } from '../hit-test'
 import {
   INITIAL_STATE,
   type ParsedInput,
@@ -15,7 +16,13 @@ import {
   parseMultipleKeypresses,
 } from '../parse-keypress'
 import reconciler from '../reconciler'
-import { type SelectionState, finishSelection, hasSelection, startSelection } from '../selection'
+import {
+  type SelectionState,
+  clearSelection,
+  finishSelection,
+  hasSelection,
+  startSelection,
+} from '../selection'
 import { isXtermJs, setXtversionName, supportsExtendedKeys } from '../terminal'
 import { getTerminalFocused, setTerminalFocused } from '../terminal-focus-state'
 import { TerminalQuerier, xtversion } from '../terminal-querier'
@@ -70,9 +77,9 @@ type Props = {
   readonly onClickAt: (col: number, row: number) => boolean
   // Dispatch a mousedown at (col, row) — hit-tests the DOM tree and
   // bubbles onMouseDown handlers. Returns the GestureHandlers if any
-  // handler called event.captureGesture(...), or null. Returns null
-  // (no-op) outside fullscreen.
-  readonly onMouseDownAt: (col: number, row: number, button: number) => GestureHandlers | null
+  // handler called event.captureGesture(...) (or .captureGestureTentatively),
+  // or null. Returns null (no-op) outside fullscreen.
+  readonly onMouseDownAt: (col: number, row: number, button: number) => CapturedGesture | null
   // Dispatch hover (onMouseEnter/onMouseLeave) as the pointer moves over
   // DOM elements. Called for mode-1003 motion events with no button held.
   // No-op outside fullscreen (Ink.dispatchHover gates on altScreenActive).
@@ -220,16 +227,30 @@ export default class App extends PureComponent<Props, State> {
   lastHoverRow = -1
 
   // Active drag-style gesture, set by an onMouseDown handler calling
-  // event.captureGesture(...). When non-null:
+  // event.captureGesture(...) or .captureGestureTentatively(...).
+  // When non-null:
   //   - subsequent drag-motion events route to activeGesture.onMove
   //     instead of extending the text selection
   //   - the next mouse-release fires activeGesture.onUp and clears
   //     this field (selection finish + onClick are skipped for that
   //     release — the user dragged, didn't click)
+  //
+  // When `activeGestureTentative` is true (capture installed via
+  // captureGestureTentatively), the rules differ:
+  //   - press-time selection-start + multi-click detection still run
+  //     (so click dispatch works on release without motion)
+  //   - first motion PROMOTES the gesture: cancels the in-progress
+  //     selection, clears the tentative flag, fires onMove
+  //   - release without motion DROPS the gesture WITHOUT firing onUp,
+  //     and falls through to normal release path (click dispatch +
+  //     selection-finish) — so a press-without-motion on a Draggable
+  //     descendant's `onClick` actually clicks
+  //
   // Cleared on FOCUS_OUT and on no-button-motion lost-release recovery
   // alongside the selection finish, so a drag aborted by leaving the
   // window doesn't leave a dangling capture.
   activeGesture: GestureHandlers | null = null
+  activeGestureTentative = false
 
   // Timestamp of last stdin chunk. Used to detect long gaps (tmux attach,
   // ssh reconnect, laptop wake) and trigger terminal mode re-assert.
@@ -622,10 +643,15 @@ function processKeysInBatch(
       // Same recovery for an active gesture — the user switched apps
       // mid-drag, so the drag is implicitly cancelled. Fire onUp with
       // the last known cursor position; handlers can use the focus-out
-      // signal to treat it as cancellation rather than commit.
+      // signal to treat it as cancellation rather than commit. Tentative
+      // gestures (no motion yet) are dropped silently — onUp would be
+      // misleading because no drag actually happened.
       if (app.activeGesture) {
-        app.activeGesture.onUp?.(new MouseUpEvent(app.lastHoverCol, app.lastHoverRow, 0))
+        if (!app.activeGestureTentative) {
+          app.activeGesture.onUp?.(new MouseUpEvent(app.lastHoverCol, app.lastHoverRow, 0))
+        }
         app.activeGesture = null
+        app.activeGestureTentative = false
       }
       const event = new TerminalFocusEvent('terminalblur')
       app.internal_eventEmitter.emit('terminalblur', event)
@@ -754,9 +780,13 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       // Same lost-release drain for an active gesture: the cursor returned
       // to the window with no button held, so the drag is over. Fire onUp
       // at the cursor position so the gesture initiator can clean up.
+      // Tentative gestures (no motion yet) drop silently.
       if (app.activeGesture) {
-        app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+        if (!app.activeGestureTentative) {
+          app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+        }
         app.activeGesture = null
+        app.activeGestureTentative = false
       }
       if (col === app.lastHoverCol && row === app.lastHoverRow) return
       app.lastHoverCol = col
@@ -775,6 +805,27 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
       // explicitly opted out of selection by capturing on press; firing
       // both would also trail a selection highlight underneath the drag.
       if (app.activeGesture) {
+        // Tentative gesture promotion: first motion proves the press was
+        // a drag (not a click). Cancel the in-progress selection that we
+        // optimistically started on press for click-dispatch purposes,
+        // clear the tentative flag, then fall through to firing onMove.
+        // After this point the gesture behaves identically to a confirmed
+        // capture.
+        if (app.activeGestureTentative) {
+          app.activeGestureTentative = false
+          if (sel.isDragging || sel.anchor) {
+            clearSelection(sel)
+            app.props.onSelectionChange()
+          }
+          // Reset the multi-click chain. The tentative press updated
+          // clickCount on press (so click dispatch on release-without-
+          // motion works); now that motion proved this is a drag, those
+          // multi-click bits would otherwise count this press toward the
+          // next quick click, dispatching onMultiClick instead of
+          // onClick. Mirror what confirmed captures do at the press
+          // path.
+          app.clickCount = 0
+        }
         app.activeGesture.onMove?.(new MouseMoveEvent(col, row, m.button))
         return
       }
@@ -795,25 +846,41 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     // Same lost-release recovery for an active gesture: the captured
     // drag effectively ended when we missed the release. Fire onUp at
     // the new press position so the gesture initiator can clean up,
-    // then clear capture so this fresh press starts cleanly.
+    // then clear capture so this fresh press starts cleanly. Tentative
+    // gestures drop silently — onUp would be misleading because no
+    // drag actually happened.
     if (app.activeGesture) {
-      app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+      if (!app.activeGestureTentative) {
+        app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+      }
       app.activeGesture = null
+      app.activeGestureTentative = false
     }
     // Dispatch onMouseDown to the DOM tree. If a handler called
-    // event.captureGesture(...), store the handlers as the active
-    // gesture and short-circuit — no multi-click bookkeeping, no
-    // selection start, no click on release. The user is dragging, not
-    // clicking, and we let the captured gesture own the entire
-    // press-drag-release sequence.
+    // event.captureGesture(...) (confirmed) or .captureGestureTentatively
+    // (deferred), store the handlers as the active gesture. For
+    // CONFIRMED captures: short-circuit — no multi-click bookkeeping,
+    // no selection start, no click on release. For TENTATIVE captures:
+    // ALSO run selection-start + multi-click below, so click dispatch
+    // works on release-without-motion. The first motion event promotes
+    // tentative→confirmed and cancels the in-progress selection (see
+    // motion handler above).
     const gesture = app.props.onMouseDownAt(col, row, m.button)
-    if (gesture) {
-      app.activeGesture = gesture
+    if (gesture && !gesture.tentative) {
+      app.activeGesture = gesture.handlers
+      app.activeGestureTentative = false
       // Reset multi-click chain too — a captured gesture interrupts
       // any in-flight click cadence (releasing a drag at the same cell
       // as a prior click shouldn't compose into a double-click).
       app.clickCount = 0
       return
+    }
+    if (gesture) {
+      // Tentative capture path: install the gesture but DON'T short-
+      // circuit. Selection-start + multi-click below run normally so
+      // a press-without-motion still produces a valid click on release.
+      app.activeGesture = gesture.handlers
+      app.activeGestureTentative = true
     }
     // Fresh left press. Detect multi-click HERE (not on release) so the
     // word/line highlight appears immediately and a subsequent drag can
@@ -851,15 +918,28 @@ export function handleMouseEvent(app: App, m: ParsedMouse): void {
     return
   }
 
-  // Release: end the active gesture (if any) FIRST. The user dragged a
-  // captured object — not a text selection or a click — so the normal
-  // selection-finish + onClick paths must not run for this release.
-  // Fires onUp at the cursor's release position (handlers can hit-test
-  // for a drop target from there) and clears the capture.
+  // Release: handle the active gesture (if any) FIRST.
+  //
+  // Confirmed gestures: the user dragged a captured object — not a text
+  // selection or a click — so fire onUp and skip the normal selection-
+  // finish + onClick paths. The drag is over.
+  //
+  // Tentative gestures (still tentative at release means no motion ever
+  // arrived): the press never became a drag. DROP the gesture WITHOUT
+  // firing onUp and FALL THROUGH to the normal release path. Selection
+  // was started on press, so finishSelection + click dispatch run as if
+  // no gesture had been captured — and the click reaches the descendant
+  // that the user actually wanted to click.
   if (app.activeGesture) {
-    app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+    if (!app.activeGestureTentative) {
+      app.activeGesture.onUp?.(new MouseUpEvent(col, row, m.button))
+      app.activeGesture = null
+      app.activeGestureTentative = false
+      return
+    }
+    // Tentative + no motion → drop and fall through to normal release.
     app.activeGesture = null
-    return
+    app.activeGestureTentative = false
   }
   // Release: end the drag even for non-zero button codes. Some terminals
   // encode release with the motion bit or button=3 "no button" (carried

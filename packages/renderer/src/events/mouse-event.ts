@@ -91,6 +91,10 @@ export class MouseDownEvent extends MouseEvent {
 
   /** @internal — set by captureGesture, read by the App after dispatch. */
   _capturedHandlers: GestureHandlers | null = null
+  /** @internal — true when captured via captureGestureTentatively. Used
+   *  by the App-level coordinator to apply the tentative-vs-confirmed
+   *  release semantics. See captureGestureTentatively for the contract. */
+  _tentative = false
 
   /**
    * Claim mouse-motion + mouse-release events for the rest of this
@@ -105,11 +109,43 @@ export class MouseDownEvent extends MouseEvent {
   captureGesture(handlers: GestureHandlers): void {
     if (this._capturedHandlers) return
     this._capturedHandlers = handlers
+    this._tentative = false
   }
 
-  /** True once any handler has claimed this press via captureGesture(). */
+  /**
+   * Tentative variant of captureGesture: claim the press, but only
+   * commit to it if motion follows. On release-without-motion the
+   * gesture is silently DROPPED — `onUp` does NOT fire — and normal
+   * click dispatch runs as if no gesture had been captured. The first
+   * mouse-motion event PROMOTES the gesture (cancels any in-progress
+   * selection, clears the tentative flag, and routes the motion to
+   * `handlers.onMove`).
+   *
+   * Use this when the press might be a click OR a drag and you want
+   * actual motion to disambiguate — `<Draggable>` uses it so that an
+   * `onClick` on a descendant element fires when the user presses and
+   * releases without moving, instead of being eaten as a phantom drag.
+   *
+   * Same first-call-wins rule as captureGesture: a confirmed capture
+   * by a descendant blocks a later tentative capture from an ancestor,
+   * and vice versa. Mixing in one press is fine; whichever call
+   * arrives first wins.
+   */
+  captureGestureTentatively(handlers: GestureHandlers): void {
+    if (this._capturedHandlers) return
+    this._capturedHandlers = handlers
+    this._tentative = true
+  }
+
+  /** True once any handler has claimed this press via captureGesture()
+   *  or captureGestureTentatively(). */
   get gestureCaptured(): boolean {
     return this._capturedHandlers !== null
+  }
+
+  /** True if the captured gesture is tentative (only commits on motion). */
+  get gestureTentative(): boolean {
+    return this._tentative
   }
 }
 
