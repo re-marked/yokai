@@ -22,7 +22,7 @@ import { PasteEvent } from './events/paste-event'
 import { FocusManager } from './focus'
 import { type Frame, type FrameEvent, emptyFrame } from './frame'
 import {
-  type CapturedGesture,
+  type MouseDownDispatch,
   dispatchClick,
   dispatchHover,
   dispatchMouseDown,
@@ -1577,12 +1577,12 @@ export default class Ink {
     const blank = isEmptyCellAt(this.frontFrame.screen, col, row)
     return dispatchClick(this.rootNode, col, row, blank)
   }
-  dispatchMouseDown(col: number, row: number, button: number): CapturedGesture | null {
+  dispatchMouseDown(col: number, row: number, button: number): MouseDownDispatch {
     // Same alt-screen gate as dispatchClick — mouse tracking is only
     // enabled inside <AlternateScreen>, so onMouseDown handlers
     // shouldn't fire on main-screen renders even if the parser
     // somehow surfaces a mouse event.
-    if (!this.altScreenActive) return null
+    if (!this.altScreenActive) return { gesture: null, clickable: false }
     return dispatchMouseDown(this.rootNode, col, row, button)
   }
   dispatchHover(col: number, row: number, exclude: dom.DOMElement | null = null): void {
