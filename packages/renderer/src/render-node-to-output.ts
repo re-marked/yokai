@@ -689,14 +689,15 @@ function renderNodeToOutput(
       // positioning (in-flow shadows would shift sibling layout). See
       // `components/Surface/shadow.ts` for the cell math.
       const elevation = node.attributes.surfaceElevation
-      if (
-        typeof elevation === 'number' &&
-        elevation > 0 &&
-        node.style.position === 'absolute'
-      ) {
+      if (typeof elevation === 'number' && elevation > 0 && node.style.position === 'absolute') {
         paintShadowCells(
           shadowCells(
-            { x: Math.floor(x), y: Math.floor(y), width: Math.floor(width), height: Math.floor(height) },
+            {
+              x: Math.floor(x),
+              y: Math.floor(y),
+              width: Math.floor(width),
+              height: Math.floor(height),
+            },
             Math.min(5, Math.max(1, Math.floor(elevation))) as SurfaceElevation,
           ),
           output,

@@ -45,7 +45,7 @@
       }
     },
     {
-      "include": ["**/components/Box.tsx"],
+      "include": ["**/components/Box.tsx", "**/components/Surface/Surface.tsx"],
       "linter": {
         "rules": {
           "a11y": {

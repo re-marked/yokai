@@ -126,7 +126,7 @@ describe('shadowCells — elevation 2 (two-cell L)', () => {
 })
 
 describe('shadowCells — elevation 5 (max)', () => {
-  it("max dim level == elevation", () => {
+  it('max dim level == elevation', () => {
     const cells = shadowCells({ x: 0, y: 0, width: 10, height: 5 }, 5)
     const dims = cells.map((c) => c.dim)
     expect(Math.max(...dims)).toBe(5)
@@ -153,9 +153,10 @@ describe('shadowCells — invariants across all elevations', () => {
       for (const c of cells) {
         const insideX = c.col >= rect.x && c.col < rect.x + rect.width
         const insideY = c.row >= rect.y && c.row < rect.y + rect.height
-        expect(insideX && insideY, `cell (${c.col},${c.row}) at elev ${t} fell inside surface`).toBe(
-          false,
-        )
+        expect(
+          insideX && insideY,
+          `cell (${c.col},${c.row}) at elev ${t} fell inside surface`,
+        ).toBe(false)
       }
     }
   })
