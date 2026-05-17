@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Edge, Node } from './index.js'
+import { Edge, Node, PositionType } from './index.js'
 
 /**
  * Construct a parent Node sized to `outerWidth × outerHeight` with
@@ -129,5 +129,118 @@ describe('yoga-layout: percent dimensions resolve against parent content box (B7
     parent.calculateLayout(undefined, undefined)
     expect(child.getComputedWidth()).toBe(20)
     expect(child.getComputedLeft()).toBe(0)
+  })
+
+  // ── related size constraints — same content-box rule ────────────────
+
+  it('minWidth=100% on a bordered child clamps to parent content box', () => {
+    // Child has no explicit width but minWidth=100%. The min clamps
+    // the child's natural size up to 100% of parent's content area
+    // (not outer). Bordered parent width 20, border 1 → content 18.
+    const { parent, child } = makeParentChild({
+      outerWidth: 20,
+      outerHeight: 5,
+      border: 1,
+    })
+    child.setMinWidthPercent(100)
+    parent.calculateLayout(undefined, undefined)
+    expect(child.getComputedWidth()).toBe(18)
+  })
+
+  it('maxWidth=50% on a bordered child caps at half of content box', () => {
+    // Parent border 1, outer 20 → content 18 → 50% = 9. With an
+    // explicit child width that would otherwise stretch (e.g. 100),
+    // maxWidth=50% must cap to 9, not 10.
+    const { parent, child } = makeParentChild({
+      outerWidth: 20,
+      outerHeight: 5,
+      border: 1,
+    })
+    child.setWidth(100)
+    child.setMaxWidthPercent(50)
+    parent.calculateLayout(undefined, undefined)
+    expect(child.getComputedWidth()).toBe(9)
+  })
+
+  it('flexBasis=100% on a bordered row child takes the full content width', () => {
+    // Single child in a row container with flexBasis=100%. Resolved
+    // against parent content box (18), not outer (20).
+    const parent = new Node()
+    parent.setWidth(20)
+    parent.setHeight(5)
+    parent.setBorder(Edge.All, 1)
+    parent.setFlexDirection(2 /* Row */)
+    const child = new Node()
+    child.setFlexBasisPercent(100)
+    parent.insertChild(child, 0)
+    parent.calculateLayout(undefined, undefined)
+    expect(child.getComputedWidth()).toBe(18)
+  })
+
+  it('position:relative left=50% offset resolves against parent content box', () => {
+    // CSS: relative offsets are percentages of the containing block.
+    // For in-flow children that's the parent content box. Parent
+    // outer 20, border 1 → content 18. left=50% = 9. Child sits at
+    // border-left (1) + relative offset (9) = layout.left of 10.
+    //
+    // NOTE: per Yoga upstream convention, ALL four position edges
+    // (top/right/bottom/left) resolve against ownerWidth, not against
+    // ownerHeight for top/bottom. This test uses `left` to stay on
+    // the width axis and keep the assertion unambiguous.
+    const { parent, child } = makeParentChild({
+      outerWidth: 20,
+      outerHeight: 5,
+      border: 1,
+    })
+    child.setWidth(2)
+    child.setHeight(1)
+    child.setPositionType(PositionType.Relative)
+    child.setPositionPercent(Edge.Left, 50)
+    parent.calculateLayout(undefined, undefined)
+    expect(child.getComputedLeft()).toBe(10)
+  })
+
+  // ── documented deviation from Yoga upstream ─────────────────────────
+
+  it('CHILD margin percent resolves against parent CONTENT box (deviation from upstream Yoga)', () => {
+    // Upstream Yoga resolves child margin percent against ownerWidth
+    // (parent outer). This port resolves against parent CONTENT box —
+    // a consistent "percent on a child = fraction of available
+    // space" mental model. Documented in CLAUDE.md.
+    //
+    // Parent outer 20, border 1 → content 18. Child margin-left=50%
+    // = 50% × 18 = 9 (not 50% × 20 = 10).
+    const { parent, child } = makeParentChild({
+      outerWidth: 20,
+      outerHeight: 5,
+      border: 1,
+    })
+    child.setWidth(2)
+    child.setMarginPercent(Edge.Left, 50)
+    parent.calculateLayout(undefined, undefined)
+    // layout.left = parent border (1) + resolved margin (9) = 10
+    expect(child.getComputedLeft()).toBe(10)
+  })
+
+  // ── absolute children unaffected ────────────────────────────────────
+
+  it('absolute child width=100% still resolves against parent PADDING box (CSS §10.1)', () => {
+    // Absolute positioning has its own containing-block rule: the
+    // padding box of the nearest positioned ancestor. The yoga port
+    // handles this in layoutAbsoluteChild and the B7 fix does NOT
+    // touch that path. Pin the expected behavior so a future refactor
+    // can't accidentally unify the two paths.
+    const parent = new Node()
+    parent.setWidth(20)
+    parent.setHeight(5)
+    parent.setBorder(Edge.All, 1)
+    parent.setPadding(Edge.All, 2)
+    // padding-box = outer − border = 20 − 2 = 18
+    const child = new Node()
+    child.setPositionType(PositionType.Absolute)
+    child.setWidthPercent(100)
+    parent.insertChild(child, 0)
+    parent.calculateLayout(undefined, undefined)
+    expect(child.getComputedWidth()).toBe(18)
   })
 })
