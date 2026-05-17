@@ -309,7 +309,12 @@ export const createTextNode = (text: string): TextNode => {
   return node
 }
 
-const measureTextNode = (
+// Exported for unit tests. The function is bound to a node and registered as
+// the yoga measureFunc — see `setMeasureFunc` above — but exposing it lets
+// tests pin the measure-layer behavior (e.g. the Undefined-mode contract
+// that protects nested-text basis from wrap-pass poisoning) without spinning
+// up a yoga calculateLayout pass.
+export const measureTextNode = (
   node: DOMNode,
   width: number,
   widthMode: LayoutMeasureMode,
