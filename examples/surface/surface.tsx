@@ -246,7 +246,7 @@ function CompositionDemo(): React.ReactNode {
     >
       <Text dim>elevated overlay · drag me ↓</Text>
       <Draggable
-        initialPos={{ top: 2, left: 1 }}
+        initialPos={{ top: 3, left: 1 }}
         width={10}
         height={2}
         backgroundColor="#06b6d4"
