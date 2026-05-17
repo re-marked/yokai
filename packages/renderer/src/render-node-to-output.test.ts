@@ -1266,7 +1266,7 @@ describe('A23 — Surface elevation shadow paint pass', () => {
     screenW: number,
     screenH: number,
     rect: { top: number; left: number; width: number; height: number },
-    opts: { elevation?: number; relative?: boolean } = {},
+    opts: { elevation?: number; relative?: boolean; shadowColor?: string } = {},
   ): DOMElement {
     const surface = el('ink-box', {
       position: opts.relative ? undefined : 'absolute',
@@ -1278,6 +1278,9 @@ describe('A23 — Surface elevation shadow paint pass', () => {
     })
     if (opts.elevation !== undefined && opts.elevation > 0) {
       surface.attributes.surfaceElevation = opts.elevation
+    }
+    if (opts.shadowColor) {
+      surface.attributes.surfaceShadowColor = opts.shadowColor
     }
     const root = el('ink-root', { width: screenW, height: screenH })
     appendChildNode(root, surface)
@@ -1375,6 +1378,59 @@ describe('A23 — Surface elevation shadow paint pass', () => {
       isShadowCell(screen, 9, 5)
       isShadowCell(screen, 9, 7)
     }).not.toThrow()
+  })
+
+  it('surfaceShadowColor attribute drives the shadow cell fill color', () => {
+    // Two elevated surfaces in ONE render — same StylePool, so equal
+    // styleIds imply equal styles. The default-shadow surface and the
+    // custom-shadow surface must resolve to DIFFERENT styleIds for
+    // their respective shadow cells (proving the bg color differs);
+    // and a third surface with the same custom color must match the
+    // second (proving the override is honored and stable).
+    const defaultSurf = el('ink-box', {
+      position: 'absolute',
+      top: 1,
+      left: 1,
+      width: 3,
+      height: 3,
+      backgroundColor: 'cyan',
+    })
+    defaultSurf.attributes.surfaceElevation = 1
+    const customSurf = el('ink-box', {
+      position: 'absolute',
+      top: 1,
+      left: 15,
+      width: 3,
+      height: 3,
+      backgroundColor: 'cyan',
+    })
+    customSurf.attributes.surfaceElevation = 1
+    customSurf.attributes.surfaceShadowColor = '#475569'
+    const customSurf2 = el('ink-box', {
+      position: 'absolute',
+      top: 1,
+      left: 25,
+      width: 3,
+      height: 3,
+      backgroundColor: 'cyan',
+    })
+    customSurf2.attributes.surfaceElevation = 1
+    customSurf2.attributes.surfaceShadowColor = '#475569'
+    const root = el('ink-root', { width: 32, height: 8 })
+    appendChildNode(root, defaultSurf)
+    appendChildNode(root, customSurf)
+    appendChildNode(root, customSurf2)
+    root.yogaNode!.calculateLayout(32, 8)
+    const screen = render(root, 32, 8)
+    // Shadow cell at (col=left+width, row=top+1) for each surface.
+    const defaultShadow = cellAt(screen, 4, 2)
+    const customShadow = cellAt(screen, 18, 2)
+    const customShadow2 = cellAt(screen, 28, 2)
+    expect(defaultShadow?.styleId).not.toBe(screen.emptyStyleId)
+    expect(customShadow?.styleId).not.toBe(screen.emptyStyleId)
+    expect(defaultShadow?.styleId).not.toBe(customShadow?.styleId)
+    // Two surfaces sharing the same shadow color reuse the styleId.
+    expect(customShadow?.styleId).toBe(customShadow2?.styleId)
   })
 
   it('moving an elevated Surface clears the OLD shadow band (Codex P2 review on PR #90)', () => {

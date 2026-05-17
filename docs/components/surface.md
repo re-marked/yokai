@@ -28,6 +28,7 @@ import type { SurfaceProps, SurfaceLayer, SurfaceElevation } from '@yokai-tui/re
 | `clip` | `'hidden' \| 'visible'` | `'visible'` | Convenience for `overflow: 'hidden'`. Explicit `overflow*` props win when set. |
 | `hitTestBoundary` | `boolean` | `false` | Marks this Surface as owning the cells it covers — lower-z absolute siblings beneath the boundary's rect cannot receive mouse events at those cells. Modals / popovers / menus set this; tooltips / drag ghosts typically don't. Must be combined with `position='absolute'` (dev-warn + silently ignored otherwise). |
 | `elevation` | `0 \| 1 \| 2 \| 3 \| 4 \| 5` | `0` | Drop-shadow band thickness in cells, offset down-right of the rect. `0` = no shadow. Only paints when `position='absolute'`. |
+| `shadowColor` | `Color` | `'#1a1a1a'` (near-black) | Solid fill color for the elevation shadow band. The default reads well on light themes but is near-invisible on dark themes — set a brighter value (`'#404040'`, `'#475569'`, …) when consuming Surface on a dark background. Only applied when `elevation > 0`. Terminals don't support alpha; this is a solid fill. |
 | `backdrop` | `boolean` | `false` | Auto-renders a sibling scrim Box behind this Surface, filling the parent at `(resolvedZ - 1)`. Only meaningful when `position='absolute'`. |
 | `backdropColor` | `Color` | `'black'` | Scrim color when `backdrop=true`. Terminals don't support alpha; this is a solid fill. |
 | `ref` | `Ref<DOMElement>` | — | Pass through to ink-box. |

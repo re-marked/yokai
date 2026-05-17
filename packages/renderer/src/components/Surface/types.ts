@@ -185,13 +185,23 @@ export type SurfaceProps = {
   /**
    * Drop-shadow elevation level. `0` (default) paints no shadow.
    * `1`-`5` paint a progressively wider terminal-cell shadow band
-   * offset 1 cell down-right of the Surface's rect, using a single
-   * reserved dim color (terminals don't do alpha, so we ship a
-   * documented dim band). Only meaningful with `position='absolute'`
-   * — an in-flow shadow would shift sibling layout. See `shadow.ts`
-   * for the exact cell math.
+   * offset 1 cell down-right of the Surface's rect, using a solid
+   * dim color (terminals don't do alpha, so we ship a documented
+   * dim band — pick `shadowColor` to taste). Only meaningful with
+   * `position='absolute'` — an in-flow shadow would shift sibling
+   * layout. See `shadow.ts` for the exact cell math.
    */
   elevation?: SurfaceElevation
+  /**
+   * Color used to paint shadow cells. Defaults to `#1a1a1a` (a
+   * near-black that reads well on light themes). Override with a
+   * brighter value (`#404040`, `#475569`, …) on dark themes so the
+   * shadow band stays visible against the surrounding cells.
+   * Terminals don't support alpha; this is a solid fill.
+   *
+   * Only applied when `elevation > 0` AND `position='absolute'`.
+   */
+  shadowColor?: Color
   /**
    * When `true`, auto-renders a sibling scrim Box behind this
    * Surface, filling the parent container with `backdropColor`,
