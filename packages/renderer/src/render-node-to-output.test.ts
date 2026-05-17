@@ -1377,6 +1377,68 @@ describe('A23 — Surface elevation shadow paint pass', () => {
     }).not.toThrow()
   })
 
+  it('moving an elevated Surface clears the OLD shadow band (Codex P2 review on PR #90)', () => {
+    // Frame 1: surface at (1,1, 3x3), elev=1 → shadow cells include
+    // (4,2)(4,3)(2,4)(3,4)(4,4).
+    // Frame 2: surface moved to (10,1, 3x3) → new shadow at
+    // (13,2)(13,3)(11,4)(12,4)(13,4). The OLD shadow cells must be
+    // cleared, NOT remain as stale paint on screen.
+    const surface = el('ink-box', {
+      position: 'absolute',
+      top: 1,
+      left: 1,
+      width: 3,
+      height: 3,
+      backgroundColor: 'cyan',
+    })
+    surface.attributes.surfaceElevation = 1
+    const root = el('ink-root', { width: 20, height: 8 })
+    appendChildNode(root, surface)
+    root.yogaNode!.calculateLayout(20, 8)
+    const frame2 = render2Frames(root, 20, 8, () => {
+      setStyle(surface, { ...surface.style, left: 10 })
+      applyStyles(surface.yogaNode!, { ...surface.style, left: 10 })
+    })
+    // Old shadow cells must now be blank (no shadow style id).
+    expect(isShadowCell(frame2, 4, 2)).toBe(false)
+    expect(isShadowCell(frame2, 4, 3)).toBe(false)
+    expect(isShadowCell(frame2, 2, 4)).toBe(false)
+    expect(isShadowCell(frame2, 3, 4)).toBe(false)
+    expect(isShadowCell(frame2, 4, 4)).toBe(false)
+    // And the new shadow position should be present.
+    expect(isShadowCell(frame2, 13, 2)).toBe(true)
+    expect(isShadowCell(frame2, 13, 4)).toBe(true)
+    expect(isShadowCell(frame2, 12, 4)).toBe(true)
+  })
+
+  it('shrinking an elevated Surface clears the shadow region that no longer applies', () => {
+    // Frame 1: surface 4x4 at (1,1), elev=2 → shadow L extends down-right
+    // a few cells. Frame 2: shrink width from 4 to 2 — the shadow that was
+    // anchored to the old right edge (cols 5-6) must be cleared.
+    const surface = el('ink-box', {
+      position: 'absolute',
+      top: 1,
+      left: 1,
+      width: 4,
+      height: 4,
+      backgroundColor: 'cyan',
+    })
+    surface.attributes.surfaceElevation = 2
+    const root = el('ink-root', { width: 20, height: 10 })
+    appendChildNode(root, surface)
+    root.yogaNode!.calculateLayout(20, 10)
+    const frame2 = render2Frames(root, 20, 10, () => {
+      setStyle(surface, { ...surface.style, width: 2, height: 2 })
+      applyStyles(surface.yogaNode!, { ...surface.style, width: 2, height: 2 })
+    })
+    // Old far-right shadow column (cols 5, 6 at the old right edge) must
+    // be blank — the surface's new right edge is at col 2, so the old
+    // shadow at col 5-6 is no longer in the new shadow band.
+    expect(isShadowCell(frame2, 5, 2)).toBe(false)
+    expect(isShadowCell(frame2, 6, 2)).toBe(false)
+    expect(isShadowCell(frame2, 5, 4)).toBe(false)
+  })
+
   it('surface itself paints over its own rect (shadow does NOT overlap the surface body)', () => {
     // The shadow L is geometrically outside the surface rect, by
     // construction of shadowCells. Re-confirm at the render level —

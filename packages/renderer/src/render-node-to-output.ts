@@ -551,12 +551,20 @@ function renderNodeToOutput(
       layoutShifted = true
     }
     if (cached && (node.dirty || positionChanged)) {
+      // Surface shadow extent: an elevated absolute Surface painted
+      // its shadow `n` cells down-right beyond its own rect last frame
+      // (n = cached.shadowExtent). On move / shrink / elevation drop,
+      // the cleared region MUST include that band or the old shadow
+      // remains visible until another node happens to repaint those
+      // cells. Width and height grow only; position (x, y) doesn't —
+      // the shadow extends down-right. (Codex P2 review on PR #90.)
+      const ext = cached.shadowExtent ?? 0
       output.clear(
         {
           x: Math.floor(cached.x),
           y: Math.floor(cached.y),
-          width: Math.floor(cached.width),
-          height: Math.floor(cached.height),
+          width: Math.floor(cached.width) + ext,
+          height: Math.floor(cached.height) + ext,
         },
         node.style.position === 'absolute',
       )
@@ -1257,8 +1265,22 @@ function renderNodeToOutput(
       renderChildren(node, output, x, y, hasRemovedChild, prevScreen, inheritedBackgroundColor)
     }
 
-    // Cache layout bounds for dirty tracking
-    const rect = { x, y, width, height, top: yogaTop }
+    // Cache layout bounds for dirty tracking. `shadowExtent` is the
+    // elevation level the node painted with this frame; non-zero only
+    // for absolute Surfaces with elevation > 0. The dirty/move clear
+    // path inflates by this amount to wipe the old shadow band when
+    // the surface moves, shrinks, or drops elevation between frames
+    // (Codex P2 review on PR #90). Stored on the rect (not folded
+    // into width/height) so hit-test / click coords keep using the
+    // node's true rect, while only the clear path uses the inflation.
+    const shadowExtentRaw =
+      node.nodeName === 'ink-box' &&
+      node.style.position === 'absolute' &&
+      typeof node.attributes.surfaceElevation === 'number'
+        ? node.attributes.surfaceElevation
+        : 0
+    const shadowExtent = shadowExtentRaw > 0 ? Math.min(5, Math.floor(shadowExtentRaw)) : 0
+    const rect = { x, y, width, height, top: yogaTop, shadowExtent }
     nodeCache.set(node, rect)
     if (node.style.position === 'absolute') {
       absoluteRectsCur.push(rect)

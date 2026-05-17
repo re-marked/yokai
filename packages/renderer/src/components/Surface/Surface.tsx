@@ -106,6 +106,16 @@ export default function Surface({
       surfaceHitTestBoundary={surfaceHitTestBoundary}
       surfaceElevation={surfaceElevation}
       style={{
+        // Match Box's defaults so swapping `<Box>` → `<Surface>` doesn't
+        // silently regress layouts. Yoga's own defaults (column, no flex,
+        // flexShrink=0, nowrap) differ from Box's React-side defaults
+        // (row, flexShrink=1) — Surface defers to Box's flavor, not
+        // Yoga's. Caller's `rest` spreads AFTER so explicit values win.
+        // Codex P1 review on PR #90.
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        flexGrow: 0,
+        flexShrink: 1,
         ...rest,
         position,
         zIndex: resolvedZ,

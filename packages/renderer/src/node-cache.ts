@@ -6,6 +6,14 @@ import type { Rectangle } from './layout/geometry'
  * `top` is the yoga-local getComputedTop() — stored so ScrollBox viewport
  * culling can skip yoga reads for clean children whose position hasn't
  * shifted (O(dirty) instead of O(mounted) first-pass).
+ *
+ * `shadowExtent` is the elevation level the node painted with last frame.
+ * When non-zero, the node's `<Surface elevation>` shadow extended `n`
+ * cells down-right beyond its own rect, so the clear/damage path needs
+ * to extend by the same amount or the old shadow band remains visible
+ * after a move / shrink / elevation drop. Stored alongside the layout
+ * rect (not folded INTO width/height) so hit-test / click coords keep
+ * using the node's true rect, while only the clear path inflates.
  */
 export type CachedLayout = {
   x: number
@@ -13,6 +21,7 @@ export type CachedLayout = {
   width: number
   height: number
   top?: number
+  shadowExtent?: number
 }
 
 export const nodeCache = new WeakMap<DOMElement, CachedLayout>()

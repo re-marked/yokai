@@ -129,6 +129,30 @@ describe('Surface — style passthrough to ink-box', () => {
     expect(node.style.position).toBe('relative')
   })
 
+  it('matches Box flex defaults (regression — Codex P1 review on PR #90)', () => {
+    // Yoga's own defaults differ from Box's React-side defaults: Box
+    // sets flexDirection='row', flexWrap='nowrap', flexGrow=0,
+    // flexShrink=1, but Yoga defaults to column / wrap=nowrap /
+    // flexGrow=0 / flexShrink=0. Surface had been spreading caller
+    // props onto an empty style, so it inherited Yoga's defaults
+    // instead of Box's — any migrated Draggable/Resizable or new
+    // Surface with multiple children and no explicit flex props
+    // would silently stack children vertically. Pin the Box-matching
+    // defaults.
+    const node = renderAndInspect(<Surface />)
+    expect(node.style.flexDirection).toBe('row')
+    expect(node.style.flexWrap).toBe('nowrap')
+    expect(node.style.flexGrow).toBe(0)
+    expect(node.style.flexShrink).toBe(1)
+  })
+
+  it('caller-supplied flex props override the Box-matching defaults', () => {
+    const node = renderAndInspect(<Surface flexDirection="column" flexShrink={0} flexGrow={1} />)
+    expect(node.style.flexDirection).toBe('column')
+    expect(node.style.flexShrink).toBe(0)
+    expect(node.style.flexGrow).toBe(1)
+  })
+
   it("layer='base' resolves to no zIndex (parity with no-layer)", () => {
     const node = renderAndInspect(<Surface layer="base" position="absolute" />)
     expect(node.style.zIndex).toBeUndefined()
