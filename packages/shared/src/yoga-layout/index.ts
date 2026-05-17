@@ -1334,11 +1334,33 @@ function layoutNode(
   collectLayoutChildren(node, flowChildren, absChildren)
 
   // ownerW/H are the reference sizes for resolving children's percentage
-  // values. Per CSS, a % width resolves against the parent's content-box
-  // width. If this node's width is indefinite, children's % widths are also
+  // values — passed both to direct % resolution in this scope AND down
+  // through `layoutNode(child, …, ownerW, ownerH, …)` as the child's
+  // own ownerWidth/ownerHeight for resolving width/height/min/max/
+  // flexBasis/position/margin/padding/border.
+  //
+  // Per CSS, a % width on an in-flow child resolves against the
+  // parent's content-box width (outer − border − padding). The
+  // innerMainSize/innerCrossSize values just computed are exactly that
+  // (`Math.max(0, mainSize - mainPadBorder)` etc.), so axisify them
+  // back to W/H and use them as the percent reference. The pre-fix
+  // code passed outer width/height here, which made `<Box width="100%">`
+  // overflow a bordered parent's right border by `borderRight` cells
+  // (shakedown B7 — issue #60).
+  //
+  // If this node's width is indefinite, children's % widths are also
   // indefinite — do NOT fall through to the grandparent's size.
-  const ownerW = isDefined(width) ? width : Number.NaN
-  const ownerH = isDefined(height) ? height : Number.NaN
+  //
+  // The deviation this introduces from Yoga upstream: child percent
+  // margin/padding/border now resolve against parent content box
+  // instead of parent outer (Yoga upstream resolves against ownerWidth
+  // = outer). This is intentional — TUI consumers expect percent on
+  // a child to mean "fraction of available space inside the parent",
+  // not "fraction including the parent's frame".
+  const innerOwnerW = isMainRow ? innerMainSize : innerCrossSize
+  const innerOwnerH = isMainRow ? innerCrossSize : innerMainSize
+  const ownerW = isDefined(innerOwnerW) ? innerOwnerW : Number.NaN
+  const ownerH = isDefined(innerOwnerH) ? innerOwnerH : Number.NaN
   const isWrap = style.flexWrap !== Wrap.NoWrap
   const gapCross = resolveGap(style, isMainRow ? Gutter.Row : Gutter.Column, innerCrossSize)
 
