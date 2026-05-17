@@ -325,6 +325,26 @@ export const measureTextNode = (
   // Actual tab expansion happens in output.ts based on screen position.
   const text = expandTabs(rawText)
 
+  // Undefined mode = "what's your intrinsic size? no constraint." Return
+  // the natural dimensions. Calling wrapText with NaN (or any sentinel
+  // width) would corrupt the basis: e.g. `wrapText(text, NaN, 'truncate')`
+  // happily appends an ellipsis and reports natural+1, so the parent's
+  // flex distribution gets a width derived from imaginary fitting. The
+  // worst case is `truncate-start`, where `wrapText(text, NaN, …)` can
+  // collapse the entire string to a single "…" cell (shakedown A1 / A5
+  // — issues #51 / #58). Wrap and truncate are about fitting within an
+  // ACTUAL constraint; without one, the natural size is the only honest
+  // answer.
+  //
+  // Embedded newlines: measureText already accounts for line breaks in
+  // its single-pass walk (each \n bumps height and resets the width
+  // accumulator). The natural dimensions reflect the longest line and
+  // the total line count, which is exactly what an unconstrained basis
+  // call wants.
+  if (widthMode === LayoutMeasureMode.Undefined) {
+    return measureText(text, Number.POSITIVE_INFINITY)
+  }
+
   const dimensions = measureText(text, width)
 
   // Text fits into container, no need to wrap
@@ -336,19 +356,6 @@ export const measureTextNode = (
   // if we can fit this text node in a <1px space, so we just say "no"
   if (dimensions.width >= 1 && width > 0 && width < 1) {
     return dimensions
-  }
-
-  // For text with embedded newlines (pre-wrapped content), avoid re-wrapping
-  // at measurement width when layout is asking for intrinsic size (Undefined mode).
-  // This prevents height inflation during min/max size checks.
-  //
-  // However, when layout provides an actual constraint (Exactly or AtMost mode),
-  // we must respect it and measure at that width. Otherwise, if the actual
-  // rendering width is smaller than the natural width, the text will wrap to
-  // more lines than layout expects, causing content to be truncated.
-  if (text.includes('\n') && widthMode === LayoutMeasureMode.Undefined) {
-    const effectiveWidth = Math.max(width, dimensions.width)
-    return measureText(text, effectiveWidth)
   }
 
   const textWrap = node.style?.textWrap ?? 'wrap'
