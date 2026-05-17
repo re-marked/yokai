@@ -1022,3 +1022,208 @@ describe('renderNodeToOutput — absolute node moving between frames', () => {
     expect(charAt(frame2, 4, 0)).toBe('o')
   })
 })
+
+// ── A1 / A5: nested-text truncation under a flex parent (issues #51 / #58) ──
+//
+// The bug: a `<Text wrap="truncate">` containing nested `<Text>` children
+// inside a flex-row parent renders with trailing content silently
+// truncated — even when the parent has abundant available space.
+//
+// Mirrors the consumer-level styles produced by `Text.tsx`:
+//   - outer Text: { flexGrow: 0, flexShrink: 1, flexDirection: 'row',
+//                   textWrap: 'truncate' }   (memoizedStylesForWrap.truncate)
+//   - inner Texts (default wrap='wrap'): { flexGrow: 0, flexShrink: 1,
+//                                          flexDirection: 'row',
+//                                          textWrap: 'wrap' }
+//
+// These tests construct the exact JSX tree from the issue repro and
+// assert that all three inner-text segments render at their natural
+// positions — no truncation, no missing trailing content.
+
+describe('nested-text inside a flex-row parent — no silent truncation (#51, #58)', () => {
+  function nestedTextTree(parentWidth: number, parentHeight = 1): DOMElement {
+    // Mirror Text.tsx memoizedStylesForWrap values exactly.
+    const outerStyle: Styles = {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate',
+    }
+    const innerStyle: Styles = {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'wrap',
+    }
+    const outer = el('ink-text', outerStyle)
+    const inner1 = el('ink-text', innerStyle)
+    appendChildNode(inner1, createTextNode('13:47:04') as unknown as DOMElement)
+    const inner2 = el('ink-text', innerStyle)
+    appendChildNode(inner2, createTextNode(' · ') as unknown as DOMElement)
+    const inner3 = el('ink-text', innerStyle)
+    appendChildNode(inner3, createTextNode('May 3') as unknown as DOMElement)
+    appendChildNode(outer, inner1)
+    appendChildNode(outer, inner2)
+    appendChildNode(outer, inner3)
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const spacer = el('ink-box', { flexGrow: 1 })
+    const parent = el('ink-root', {
+      width: parentWidth,
+      height: parentHeight,
+      flexDirection: 'row',
+    })
+    appendChildNode(parent, spacer)
+    appendChildNode(parent, wrapper)
+    parent.yogaNode!.calculateLayout(parentWidth, parentHeight)
+    return parent
+  }
+
+  it('exact issue #51 repro: 80-cell parent, 16-cell content, all three segments visible', () => {
+    const parent = nestedTextTree(80)
+    const screen = render(parent, 80, 1)
+    // Natural content "13:47:04 · May 3" = 16 cells. Right-anchored at
+    // col 80 - 16 = 64. Verify each segment ends where it should.
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+
+  it('30-cell parent, 16-cell content (14 cells of slack): no truncation', () => {
+    const parent = nestedTextTree(30)
+    const screen = render(parent, 30, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+
+  it('20-cell parent, 16-cell content (4 cells of slack): no truncation', () => {
+    const parent = nestedTextTree(20)
+    const screen = render(parent, 20, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+
+  it('16-cell parent (exact fit): no truncation', () => {
+    const parent = nestedTextTree(16)
+    const screen = render(parent, 16, 1)
+    expect(rowText(screen, 0)).toBe('13:47:04 · May 3')
+  })
+
+  it('column parent, NO wrapper width, nested truncate-Text: renders natural without poisoned basis', () => {
+    // A1's underlying poisoning path: outer Text with `wrap="truncate"`
+    // inside a COLUMN-parented wrapper (no explicit width). Pre-fix,
+    // the basis pass called measureFunc with widthMode=Undefined →
+    // wrapText(text, NaN, 'truncate') appended an ellipsis →
+    // measureFunc reported width = natural + 1. The bug surfaces as
+    // either an unwanted ellipsis or downstream flex weirdness.
+    // Post-fix, measureFunc returns natural in Undefined mode.
+    const outer = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate',
+    })
+    const inner1 = createNode('ink-virtual-text')
+    appendChildNode(inner1, createTextNode('13:47:04') as unknown as DOMElement)
+    const inner2 = createNode('ink-virtual-text')
+    appendChildNode(inner2, createTextNode(' · ') as unknown as DOMElement)
+    const inner3 = createNode('ink-virtual-text')
+    appendChildNode(inner3, createTextNode('May 3') as unknown as DOMElement)
+    appendChildNode(outer, inner1)
+    appendChildNode(outer, inner2)
+    appendChildNode(outer, inner3)
+    // Wrapper is column-direction (Box default), no explicit width →
+    // triggers the Undefined-mode measureFunc call on the outer Text.
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const root = el('ink-root', { width: 80, height: 1, flexDirection: 'row' })
+    appendChildNode(root, el('ink-box', { flexGrow: 1 }))
+    appendChildNode(root, wrapper)
+    root.yogaNode!.calculateLayout(80, 1)
+    const screen = render(root, 80, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+
+  it('truncate-start in Undefined mode does NOT collapse the entire string to "…"', () => {
+    // Pre-fix, `wrapText(text, NaN, 'truncate-start')` collapsed the
+    // whole string to a single "…" cell because sliceFit(text, length-NaN, length)
+    // returned an empty slice. The basis would report width=1, which
+    // then locks the rendered layout. Verify the fix surfaces at the
+    // render layer too.
+    const outer = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate-start',
+    })
+    appendChildNode(outer, createTextNode('foo bar baz') as unknown as DOMElement)
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const root = el('ink-root', { width: 40, height: 1, flexDirection: 'row' })
+    appendChildNode(root, el('ink-box', { flexGrow: 1 }))
+    appendChildNode(root, wrapper)
+    root.yogaNode!.calculateLayout(40, 1)
+    const screen = render(root, 40, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('foo bar baz')
+  })
+
+  it('cross-stretch in a column parent does not silently shrink wrap-Text to multi-line', () => {
+    // A5's scenario in spirit: a wrap-mode Text inside a column-
+    // parented wrapper. With the measure-layer fix, the wrap-mode
+    // Text reports its natural width during basis and the parent
+    // sizes accordingly — no surprise wrap to a 2nd line caused by
+    // poisoned intrinsic measurement.
+    const text = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'wrap',
+    })
+    appendChildNode(text, createTextNode('Title Bar') as unknown as DOMElement)
+    const titleRow = el('ink-box', { flexShrink: 0 })
+    appendChildNode(titleRow, text)
+    const root = el('ink-root', {
+      width: 30,
+      height: 1,
+      flexDirection: 'column',
+    })
+    appendChildNode(root, titleRow)
+    root.yogaNode!.calculateLayout(30, 1)
+    const screen = render(root, 30, 1)
+    expect(rowText(screen, 0)).toBe('Title Bar')
+  })
+
+  it('inner children rendered as ink-virtual-text (matching reconciler behavior)', () => {
+    // The reconciler converts nested <Text> inside <Text> to
+    // ink-virtual-text in createInstance (no yoga node, content
+    // collected by squashTextNodes on the outer ink-text). This
+    // mirrors that path: outer ink-text with virtual-text children.
+    const outer = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate',
+    })
+    const inner1 = createNode('ink-virtual-text')
+    setStyle(inner1, { textWrap: 'wrap' })
+    appendChildNode(inner1, createTextNode('13:47:04') as unknown as DOMElement)
+    const inner2 = createNode('ink-virtual-text')
+    setStyle(inner2, { textWrap: 'wrap' })
+    appendChildNode(inner2, createTextNode(' · ') as unknown as DOMElement)
+    const inner3 = createNode('ink-virtual-text')
+    setStyle(inner3, { textWrap: 'wrap' })
+    appendChildNode(inner3, createTextNode('May 3') as unknown as DOMElement)
+    appendChildNode(outer, inner1)
+    appendChildNode(outer, inner2)
+    appendChildNode(outer, inner3)
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const spacer = el('ink-box', { flexGrow: 1 })
+    const parent = el('ink-root', {
+      width: 80,
+      height: 1,
+      flexDirection: 'row',
+    })
+    appendChildNode(parent, spacer)
+    appendChildNode(parent, wrapper)
+    parent.yogaNode!.calculateLayout(80, 1)
+    const screen = render(parent, 80, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+})
