@@ -217,6 +217,25 @@ describe('Surface — style passthrough to ink-box', () => {
     expect(node.attributes.surfaceElevation).toBeUndefined()
   })
 
+  it('shadowColor passes through to the surfaceShadowColor host attribute', () => {
+    const node = renderAndInspect(
+      <Surface elevation={2} shadowColor="#475569" position="absolute" />,
+    )
+    expect(node.attributes.surfaceShadowColor).toBe('#475569')
+  })
+
+  it('shadowColor is OMITTED when elevation is 0 (no shadow to paint)', () => {
+    const node = renderAndInspect(
+      <Surface elevation={0} shadowColor="#475569" position="absolute" />,
+    )
+    expect(node.attributes.surfaceShadowColor).toBeUndefined()
+  })
+
+  it('shadowColor is omitted when not set (renderer falls back to default near-black)', () => {
+    const node = renderAndInspect(<Surface elevation={2} position="absolute" />)
+    expect(node.attributes.surfaceShadowColor).toBeUndefined()
+  })
+
   it('layout passthrough: padding / flex / border props reach ink-box style', () => {
     const node = renderAndInspect(
       <Surface

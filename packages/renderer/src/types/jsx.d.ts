@@ -37,6 +37,9 @@ type InkBoxProps = {
   // modal semantics. See components/Surface/types.ts.
   surfaceHitTestBoundary?: boolean
   surfaceElevation?: number
+  /** Per-Surface override for the elevation shadow's fill color.
+   *  Defaults to the renderer's reserved near-black when undefined. */
+  surfaceShadowColor?: string
   children?: ReactNode
 }
 

@@ -39,6 +39,7 @@ export default function Surface({
   clip,
   hitTestBoundary,
   elevation,
+  shadowColor,
   backdrop,
   backdropColor = 'black',
   ref,
@@ -84,6 +85,11 @@ export default function Surface({
   // signal that something will be ignored).
   const surfaceHitTestBoundary = hitTestBoundary === true ? true : undefined
   const surfaceElevation = typeof elevation === 'number' && elevation > 0 ? elevation : undefined
+  // Pass through only when the consumer actively set a color AND the
+  // surface is actually elevated. Avoids polluting the rendered DOM
+  // attrs for the common case where the default `#1a1a1a` is fine.
+  const surfaceShadowColor =
+    surfaceElevation !== undefined && typeof shadowColor === 'string' ? shadowColor : undefined
 
   const surface = (
     <ink-box
@@ -105,6 +111,7 @@ export default function Surface({
       onPasteCapture={onPasteCapture}
       surfaceHitTestBoundary={surfaceHitTestBoundary}
       surfaceElevation={surfaceElevation}
+      surfaceShadowColor={surfaceShadowColor}
       style={{
         // Match Box's defaults so swapping `<Box>` → `<Surface>` doesn't
         // silently regress layouts. Yoga's own defaults (column, no flex,

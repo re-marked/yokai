@@ -80,18 +80,34 @@ function SectionTitle({ children }: { children: React.ReactNode }): React.ReactN
 
 // ── individual sections ──────────────────────────────────────────────
 
-/** All 8 layers, stacked from top-left, each offset down-right so the
+/** All 8 layers, stacked from top-left with horizontal overlap so the
  *  highest band ends up visibly on top — proves the paint-order
- *  contract in one glance. Each Surface labels itself with its band
- *  name + numeric z. */
+ *  contract in one glance. Each surface fits a 4-char label in its
+ *  visible portion (the rest is occluded by the next layer's left
+ *  edge); the section title carries the layer→z mapping reference. */
 function LayersDemo(): React.ReactNode {
+  // 4-char abbreviations sized to fit the visible portion of each
+  // surface (each spans 14 cells but only the first 6 are visible
+  // before the next-higher-z layer's left edge covers it; after
+  // border (1) + padding (0) → 5 visible content cells, comfortable
+  // for 4-char labels with one cell breathing room).
+  const ABBR: Record<(typeof LAYERS)[number]['layer'], string> = {
+    base: 'base',
+    docked: 'dock',
+    overlay: 'over',
+    dropdown: 'drop',
+    modal: 'modl',
+    popover: 'popo',
+    tooltip: 'tool',
+    'drag-ghost': 'ghst',
+  }
   return (
-    <Box position="relative" width={56} height={6}>
+    <Box position="relative" width={56} height={3}>
       {LAYERS.map((l, i) => (
         <Surface
           key={l.layer}
           position="absolute"
-          top={i * 0}
+          top={0}
           left={i * 6}
           width={14}
           height={3}
@@ -99,12 +115,8 @@ function LayersDemo(): React.ReactNode {
           backgroundColor={l.color}
           borderStyle="single"
           borderColor={C.border}
-          paddingX={1}
         >
-          <Text color={C.text}>
-            {l.layer}{' '}
-            <Text dim>z={l.z}</Text>
-          </Text>
+          <Text color={C.text}>{ABBR[l.layer]}</Text>
         </Surface>
       ))}
     </Box>
@@ -112,7 +124,9 @@ function LayersDemo(): React.ReactNode {
 }
 
 /** Six surfaces at elev 0..5, side-by-side. Visually shows the shadow
- *  band growing thicker as elevation rises. */
+ *  band growing thicker as elevation rises. `shadowColor` is brightened
+ *  from the default near-black so the band is visible against the
+ *  demo's dark background. */
 function ElevationRow(): React.ReactNode {
   return (
     <Box position="relative" width={56} height={5}>
@@ -128,6 +142,7 @@ function ElevationRow(): React.ReactNode {
           borderStyle="round"
           borderColor={C.border}
           elevation={e}
+          shadowColor="#475569"
           alignItems="center"
           justifyContent="center"
         >
@@ -179,13 +194,15 @@ function BoundaryDemo({
         >
           <Text color="white">click anywhere · sibling</Text>
         </Surface>
-        {/* Boundary on top covers the middle 16 cells. */}
+        {/* Boundary on top covers the middle 16 cells. Height=3 so the
+            border (1 row top + 1 row bottom) still leaves 1 row for the
+            label; with height=2 the label would have no inner space. */}
         <Surface
           position="absolute"
-          top={1}
+          top={0}
           left={8}
           width={16}
-          height={2}
+          height={3}
           layer="modal"
           backgroundColor={C.modal}
           borderStyle="round"
@@ -203,7 +220,14 @@ function BoundaryDemo({
 }
 
 /** Draggable inside an elevated Surface. Drag the inner box around —
- *  drag-time z boost lifts it above the parent's chrome. */
+ *  drag-time z boost lifts it above the parent's chrome.
+ *
+ *  Draggable's `initialPos` resolves against the parent's padding-box
+ *  per CSS §10.1, not the content box. With this Surface's padding=1,
+ *  initialPos={top:1, left:1} would land on the SAME row as the
+ *  in-flow text (text starts at content origin = padding+border). We
+ *  intentionally push Draggable down to top=2 so it sits BELOW the
+ *  label row inside the content area. */
 function CompositionDemo(): React.ReactNode {
   return (
     <Surface
@@ -217,11 +241,12 @@ function CompositionDemo(): React.ReactNode {
       borderStyle="single"
       borderColor={C.border}
       elevation={2}
+      shadowColor="#475569"
       padding={1}
     >
       <Text dim>elevated overlay · drag me ↓</Text>
       <Draggable
-        initialPos={{ top: 1, left: 1 }}
+        initialPos={{ top: 2, left: 1 }}
         width={10}
         height={2}
         backgroundColor="#06b6d4"
@@ -295,6 +320,7 @@ function StressDemo({
         borderStyle="round"
         borderColor={C.modalBorder}
         elevation={elev}
+        shadowColor="#475569"
         alignItems="center"
         justifyContent="center"
       >

@@ -16,17 +16,20 @@ import { isXtermJs } from './terminal'
 import { widestLine } from './widest-line'
 import wrapText from './wrap-text'
 
-// Reserved dim color slot for `<Surface elevation>` drop shadows.
-// Terminals don't support alpha, so the shadow is a single dim band of
-// background-filled spaces. Color choice: a near-black 256-color value
-// readable on both light and dark themes (chalk maps #1a1a1a to the
-// nearest 256-color slot when truecolor isn't available, ~ANSI 234).
+// Default fill color for `<Surface elevation>` drop shadows when the
+// consumer doesn't supply `shadowColor`. Terminals don't support
+// alpha, so the shadow is a single dim band of background-filled
+// spaces — `#1a1a1a` reads as a near-black 256-color slot (~ANSI
+// 234) that contrasts well against typical LIGHT themes. On dark
+// themes the default is close to invisible; set `<Surface
+// shadowColor>` to a brighter value (e.g. `#404040`, `#475569`) to
+// pull the band out from the background.
 //
 // Per-cell `dim` levels from `shadowCells` are not currently used —
-// v1 paints all shadow cells with this single color. The level field
-// remains in the cell record for future multi-tone shading without
-// an API change.
-const SHADOW_COLOR: Color = '#1a1a1a'
+// v1 paints all shadow cells with the single resolved color. The
+// level field remains in the cell record for future multi-tone
+// shading without an API change.
+const DEFAULT_SHADOW_COLOR: Color = '#1a1a1a'
 
 /**
  * Paint a `<Surface elevation>` drop shadow into the output buffer.
@@ -34,16 +37,16 @@ const SHADOW_COLOR: Color = '#1a1a1a'
  * the shadow sits behind the surface visually and on top of any
  * lower-z sibling cells that lie in the shadow's L-band.
  *
- * Each cell is written as a background-filled space using the reserved
- * SHADOW_COLOR. The styled space is computed per-call rather than
- * cached at module load, because chalk.level is mutable across
- * processes (tests force level 3 for cell discrimination, the boost/
- * clamp in colorize.ts adjusts it for terminal capabilities) and a
- * cached pre-render would silently fall back to a plain space if the
- * level was 0 when this module first loaded. `output.write` clips
- * per its existing cell-bounds check, so shadow cells that escape
- * the screen are naturally dropped without callers needing to bound
- * them.
+ * Each cell is written as a background-filled space using the
+ * caller-supplied or default shadow color. The styled space is
+ * computed per-call rather than cached at module load, because
+ * chalk.level is mutable across processes (tests force level 3 for
+ * cell discrimination, the boost/clamp in colorize.ts adjusts it for
+ * terminal capabilities) and a cached pre-render would silently fall
+ * back to a plain space if the level was 0 when this module first
+ * loaded. `output.write` clips per its existing cell-bounds check,
+ * so shadow cells that escape the screen are naturally dropped
+ * without callers needing to bound them.
  *
  * Known limitation: if a lower-z sibling is dirty AND this Surface is
  * NOT dirty (blit fast path), the sibling's repaint overwrites the
@@ -53,9 +56,9 @@ const SHADOW_COLOR: Color = '#1a1a1a'
  * register shadow cells in `pendingClears` or as parent-tracked
  * dirty regions if real consumers hit this.
  */
-function paintShadowCells(cells: ShadowCell[], output: Output): void {
+function paintShadowCells(cells: ShadowCell[], color: Color, output: Output): void {
   if (cells.length === 0) return
-  const shadowCell = applyTextStyles(' ', { backgroundColor: SHADOW_COLOR })
+  const shadowCell = applyTextStyles(' ', { backgroundColor: color })
   for (const c of cells) {
     output.write(c.col, c.row, shadowCell)
   }
@@ -698,6 +701,9 @@ function renderNodeToOutput(
       // `components/Surface/shadow.ts` for the cell math.
       const elevation = node.attributes.surfaceElevation
       if (typeof elevation === 'number' && elevation > 0 && node.style.position === 'absolute') {
+        const customShadow = node.attributes.surfaceShadowColor
+        const shadowColor: Color =
+          typeof customShadow === 'string' ? customShadow : DEFAULT_SHADOW_COLOR
         paintShadowCells(
           shadowCells(
             {
@@ -708,6 +714,7 @@ function renderNodeToOutput(
             },
             Math.min(5, Math.max(1, Math.floor(elevation))) as SurfaceElevation,
           ),
+          shadowColor,
           output,
         )
       }
