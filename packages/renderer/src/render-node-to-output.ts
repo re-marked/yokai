@@ -1,5 +1,7 @@
 import indentString from 'indent-string'
 import { applyTextStyles } from './colorize'
+import { type ShadowCell, shadowCells } from './components/Surface/shadow.js'
+import type { SurfaceElevation } from './components/Surface/types.js'
 import type { DOMElement, DOMNode } from './dom'
 import getMaxWidth from './get-max-width'
 import type { Rectangle } from './layout/geometry'
@@ -13,6 +15,51 @@ import type { Color } from './styles'
 import { isXtermJs } from './terminal'
 import { widestLine } from './widest-line'
 import wrapText from './wrap-text'
+
+// Reserved dim color slot for `<Surface elevation>` drop shadows.
+// Terminals don't support alpha, so the shadow is a single dim band of
+// background-filled spaces. Color choice: a near-black 256-color value
+// readable on both light and dark themes (chalk maps #1a1a1a to the
+// nearest 256-color slot when truecolor isn't available, ~ANSI 234).
+//
+// Per-cell `dim` levels from `shadowCells` are not currently used —
+// v1 paints all shadow cells with this single color. The level field
+// remains in the cell record for future multi-tone shading without
+// an API change.
+const SHADOW_COLOR: Color = '#1a1a1a'
+
+/**
+ * Paint a `<Surface elevation>` drop shadow into the output buffer.
+ * Called from the ink-box render path BEFORE the box's own paint, so
+ * the shadow sits behind the surface visually and on top of any
+ * lower-z sibling cells that lie in the shadow's L-band.
+ *
+ * Each cell is written as a background-filled space using the reserved
+ * SHADOW_COLOR. The styled space is computed per-call rather than
+ * cached at module load, because chalk.level is mutable across
+ * processes (tests force level 3 for cell discrimination, the boost/
+ * clamp in colorize.ts adjusts it for terminal capabilities) and a
+ * cached pre-render would silently fall back to a plain space if the
+ * level was 0 when this module first loaded. `output.write` clips
+ * per its existing cell-bounds check, so shadow cells that escape
+ * the screen are naturally dropped without callers needing to bound
+ * them.
+ *
+ * Known limitation: if a lower-z sibling is dirty AND this Surface is
+ * NOT dirty (blit fast path), the sibling's repaint overwrites the
+ * shadow cells while this Surface re-blits its own rect without
+ * re-painting the shadow. The shadow returns on the next frame this
+ * Surface itself dirties. Acceptable for v1; a follow-up could
+ * register shadow cells in `pendingClears` or as parent-tracked
+ * dirty regions if real consumers hit this.
+ */
+function paintShadowCells(cells: ShadowCell[], output: Output): void {
+  if (cells.length === 0) return
+  const shadowCell = applyTextStyles(' ', { backgroundColor: SHADOW_COLOR })
+  for (const c of cells) {
+    output.write(c.col, c.row, shadowCell)
+  }
+}
 
 // Matches detectXtermJsWheel() in ScrollKeybindingHandler.tsx — the curve
 // and drain must agree on terminal detection. TERM_PROGRAM check is the sync
@@ -634,6 +681,28 @@ function renderNodeToOutput(
         output.write(x, y, text, softWrap)
       }
     } else if (node.nodeName === 'ink-box') {
+      // A23 Surface drop-shadow pass. Paints BEFORE any of this box's
+      // own content (noSelect / fill / children / border) so the
+      // shadow cells — which sit OUTSIDE this box's rect — overlay
+      // lower-z sibling cells that may already have painted into the
+      // shadow band. Gated on `surfaceElevation > 0` AND absolute
+      // positioning (in-flow shadows would shift sibling layout). See
+      // `components/Surface/shadow.ts` for the cell math.
+      const elevation = node.attributes.surfaceElevation
+      if (
+        typeof elevation === 'number' &&
+        elevation > 0 &&
+        node.style.position === 'absolute'
+      ) {
+        paintShadowCells(
+          shadowCells(
+            { x: Math.floor(x), y: Math.floor(y), width: Math.floor(width), height: Math.floor(height) },
+            Math.min(5, Math.max(1, Math.floor(elevation))) as SurfaceElevation,
+          ),
+          output,
+        )
+      }
+
       const boxBackgroundColor = node.style.backgroundColor ?? inheritedBackgroundColor
 
       // Mark this box's region as non-selectable (fullscreen text

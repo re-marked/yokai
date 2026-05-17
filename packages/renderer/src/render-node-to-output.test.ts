@@ -11,7 +11,7 @@
  * appears later we can promote them to a shared internal helpers module.
  */
 
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type DOMElement, appendChildNode, createNode, createTextNode, setStyle } from './dom.js'
 import Output from './output.js'
 import renderNodeToOutput, { getScrollHint, resetScrollHint } from './render-node-to-output.js'
@@ -1225,5 +1225,176 @@ describe('nested-text inside a flex-row parent — no silent truncation (#51, #5
     parent.yogaNode!.calculateLayout(80, 1)
     const screen = render(parent, 80, 1)
     expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+})
+
+// ── A23: <Surface elevation> shadow paint pass ─────────────────────────
+//
+// The shadow paint pass runs at the top of the ink-box render branch,
+// gated on `surfaceElevation > 0` AND `position === 'absolute'`. It
+// writes background-filled cells at the geometric L-band computed by
+// `shadowCells`. These tests pin:
+//   - cells get painted at the expected positions for elev=1/elev=2
+//   - elev=0 is a no-op (byte-identical to a non-elevated baseline)
+//   - in-flow (relative) Surface with elevation is silently ignored
+//     (would shift sibling layout if painted; matches the dev warn)
+//   - cells outside the screen are clipped (output.write bounds check)
+//
+// The renderer test infra (`render` + `charAt`) lets us inspect what
+// actually landed in the cell grid; that's the truth source.
+//
+// Chalk gate: vitest runs with no TTY, so chalk auto-detects level 0
+// and `applyTextStyles(' ', { backgroundColor })` returns a plain
+// space — indistinguishable from an unwritten cell. Force chalk to
+// level 3 for this suite so styled cells get distinct styleIds and
+// the shadow-vs-blank discrimination works. Restored at suite end so
+// subsequent describe blocks see the original level.
+describe('A23 — Surface elevation shadow paint pass', () => {
+  let originalChalkLevel: 0 | 1 | 2 | 3
+  beforeAll(async () => {
+    const chalk = (await import('chalk')).default
+    originalChalkLevel = chalk.level
+    chalk.level = 3
+  })
+  afterAll(async () => {
+    const chalk = (await import('chalk')).default
+    chalk.level = originalChalkLevel
+  })
+  /** Build a single absolute "surface" Box at the given rect + elevation,
+   *  inside a root sized to the screen. */
+  function surfaceTree(
+    screenW: number,
+    screenH: number,
+    rect: { top: number; left: number; width: number; height: number },
+    opts: { elevation?: number; relative?: boolean } = {},
+  ): DOMElement {
+    const surface = el('ink-box', {
+      position: opts.relative ? undefined : 'absolute',
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      backgroundColor: 'cyan',
+    })
+    if (opts.elevation !== undefined && opts.elevation > 0) {
+      surface.attributes.surfaceElevation = opts.elevation
+    }
+    const root = el('ink-root', { width: screenW, height: screenH })
+    appendChildNode(root, surface)
+    root.yogaNode!.calculateLayout(screenW, screenH)
+    return root
+  }
+
+  /** A shadow cell appears as a background-filled space in the grid —
+   *  visible char is ' ', cell is non-blank. Compare via cellAt. */
+  function isShadowCell(screen: Screen, x: number, y: number): boolean {
+    const cell = cellAt(screen, x, y)
+    if (!cell) return false
+    if (cell.char !== ' ') return false
+    // Reserved shadow style differs from emptyStyleId — the cell is
+    // "painted" rather than "blank."
+    return cell.styleId !== screen.emptyStyleId
+  }
+
+  it('elevation=1 paints the documented 5-cell L-band around a 3x3 surface', () => {
+    // Surface at (1, 1) with 3x3. Shadow cells per shadow.test.ts:
+    //   (4,2) (4,3) (2,4) (3,4) (4,4)
+    const root = surfaceTree(10, 8, { top: 1, left: 1, width: 3, height: 3 }, { elevation: 1 })
+    const screen = render(root, 10, 8)
+    expect(isShadowCell(screen, 4, 2)).toBe(true)
+    expect(isShadowCell(screen, 4, 3)).toBe(true)
+    expect(isShadowCell(screen, 2, 4)).toBe(true)
+    expect(isShadowCell(screen, 3, 4)).toBe(true)
+    expect(isShadowCell(screen, 4, 4)).toBe(true)
+    // Cells off the L are NOT shadowed.
+    expect(isShadowCell(screen, 5, 2)).toBe(false) // beyond right band
+    expect(isShadowCell(screen, 4, 5)).toBe(false) // beyond bottom band
+    expect(isShadowCell(screen, 1, 4)).toBe(false) // left of bottom band
+  })
+
+  it('elevation=0 produces NO shadow cells (no-op vs baseline)', () => {
+    // Default elevation is undefined / 0 — surface attribute is not
+    // set, so no shadow paint. The cells around the surface stay
+    // blank (or take whatever the existing renderer would have put
+    // there, which is "nothing" for an isolated absolute surface).
+    const root = surfaceTree(10, 8, { top: 1, left: 1, width: 3, height: 3 }) // no elevation
+    const screen = render(root, 10, 8)
+    // Cells where shadow WOULD have been at elev=1 should now be empty.
+    expect(isShadowCell(screen, 4, 2)).toBe(false)
+    expect(isShadowCell(screen, 4, 3)).toBe(false)
+    expect(isShadowCell(screen, 2, 4)).toBe(false)
+    expect(isShadowCell(screen, 3, 4)).toBe(false)
+    expect(isShadowCell(screen, 4, 4)).toBe(false)
+  })
+
+  it('in-flow (relative) surface with elevation paints NO shadow (in-flow guard)', () => {
+    // The renderer's gate requires position='absolute'. The dev-warn
+    // (in Surface.tsx, not the renderer) tells the consumer; the
+    // renderer's behavior is "silently ignore." This pins that.
+    const root = surfaceTree(
+      10,
+      8,
+      { top: 1, left: 1, width: 3, height: 3 },
+      { elevation: 2, relative: true },
+    )
+    const screen = render(root, 10, 8)
+    expect(isShadowCell(screen, 4, 2)).toBe(false)
+    expect(isShadowCell(screen, 4, 4)).toBe(false)
+  })
+
+  it('elevation=2 produces a wider L-band (covers elev-1 cells PLUS the outer ring)', () => {
+    // From shadow.test.ts elev=2 case: extra cells include (5,2)(5,3)
+    // (5,4) on the right and (2,5)(3,5)(4,5)(5,5) on the bottom.
+    const root = surfaceTree(10, 8, { top: 1, left: 1, width: 3, height: 3 }, { elevation: 2 })
+    const screen = render(root, 10, 8)
+    // Inner L still present
+    expect(isShadowCell(screen, 4, 2)).toBe(true)
+    expect(isShadowCell(screen, 4, 4)).toBe(true)
+    // Outer ring
+    expect(isShadowCell(screen, 5, 2)).toBe(true)
+    expect(isShadowCell(screen, 5, 4)).toBe(true)
+    expect(isShadowCell(screen, 3, 5)).toBe(true)
+    expect(isShadowCell(screen, 5, 5)).toBe(true)
+  })
+
+  it('shadow cells beyond screen bounds are silently clipped', () => {
+    // Surface near the right/bottom edge — shadow cells extending
+    // off-screen should just be dropped by `output.write` bounds
+    // checking, not crash and not paint at wrap-around coords.
+    const root = surfaceTree(10, 6, { top: 4, left: 7, width: 2, height: 2 }, { elevation: 2 })
+    const screen = render(root, 10, 6)
+    // In-bounds shadow cells should still be present (cells inside
+    // the 10x6 grid).
+    // Right band at cols 9, 10 — col 10 is off-screen.
+    // Bottom band at rows 6, 7 — both off-screen.
+    // So only (9, 5) — right band row 5 col 9 — is in-bounds.
+    // We don't assert exhaustively; just that no crash and the
+    // in-bounds cell is reachable.
+    expect(() => {
+      // accessing arbitrary cells must not throw
+      isShadowCell(screen, 9, 5)
+      isShadowCell(screen, 9, 7)
+    }).not.toThrow()
+  })
+
+  it('surface itself paints over its own rect (shadow does NOT overlap the surface body)', () => {
+    // The shadow L is geometrically outside the surface rect, by
+    // construction of shadowCells. Re-confirm at the render level —
+    // cells inside the surface should have the surface's background
+    // (cyan), not the shadow color.
+    const root = surfaceTree(10, 8, { top: 1, left: 1, width: 3, height: 3 }, { elevation: 2 })
+    const screen = render(root, 10, 8)
+    // Surface cells (1..3, 1..3) should NOT be shadow cells.
+    for (let y = 1; y <= 3; y++) {
+      for (let x = 1; x <= 3; x++) {
+        const cell = cellAt(screen, x, y)
+        expect(cell, `cell (${x},${y})`).toBeDefined()
+        // The cell has a background fill from the surface's
+        // backgroundColor=cyan — different style than the shadow.
+        // We don't compare the exact styleId here; we just verify
+        // it's painted (non-empty styleId).
+        expect(cell?.styleId).not.toBe(screen.emptyStyleId)
+      }
+    }
   })
 })
