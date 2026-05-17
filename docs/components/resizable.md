@@ -58,6 +58,7 @@ All `<Box>` props are accepted except `width`, `height`, `onMouseDown` (owned in
 ## Related
 - [`Draggable`](./draggable.md)
 - [`Box`](./box.md)
+- [`Surface`](./surface.md) — paints through this primitive (the outer wrapper is a `<Surface clip="hidden">`).
 
 ## Source
 [`packages/renderer/src/components/Resizable.tsx`](../../packages/renderer/src/components/Resizable.tsx)

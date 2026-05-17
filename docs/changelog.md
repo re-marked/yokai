@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+**Added**
+
+- **`<Surface>`** — foundational rectangle primitive that paints, layers, optionally bounds hit-tests, casts drop shadows (elevation 0-5), and auto-renders a backdrop scrim. Named z-bands via `layer` prop: `base / docked / overlay / dropdown / modal / popover / tooltip / drag-ghost`, with explicit numeric `zIndex` as an escape hatch. Default Surface is byte-identical to `<Box>` — opt into each Surface feature individually. Foundation for the upcoming `<Window>` primitive (A4) and the Phase 2 modal / popover / tooltip components.
+- New ink-box host attributes `surfaceHitTestBoundary` and `surfaceElevation` consumed by `hit-test.ts` and `render-node-to-output.ts`. Dev warnings (`logForDebugging` — no-op without `DEBUG=1`) fire when `hitTestBoundary` / `elevation` / `backdrop` are set on a non-absolute Surface.
+
+**Changed**
+
+- `<Draggable>` and `<Resizable>` now paint through `<Surface>` internally. No public API change; existing consumers see identical behavior. Surface's `clip="hidden"` carries Resizable's prior `overflow:'hidden'` default; Draggable's raise-on-press z math flows through Surface's explicit `zIndex` prop.
+
 **Fixed**
 
 - `<ScrollBox>` now defaults to vertical content layout (`flexDirection: 'column'`) so ordinary lists/logs scroll without an explicit workaround.

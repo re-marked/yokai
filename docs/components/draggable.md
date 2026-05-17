@@ -53,6 +53,7 @@ Once motion begins, the gesture is promoted: any in-progress text selection from
 ## Related
 - [`DropTarget`](./drop-target.md)
 - [`Box`](./box.md)
+- [`Surface`](./surface.md) — paints through this primitive (the outer rectangle is a `<Surface>` carrying the raise-on-press `zIndex`).
 - [Window pattern](../patterns/window.md) — interim recipe for building draggable window-shaped UIs on top of `<Draggable>`
 
 ## Source
