@@ -29,6 +29,14 @@ type InkBoxProps = {
   scrollBox?: boolean
   disableWheel?: boolean
   scrollWheelStep?: number
+  // Surface-specific host attributes, set by `<Surface>` and read by
+  // `hit-test.ts` (boundary occlusion) and `render-node-to-output.ts`
+  // (shadow paint pass). Forward-looking — surfaceHitTestBoundary
+  // codifies "this surface absorbs clicks at its cells" so a future
+  // refactor of the implicit reverse-z hit-test can't silently break
+  // modal semantics. See components/Surface/types.ts.
+  surfaceHitTestBoundary?: boolean
+  surfaceElevation?: number
   children?: ReactNode
 }
 

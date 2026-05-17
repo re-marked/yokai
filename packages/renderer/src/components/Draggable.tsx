@@ -3,7 +3,8 @@ import { useCallback, useRef, useState } from 'react'
 import type { Except } from 'type-fest'
 import { dispatchDrop, endDrag, startDrag, tickDrag } from '../drag-registry.js'
 import type { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
-import Box, { type Props as BoxProps } from './Box.js'
+import type { Props as BoxProps } from './Box.js'
+import Surface from './Surface/Surface.js'
 
 /**
  * A position in cell coordinates relative to the parent's content edge.
@@ -245,8 +246,15 @@ export default function Draggable({
     [pos, disabled],
   )
 
+  // A23: paint through Surface instead of Box so layering, clipping,
+  // and hit-test behavior matches every other primitive built on the
+  // foundation. The explicit `zIndex` prop carries Draggable's raise-
+  // on-press math (persistedZ + drag-time boost) — Surface's `layer`
+  // prop is intentionally NOT set, leaving it at the implicit `base`
+  // default, so the explicit zIndex value is the sole z source. No
+  // public API change; existing consumers see identical behavior.
   return (
-    <Box
+    <Surface
       {...boxProps}
       position="absolute"
       top={pos.top}

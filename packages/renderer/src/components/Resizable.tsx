@@ -4,6 +4,7 @@ import type { Except } from 'type-fest'
 import type { MouseDownEvent, MouseMoveEvent, MouseUpEvent } from '../events/mouse-event.js'
 import type { Color } from '../styles.js'
 import Box, { type Props as BoxProps } from './Box.js'
+import Surface from './Surface/Surface.js'
 import Text from './Text.js'
 
 /** Cell-grid size. width/height are integer cell counts. */
@@ -176,11 +177,13 @@ export default function Resizable({
     hoveredHandle === dir ? handleHoverColor : handleColor
 
   return (
-    // overflow:'hidden' default hides any transient where content
+    // A23: paint through Surface. `clip="hidden"` preserves today's
+    // `overflow:'hidden'` default — hides any transient where content
     // briefly exceeds the box (during the 1-2 frame autoFit catch-up,
-    // or always when autoFit is false). Spread boxProps after the
-    // default so users can opt back into 'visible'.
-    <Box overflow="hidden" {...boxProps} width={size.width} height={size.height}>
+    // or always when autoFit is false). Surface's `clip` defers to an
+    // explicit `overflow` prop when set, so users can still opt back
+    // into 'visible' via boxProps spread. No public API change.
+    <Surface clip="hidden" {...boxProps} width={size.width} height={size.height}>
       {children}
       {/* Handles are absolute children so they paint on top of content
           without affecting flex layout inside the Resizable. zIndex on
@@ -233,7 +236,7 @@ export default function Resizable({
           <Text>◢</Text>
         </Box>
       )}
-    </Box>
+    </Surface>
   )
 }
 

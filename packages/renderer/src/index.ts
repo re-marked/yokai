@@ -26,6 +26,12 @@ export type {
   ResizeHandleDirection,
   ResizeInfo,
 } from './components/Resizable'
+export { Surface } from './components/Surface/index.js'
+export type {
+  SurfaceProps,
+  SurfaceLayer,
+  SurfaceElevation,
+} from './components/Surface/index.js'
 export { default as TextInput } from './components/TextInput/TextInput'
 export type { TextInputProps } from './components/TextInput/TextInput'
 export type { WordBoundaryMode, WrapHint } from './components/TextInput/wrap-math'

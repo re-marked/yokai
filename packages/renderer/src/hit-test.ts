@@ -109,6 +109,37 @@ export function hitTestExcluding(
     if (!inBounds && childElem.style.position !== 'absolute') continue
     const hit = hitTestExcluding(childElem, col, row, exclude)
     if (hit) return hit
+    // Hit-test boundary (A23): an absolute `<Surface>` with
+    // `surfaceHitTestBoundary === true` explicitly owns the cells it
+    // covers — lower-z absolute siblings beneath the boundary's rect
+    // must never receive mouse events at those cells. Current reverse-
+    // paint-order iteration already satisfies this implicitly: the
+    // recursive call above returns the boundary itself when in-bounds
+    // (via the `return inBounds ? node : null` fallthrough), and we
+    // return immediately on the first non-null hit. This explicit
+    // branch is a defensive backstop — if a future refactor makes the
+    // fallthrough conditional (e.g. only return self when handlers
+    // exist), the boundary contract still holds because we re-check
+    // inBounds against the child's own rect and return the boundary
+    // unconditionally. Out-of-bounds boundaries are not handled here
+    // (cursor isn't on them; they cannot occlude). See
+    // `components/Surface/types.ts` for the prop semantics and
+    // `hit-test.test.ts` for the pinned contract.
+    if (
+      childElem.attributes.surfaceHitTestBoundary === true &&
+      childElem.style.position === 'absolute'
+    ) {
+      const cRect = nodeCache.get(childElem)
+      if (
+        cRect &&
+        col >= cRect.x &&
+        col < cRect.x + cRect.width &&
+        row >= cRect.y &&
+        row < cRect.y + cRect.height
+      ) {
+        return childElem
+      }
+    }
   }
   // Self only matches if the click is actually within our own rect.
   // When out-of-bounds we may have descended into absolute children

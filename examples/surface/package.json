@@ -1,0 +1,16 @@
+{
+  "name": "@yokai-example/surface",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "tsx surface.tsx"
+  },
+  "dependencies": {
+    "@yokai-tui/renderer": "workspace:*",
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
