@@ -1105,6 +1105,90 @@ describe('nested-text inside a flex-row parent — no silent truncation (#51, #5
     expect(rowText(screen, 0)).toBe('13:47:04 · May 3')
   })
 
+  it('column parent, NO wrapper width, nested truncate-Text: renders natural without poisoned basis', () => {
+    // A1's underlying poisoning path: outer Text with `wrap="truncate"`
+    // inside a COLUMN-parented wrapper (no explicit width). Pre-fix,
+    // the basis pass called measureFunc with widthMode=Undefined →
+    // wrapText(text, NaN, 'truncate') appended an ellipsis →
+    // measureFunc reported width = natural + 1. The bug surfaces as
+    // either an unwanted ellipsis or downstream flex weirdness.
+    // Post-fix, measureFunc returns natural in Undefined mode.
+    const outer = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate',
+    })
+    const inner1 = createNode('ink-virtual-text')
+    appendChildNode(inner1, createTextNode('13:47:04') as unknown as DOMElement)
+    const inner2 = createNode('ink-virtual-text')
+    appendChildNode(inner2, createTextNode(' · ') as unknown as DOMElement)
+    const inner3 = createNode('ink-virtual-text')
+    appendChildNode(inner3, createTextNode('May 3') as unknown as DOMElement)
+    appendChildNode(outer, inner1)
+    appendChildNode(outer, inner2)
+    appendChildNode(outer, inner3)
+    // Wrapper is column-direction (Box default), no explicit width →
+    // triggers the Undefined-mode measureFunc call on the outer Text.
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const root = el('ink-root', { width: 80, height: 1, flexDirection: 'row' })
+    appendChildNode(root, el('ink-box', { flexGrow: 1 }))
+    appendChildNode(root, wrapper)
+    root.yogaNode!.calculateLayout(80, 1)
+    const screen = render(root, 80, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('13:47:04 · May 3')
+  })
+
+  it('truncate-start in Undefined mode does NOT collapse the entire string to "…"', () => {
+    // Pre-fix, `wrapText(text, NaN, 'truncate-start')` collapsed the
+    // whole string to a single "…" cell because sliceFit(text, length-NaN, length)
+    // returned an empty slice. The basis would report width=1, which
+    // then locks the rendered layout. Verify the fix surfaces at the
+    // render layer too.
+    const outer = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'truncate-start',
+    })
+    appendChildNode(outer, createTextNode('foo bar baz') as unknown as DOMElement)
+    const wrapper = el('ink-box', { flexShrink: 0 })
+    appendChildNode(wrapper, outer)
+    const root = el('ink-root', { width: 40, height: 1, flexDirection: 'row' })
+    appendChildNode(root, el('ink-box', { flexGrow: 1 }))
+    appendChildNode(root, wrapper)
+    root.yogaNode!.calculateLayout(40, 1)
+    const screen = render(root, 40, 1)
+    expect(rowText(screen, 0).trimStart()).toBe('foo bar baz')
+  })
+
+  it('cross-stretch in a column parent does not silently shrink wrap-Text to multi-line', () => {
+    // A5's scenario in spirit: a wrap-mode Text inside a column-
+    // parented wrapper. With the measure-layer fix, the wrap-mode
+    // Text reports its natural width during basis and the parent
+    // sizes accordingly — no surprise wrap to a 2nd line caused by
+    // poisoned intrinsic measurement.
+    const text = el('ink-text', {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexDirection: 'row',
+      textWrap: 'wrap',
+    })
+    appendChildNode(text, createTextNode('Title Bar') as unknown as DOMElement)
+    const titleRow = el('ink-box', { flexShrink: 0 })
+    appendChildNode(titleRow, text)
+    const root = el('ink-root', {
+      width: 30,
+      height: 1,
+      flexDirection: 'column',
+    })
+    appendChildNode(root, titleRow)
+    root.yogaNode!.calculateLayout(30, 1)
+    const screen = render(root, 30, 1)
+    expect(rowText(screen, 0)).toBe('Title Bar')
+  })
+
   it('inner children rendered as ink-virtual-text (matching reconciler behavior)', () => {
     // The reconciler converts nested <Text> inside <Text> to
     // ink-virtual-text in createInstance (no yoga node, content
