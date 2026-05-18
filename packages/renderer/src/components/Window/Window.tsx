@@ -78,7 +78,7 @@ export default function Window({
   blurredBorderColor = 'gray',
   backgroundColor,
   titlebarColor,
-  backdropColor: _backdropColor = 'black',
+  backdropColor = 'black',
   ref,
   tabIndex,
   autoFocus,
@@ -400,8 +400,32 @@ export default function Window({
   const showHandleE = showHandles && handles.includes('e')
   const showHandleSe = showHandles && handles.includes('se')
 
+  // Modal z math: modals live in Surface's `modal` band (≥3000) so even
+  // a heavily-pressed non-modal at z=N can't paint above them under
+  // realistic usage. persistedZ rides on top so the most-recently-
+  // pressed modal still wins among peer modals. Drag-time boost layered
+  // on top of paintZ so a dragged modal floats above static peers.
+  const paintZ = modal ? MODAL_Z_BAND_BASE + persistedZ : persistedZ
+  const renderedZ = isDragging ? paintZ + WINDOW_DRAG_Z_BOOST : paintZ
+
   return (
     <WindowFocusContext.Provider value={focusContextValue}>
+      {/* Modal backdrop — fills the parent, sits one z-step below the
+          modal, absorbs clicks via hitTestBoundary so peers underneath
+          can't receive them. Conditional on modal=true; non-modals
+          render no backdrop. */}
+      {modal && (
+        <Surface
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          zIndex={renderedZ - 1}
+          backgroundColor={backdropColor}
+          hitTestBoundary
+        />
+      )}
       <Surface
         ref={ref}
         position="absolute"
@@ -409,7 +433,13 @@ export default function Window({
         left={rect.left}
         width={rect.width}
         height={rect.height}
-        zIndex={isDragging ? persistedZ + WINDOW_DRAG_Z_BOOST : persistedZ}
+        zIndex={renderedZ}
+        // hitTestBoundary on modal so any cell the modal covers absorbs
+        // events — redundant for cells where the modal already has a
+        // background (clicks land naturally), but matters if a consumer
+        // styles the modal with transparent regions. Non-modal Windows
+        // pass false; Surface omits the host attribute when not true.
+        hitTestBoundary={modal}
         borderStyle={borderStyle}
         borderColor={isFocused ? borderColor : blurredBorderColor}
         backgroundColor={backgroundColor}
@@ -542,12 +572,24 @@ const HANDLE_HOVER_COLOR: Color = 'white'
  * Base z-index for a freshly-mounted window. Picked above 1 so a
  * Window paints over a typical container with `zIndex={1}` (mirrors
  * Draggable's BASE_Z but isolated — Window stacking and Draggable
- * stacking don't share a counter so they don't interleave). Modal
- * backdrops in a follow-up commit will compute relative to this base
- * via the same takeNextWindowZ counter so the scrim lands directly
- * below its modal.
+ * stacking don't share a counter so they don't interleave).
  */
 const WINDOW_BASE_Z = 10
+
+/**
+ * Base z-index for MODAL Windows — matches Surface's named `'modal'`
+ * layer band (see Surface/layer.ts). Modal-Window paint z is computed
+ * as `MODAL_Z_BAND_BASE + persistedZ`, so even after persistedZ has
+ * been pushed up by many non-modal presses, the modal still paints
+ * above every non-modal (assuming persistedZ < 1000 under realistic
+ * usage — a non-modal pressed >2990 times could approach the popover
+ * band at 4000, but that's not a realistic UI scenario).
+ *
+ * Nested modals stack by mount + press order via persistedZ: every
+ * modal's z is in [MODAL_Z_BAND_BASE, MODAL_Z_BAND_BASE+persistedZ],
+ * latest-pressed wins.
+ */
+const MODAL_Z_BAND_BASE = 3000
 
 /**
  * How much higher to paint a Window WHILE its drag is in progress.
