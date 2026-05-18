@@ -44,12 +44,7 @@ export type WindowRect = {
 /** Re-exported convenience aliases so consumers can import everything
  *  from Window without remembering which sibling primitive owns the
  *  vocabulary. */
-export type {
-  DragBounds,
-  DragPos,
-  ResizeHandleDirection,
-  ResizeSize,
-}
+export type { DragBounds, DragPos, ResizeHandleDirection, ResizeSize }
 
 /**
  * Information passed to window-level focus callbacks. `windowId` is the
@@ -232,28 +227,47 @@ export type WindowProps = {
    * plus the WindowManager treats modals as a hard barrier in the focus
    * stack. Esc does NOT close modals automatically — consumers wire
    * that via `onClose` if they want it.
+   *
+   * Mount-time only: changing `modal` after mount has no effect on the
+   * WindowManager's registration (the entry's modality is captured at
+   * register time). Toggle by unmounting and remounting the Window.
    */
   modal?: boolean
   /**
    * When `true` (default), pressing anywhere on this window promotes it
-   * to focused. When `false`, the window never claims focus on press —
-   * useful for "panel" windows (tool palettes, mini-maps) that should
-   * stay above content but never steal focus from the user's text-
-   * editing window.
+   * to focused, AND the window claims focus on mount. When `false`, the
+   * window never auto-claims — useful for "panel" windows (tool
+   * palettes, mini-maps) that should stay above content but never
+   * steal focus from the user's text-editing window.
    *
    * Has no effect on `modal` windows; modals always claim focus on
-   * mount regardless of `claimsFocus`.
+   * mount regardless of `claimsFocus`. Modal-press is also unaffected:
+   * a press on a modal doesn't matter for focus because the modal is
+   * already topmost.
+   *
+   * Read live (NOT mount-time only): toggling `claimsFocus` after mount
+   * changes whether subsequent presses promote the window. The
+   * mount-time auto-claim is a separate decision; flipping the prop
+   * later doesn't retroactively claim or un-claim.
    */
   claimsFocus?: boolean
   /**
    * Fires when this window becomes the focused window. `info.windowId`
    * is the stable identity. Useful for "remember which window the user
    * was last in" persistence, or for ARIA-style live-region updates.
+   *
+   * Fires on the FLIP from blurred → focused, including the initial
+   * mount-as-focused case. Does NOT re-fire on every render of an
+   * already-focused window.
    */
   onWindowFocus?: (info: WindowFocusInfo) => void
   /**
    * Fires when this window loses window-level focus (another window
-   * was raised, or this window unmounted before another was raised).
+   * was raised above it). Only fires on the FLIP from focused →
+   * blurred — never on the initial mount-as-blurred case (a window
+   * that mounts unfocused never "lost" focus to begin with), and not
+   * on unmount-while-focused (use the consumer's own unmount lifecycle
+   * for that).
    */
   onWindowBlur?: (info: WindowFocusInfo) => void
   // ── visual ────────────────────────────────────────────────────────
@@ -298,12 +312,17 @@ export type WindowProps = {
   tabIndex?: number
   autoFocus?: boolean
   /**
-   * Per-window override of the global Window focus behavior. When
-   * `false`, pressing the window does NOT call `claimWindowFocus()`.
-   * Distinct from `claimsFocus` (which controls window-LEVEL focus) —
-   * this controls ELEMENT-level focus via the existing FocusManager.
-   * Default `true` so consumers get the obvious behavior without
-   * threading the prop.
+   * Controls ELEMENT-level focus (the existing FocusManager / tabIndex
+   * system) on press. When `true` (default), clicking the Window's
+   * body claims keyboard focus for the Window's outer box (matching
+   * default Box / Surface behavior, so a Window with `tabIndex={0}`
+   * focuses on click).
+   *
+   * Distinct from `claimsFocus` — that one controls WINDOW-level focus
+   * via the WindowManager (which window owns the keyboard / wheel
+   * routing scope). The two are orthogonal: a panel window may opt
+   * out of window focus (`claimsFocus={false}`) while still claiming
+   * element focus for Tab walking (`claimFocusOnClick={true}`).
    */
   claimFocusOnClick?: boolean
   onClick?: (event: ClickEvent) => void

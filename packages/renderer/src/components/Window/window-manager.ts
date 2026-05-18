@@ -82,13 +82,20 @@ let nextZ = 0
  * — except when `claimsFocus=false` (panel windows), in which case the
  * window registers without claiming.
  *
- * Returns the cleanup function. Idempotent if the same id is registered
- * twice (treat the second as a no-op rather than corrupting the stack).
+ * Returns a cleanup function that unregisters the window. The cleanup
+ * is a fresh closure each call — React stores the closure that came
+ * back from the call that ran, and StrictMode dev double-invokes
+ * register→cleanup→register before the real lifecycle starts, so the
+ * "already registered" branch below is defensive against a degenerate
+ * register-without-cleanup pattern, not the StrictMode path (which is
+ * handled by the cleanup in between).
  */
 export function registerWindow(id: WindowId, modal: boolean, claimsFocus: boolean): () => void {
-  // Idempotent guard. React StrictMode double-invokes effects in dev, so
-  // the same id may register twice in quick succession; ignore the
-  // second registration to avoid double-stacking.
+  // Defensive guard: if a caller somehow registers the same id twice
+  // without unregistering between, treat the second call as a no-op
+  // rather than corrupting the stack with duplicate entries. Not the
+  // StrictMode path — that path is register→cleanup→register, so the
+  // second register sees an empty stack and pushes normally.
   if (stack.some((e) => e.id === id)) return () => unregisterWindow(id)
   stack.push({ id, modal, z: 0 })
   if (modal || claimsFocus) claimWindowFocus(id)
