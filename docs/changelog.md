@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.8.0 — 2026-05-18
+
+Two new desktop primitives — `<Surface>` and `<Window>` — plus the shakedown wave that hardened the layout / event substrate underneath them. [GitHub release](https://github.com/re-marked/yokai/releases/tag/v0.8.0).
 
 **Added**
 
@@ -9,6 +11,7 @@
 - **`useInput` auto-routes inside `<Window>`** — when called from a *descendant* component of the Window, it gates by focus (keyboard) / hover (wheel) automatically. Reads `WindowFocusContext` and `CursorOverWindowContext`; per-event-type split (focus-scoped keyboard, hover-scoped wheel) so the wheel still scrolls "whatever you're hovering" the way real OSes do. Outside any Window, behavior is unchanged (back-compat). Explicit `isActive` still wins over the auto-routing. For handlers owned by the component that renders `<Window>` itself (i.e. above the context providers), prefer `<Window onInput>` instead — see component docs.
 - **`<Surface>`** — foundational rectangle primitive that paints, layers, optionally bounds hit-tests, casts drop shadows (elevation 0-5), and auto-renders a backdrop scrim. Named z-bands via `layer` prop: `base / docked / overlay / dropdown / modal / popover / tooltip / drag-ghost`, with explicit numeric `zIndex` as an escape hatch. Default Surface is byte-identical to `<Box>` — opt into each Surface feature individually. Foundation for `<Window>` (A4) and the Phase 2 modal / popover / tooltip components.
 - New ink-box host attributes `surfaceHitTestBoundary` and `surfaceElevation` consumed by `hit-test.ts` and `render-node-to-output.ts`. Dev warnings (`logForDebugging` — no-op without `DEBUG=1`) fire when `hitTestBoundary` / `elevation` / `backdrop` are set on a non-absolute Surface.
+- **Press-intent classification** (A22, #61) — every left-press is classified up front into `gesture-confirmed | gesture-tentative | click | select`. `dispatchMouseDown` now reports `{ gesture, clickable }`; the reducer in `press-intent.ts` decides whether a press should escalate into a selection drag, fire as a click on release, or hand off to a captured gesture. Shift / Alt force-select modifiers demote `click` → `select` so consumers can still highlight text inside a clickable region (Button label, link anchor text).
 
 **Changed**
 
@@ -20,6 +23,15 @@
 - `<ScrollBox>` `scrollTo` / `scrollBy` clamp to content bounds, preventing overscroll into blank space.
 - `<ScrollBox>` now auto-scrolls on mouse wheel when the cursor is over the box, with `wheelStep` and `disableWheel` props for tuning/opt-out.
 - `MouseDownEvent.captureGesture(...)` is now leaf-first: once a descendant captures a press, ancestors cannot overwrite that gesture.
+- **Click on clickable Box no longer eats the click via accidental selection escalation** (A22 / B8, #61). Previously, sub-cell cursor jitter between mouseDown and mouseUp on a clickable element would promote the press into a selection drag, swallowing the click. The press-intent layer now classifies these up front as `click` and skips selection entirely. `onClickAt` fires on release.
+- **Percent dimensions on in-flow children resolve against the parent's CONTENT box** (B7, #60). Pre-fix, `<Box width="100%">` overpainted the right border of any bordered parent because the yoga port resolved percents against the parent's outer rect. Now matches CSS containing-block rules: a `100%` child of a `border={1}` parent gets `parentWidth - 2`.
+- **`measureTextNode` returns NATURAL dimensions in `Undefined` mode** (A1 / A5, closes #51 / #58). Pre-fix, yoga's basis pass (where it asks for natural size before any width constraint is known) would erroneously truncate / append ellipsis on `truncate`-family wrap modes, then propagate that poisoned width through the layout. Now wrap and truncate only apply when there's an actual width constraint (`AtMost` or `Exactly`).
+
+**Internal**
+
+- Surface paint passes (elevation shadow, backdrop sibling) hook into the existing render pipeline at the ink-box entry; per-frame shadow extent is tracked in `nodeCache.shadowExtent` to clear shadows when surfaces move or shrink.
+- Window paint-z lives in a module-scope counter isolated from Draggable's, so window stacking and raw-Draggable stacking don't interleave. Modal windows compute paint z in Surface's `modal` z-band (`MODAL_Z_BAND_BASE = 3000 + persistedZ`).
+- Hit-test honors `zIndex` AND traverses outside parent bounds for absolute children — necessary so a Draggable raised above its container by raise-on-press stays clickable after being dragged past the container's edge.
 
 Tagged releases of `@yokai-tui/renderer` and `@yokai-tui/shared`. The full commit graph is preserved on `main` — `git log vPREV..vNEXT` shows everything between any two tags.
 
