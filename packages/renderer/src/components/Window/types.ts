@@ -21,6 +21,7 @@ import type { Ref } from 'react'
 import type { DOMElement } from '../../dom.js'
 import type { ClickEvent } from '../../events/click-event.js'
 import type { FocusEvent } from '../../events/focus-event.js'
+import type { InputEvent, Key } from '../../events/input-event.js'
 import type { KeyboardEvent } from '../../events/keyboard-event.js'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
 import type { Color, Styles } from '../../styles.js'
@@ -295,10 +296,13 @@ export type WindowProps = {
    */
   blurredBorderColor?: Color
   /**
-   * Background fill color for the window body. Default `undefined`
-   * (transparent — terminal background shows through). Set to `'black'`
-   * or your theme bg for opaque windows that don't leak content from
-   * windows behind them.
+   * Background fill color for the window body. Default `'black'` —
+   * opaque so overlapping windows don't bleed content from windows
+   * underneath. Override to your theme background (e.g. `'#101820'`,
+   * `'#fafafa'` on light themes) or pass `undefined` for a transparent
+   * window that lets whatever's behind show through.
+   *
+   * Terminals don't support alpha; this is always a solid fill.
    */
   backgroundColor?: Color
   /**
@@ -338,5 +342,35 @@ export type WindowProps = {
   onFocus?: (event: FocusEvent) => void
   onBlur?: (event: FocusEvent) => void
   onKeyDown?: (event: KeyboardEvent) => void
+  /**
+   * Fires on terminal input events scoped to this Window:
+   *   - **keyboard** events fire while this Window is focused,
+   *   - **wheel** events fire while the cursor is over this Window.
+   *
+   * This is the recommended way to subscribe to per-window input. The
+   * Window component wires `useInput` internally inside its own
+   * `WindowFocusContext` / `CursorOverWindowContext` providers, so the
+   * routing rules apply automatically — you don't have to extract a
+   * child component just to position the `useInput` call site inside
+   * the Window's context tree.
+   *
+   * Why a prop and not "just call useInput in your component": React
+   * context only flows DOWN. A `useInput` call in the same component
+   * that renders `<Window>` sits ABOVE the Window's Providers in the
+   * React tree, so it doesn't read the per-Window contexts and falls
+   * back to the back-compat "always fire" path — every window's handler
+   * fires on every keystroke. The `onInput` prop sidesteps the trap by
+   * letting the framework own the `useInput` placement.
+   *
+   * For more complex setups (multiple `useInput` hooks per window, hooks
+   * conditional on internal Window state), extract a child component
+   * and call `useInput` from inside that child — the contexts flow
+   * naturally there.
+   *
+   * Handler signature matches `useInput`'s exactly: `(input, key, event)`.
+   * Identity churn is fine — the Window stashes the latest handler in
+   * a ref every render, so passing an inline arrow is safe.
+   */
+  onInput?: (input: string, key: Key, event: InputEvent) => void
   children?: React.ReactNode
 }

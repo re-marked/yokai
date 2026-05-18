@@ -55,37 +55,75 @@ import { WindowFocusContext, CursorOverWindowContext } from '@yokai-tui/renderer
 | `backgroundColor` | `Color` | — | Window body fill. Default `undefined` (transparent — terminal background shows through). Set `'black'` or your theme bg for opaque windows that don't leak content from windows behind them. |
 | `titlebarColor` | `Color` | — | Titlebar row background (defaults to `backgroundColor`). Set to a tint for macOS-style "title strip". |
 | `backdropColor` | `Color` | `'black'` | Backdrop scrim color when `modal=true`. Solid fill (terminals don't do alpha). |
+| **Input subscription (recommended for per-window keyboard / wheel)** | | | |
+| `onInput` | `(input, key, event) => void` | — | Fires on terminal input events scoped to THIS window: keyboard fires when focused, wheel fires when hovered. The Window wires `useInput` internally inside its own context providers, so the auto-routing applies automatically. **Use this instead of `useInput`** when the handler is owned by the same component that renders the Window. (`useInput` only works for auto-routing when called from a *descendant* component, since React context flows down — see "Routing" below.) |
 | **Event handlers (pass through to underlying Surface)** | | | |
 | `ref` / `tabIndex` / `autoFocus` / `claimFocusOnClick` | per `Box` / `Surface` | — | Focus passthrough. `claimFocusOnClick` controls ELEMENT focus (`FocusManager`); orthogonal to `claimsFocus` (which controls WINDOW focus). |
 | `onClick` / `onMouseDown` / `onMouseEnter` / `onMouseLeave` / `onKeyDown` / `onFocus` / `onBlur` | per `Box` | — | Event handler passthrough. Window's own raise-on-press and cursor-over tracking run BEFORE the consumer's handler, so the consumer sees up-to-date focus/hover state on inspection. |
 | `children` | `ReactNode` | — | Window body content. |
 
-## Auto-routed event scopes
+## Routing
 
-The headline of A18 is "anything inside a `<Window>` automatically gets focus-/hover-scoped event routing." `useInput` reads two contexts the Window provides:
+The headline of A18 is "events route correctly per-window without consumer boilerplate." Per-event-type rules:
 
 | Event class | Routing rule | Why |
 |---|---|---|
-| Keyboard (arrows, letters, ctrl-shortcuts, paste) | **focus-scoped** — fires when the enclosing Window is focused | Matches the "keyboard follows focus" mental model. |
-| Wheel (`key.wheelUp` / `key.wheelDown`) | **hover-scoped** — fires when the cursor is over the enclosing Window | Matches real-OS scroll: scroll whatever you're hovering, not what has focus. |
+| Keyboard (arrows, letters, ctrl-shortcuts, paste) | **focus-scoped** — fires for the focused Window | Matches the "keyboard follows focus" mental model. |
+| Wheel (`key.wheelUp` / `key.wheelDown`) | **hover-scoped** — fires for the Window the cursor is over | Matches real-OS scroll: scroll whatever you're hovering, not what has focus. |
 | Click / mouseDown | **hit-test-scoped** (unchanged) | Existing dispatch already lands clicks on the topmost element under the cursor. |
 
-Consumers inside a Window can drop the boilerplate:
+There are two ways to subscribe:
+
+### `onInput` prop (the happy path)
+
+Pass `onInput` directly to the Window. Routing is wired internally — your handler fires when this Window owns the relevant scope (focus for keys, hover for wheel). Use this when the handler is owned by the same component that renders the Window:
 
 ```tsx
-// Before — every consumer re-derives "is this my window?"
-useInput((_, key) => {
-  if (myWindowId !== activeWindowId) return  // ← unnecessary
-  if (key.wheelDown) scroll(3)
-})
-
-// After — auto-routed
-useInput((_, key) => {
-  if (key.wheelDown) scroll(3)  // fires only when cursor is over this window
-})
+function CounterWindow() {
+  const [count, setCount] = useState(0)
+  return (
+    <Window
+      title="counter"
+      initialPos={{ top: 2, left: 2 }}
+      initialSize={{ width: 28, height: 8 }}
+      onInput={(_, key) => {
+        if (key.upArrow) setCount(c => c + 1)     // ← keyboard: only when focused
+        if (key.wheelUp) setCount(c => c + 1)     // ← wheel: only when hovered
+      }}
+    >
+      <Text>count: {count}</Text>
+    </Window>
+  )
+}
 ```
 
-`isActive: true` and `isActive: false` still work as explicit overrides for consumers that want to opt out of the auto-routing.
+### `useInput` inside a child component
+
+For cases where `onInput` isn't enough (multiple input hooks, hooks gated on internal Window state), extract a child component and call `useInput` from inside it. The child is a descendant of the Window's context providers, so the auto-routing reaches it naturally:
+
+```tsx
+function CounterWindow() {
+  return (
+    <Window title="counter" initialPos={...} initialSize={...}>
+      <CounterBody />
+    </Window>
+  )
+}
+function CounterBody() {
+  const [count, setCount] = useState(0)
+  useInput((_, key) => {
+    if (key.upArrow) setCount(c => c + 1)
+    if (key.wheelUp) setCount(c => c + 1)
+  })
+  return <Text>count: {count}</Text>
+}
+```
+
+### Why `useInput` in the *same* component as `<Window>` doesn't auto-route
+
+React context only flows DOWN. A `useInput` call sitting in the same component that renders `<Window>` is ABOVE the Window's Providers in the React tree — so it doesn't read the per-Window contexts and falls back to the "fire unconditionally" path (back-compat for pre-Window apps). The `onInput` prop and the descendant-component pattern above are the two designed-for ways to subscribe per-window; the framework doesn't make this kind of misplacement work because it can't tell *which* Window an outside-context handler was "meant to" belong to.
+
+Explicit `isActive: true` and `isActive: false` on `useInput` still work as overrides for consumers that want to bypass the auto-routing entirely.
 
 ## Modal mode
 
@@ -105,19 +143,25 @@ Nested modals stack — innermost wins focus via the modal-barrier rule in `Wind
 ### Multi-window WM
 
 ```tsx
-import { Box, Window, useInput } from '@yokai-tui/renderer'
+import { Box, Text, Window } from '@yokai-tui/renderer'
 import { useState } from 'react'
 
 function Counter({ title, left }: { title: string; left: number }) {
   const [count, setCount] = useState(0)
-  // Arrows fire only when this window is focused; wheel fires only
-  // when the cursor is over this window. No isActive boilerplate.
-  useInput((_, key) => {
-    if (key.upArrow || key.wheelUp) setCount((c) => c + 1)
-    if (key.downArrow || key.wheelDown) setCount((c) => c - 1)
-  })
   return (
-    <Window title={title} initialPos={{ top: 2, left }} initialSize={{ width: 24, height: 8 }}>
+    <Window
+      title={title}
+      initialPos={{ top: 2, left }}
+      initialSize={{ width: 24, height: 8 }}
+      onInput={(_, key) => {
+        // Keyboard: fires only when this Window is focused.
+        if (key.upArrow) setCount((c) => c + 1)
+        if (key.downArrow) setCount((c) => c - 1)
+        // Wheel: fires only when the cursor is over this Window.
+        if (key.wheelUp) setCount((c) => c + 1)
+        if (key.wheelDown) setCount((c) => c - 1)
+      }}
+    >
       <Box paddingX={1}>
         <Text>count: {count}</Text>
       </Box>
@@ -136,10 +180,6 @@ function Counter({ title, left }: { title: string; left: number }) {
 
 ```tsx
 function ConfirmModal({ onClose }: { onClose: (answer: boolean) => void }) {
-  useInput((input) => {
-    if (input === 'y') onClose(true)
-    if (input === 'n') onClose(false)
-  })
   return (
     <Window
       title="confirm"
@@ -149,6 +189,10 @@ function ConfirmModal({ onClose }: { onClose: (answer: boolean) => void }) {
       borderColor="yellow"
       resizable={false}
       draggable={false}
+      onInput={(input) => {
+        if (input === 'y') onClose(true)
+        if (input === 'n') onClose(false)
+      }}
     >
       <Box paddingX={2} paddingY={1}>
         <Text>Close all panels? (y/n)</Text>

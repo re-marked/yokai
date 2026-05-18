@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
+import type { InputEvent, Key } from '../../events/input-event.js'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
+import useInput from '../../hooks/use-input.js'
 import type { Color } from '../../styles.js'
 import Box from '../Box.js'
 import { type DragBounds, type DragInfo, type DragPos, handleDragPress } from '../Draggable.js'
@@ -47,11 +49,15 @@ import { claimWindowFocus, registerWindow, subscribeWindow } from './window-mana
  *   to the focused window (via WindowManager) and bumps its z. Modal
  *   windows ignore press from siblings underneath (they don't get
  *   the press at all — App's hit-test honors the focus stack).
- * - **Focus-/hover-scoped routing**: every descendant's `useInput`
- *   handler auto-gates by `WindowFocusContext`; wheel events route
- *   via `CursorOverWindowContext` (hover-scoped, not focus-scoped).
- *   No `if (myWindowId === activeWindowId) return` boilerplate. See
- *   A18 / use-input.ts.
+ * - **Focus-/hover-scoped event routing**: pass an `onInput` prop to
+ *   subscribe to per-window terminal input — keyboard fires while the
+ *   Window is focused, wheel fires while the cursor is over the
+ *   Window. The Window wires `useInput` internally inside its own
+ *   context providers, so consumers don't have to extract a child
+ *   component just to position the call site correctly. For multiple
+ *   handlers or hooks gated on internal state, call `useInput` from
+ *   a child component (where the per-Window contexts naturally flow).
+ *   See A18 / use-input.ts.
  * - **Focused/blurred chrome**: border color flips between
  *   `borderColor` and `blurredBorderColor` so a multi-window WM is
  *   legible at a glance.
@@ -82,7 +88,7 @@ export default function Window({
   borderStyle = 'single',
   borderColor = 'cyan',
   blurredBorderColor = 'gray',
-  backgroundColor,
+  backgroundColor = 'black',
   titlebarColor,
   backdropColor = 'black',
   ref,
@@ -96,6 +102,7 @@ export default function Window({
   onFocus,
   onBlur,
   onKeyDown,
+  onInput,
   children,
 }: WindowProps): React.ReactNode {
   // Single rect state — drag mutates {top,left} via setDragPos,
@@ -207,6 +214,19 @@ export default function Window({
   const handleMouseLeave = useCallback(() => {
     setIsCursorOver(false)
     userOnMouseLeaveRef.current?.()
+  }, [])
+
+  // onInput bridging: consumer's handler stashed in a ref so the
+  // bridge component below sees a stable function identity (no remount
+  // on identity changes) while always invoking the latest callback.
+  // The bridge component is rendered INSIDE the Provider tree so its
+  // own useInput call reads the per-Window contexts — fixing the
+  // footgun where calling useInput in the same component as <Window>
+  // sits ABOVE the Providers and silently falls back to "always fire."
+  const onInputRef = useRef(onInput)
+  onInputRef.current = onInput
+  const bridgedInputHandler = useCallback((input: string, key: Key, event: InputEvent) => {
+    onInputRef.current?.(input, key, event)
   }, [])
 
   // Paint-z state, with a starting value reserved from the module-scope
@@ -523,19 +543,31 @@ export default function Window({
           <Box flexDirection="column" flexGrow={1}>
             {children}
           </Box>
+          {/* onInput bridge — child of Provider tree so useInput inside
+              it reads the per-Window contexts (auto-routes by focus for
+              keyboard, by hover for wheel). Renders nothing. Mounted
+              only when the consumer passed `onInput`. */}
+          {onInput && <WindowInputBridge handler={bridgedInputHandler} />}
           {/* Resize handles — absolute children of the Surface, positioned
             inside the border (yoga absolute coords are relative to the
             padding box). Painted on top of content so they're grabbable
             even when content fills the area. zIndex layers SE above
             E/S so the corner cell wins paint when all three are
-            enabled, matching Resizable's pattern. */}
+            enabled, matching Resizable's pattern.
+
+            The E handle starts at top=TITLEBAR_HEIGHT (not 0) so it
+            doesn't paint over the titlebar's rightmost cell — without
+            that offset, a Window with the title at the right edge of
+            the bar would see the title's last character covered by the
+            handle's gray. The S handle is naturally below the titlebar
+            (at contentHeight-1, the bottom row), so no offset needed. */}
           {showHandleE && (
             <Box
               position="absolute"
-              top={0}
+              top={TITLEBAR_HEIGHT}
               left={contentWidth - 1}
               width={1}
-              height={contentHeight}
+              height={Math.max(1, contentHeight - TITLEBAR_HEIGHT)}
               backgroundColor={handleColorFor('e')}
               onMouseDown={onHandleE}
               onMouseEnter={enterHandle('e')}
@@ -589,6 +621,14 @@ export default function Window({
  * accidental resize-into-invisibility.
  */
 const DEFAULT_MIN_SIZE: ResizeSize = { width: 8, height: 4 }
+
+/**
+ * Height of the titlebar row in cells. Used to offset the E (east)
+ * resize handle so it starts BELOW the titlebar rather than painting
+ * over the titlebar's right edge. The titlebar is itself pinned to
+ * `height={1}` in JSX; this constant keeps the two definitions in sync.
+ */
+const TITLEBAR_HEIGHT = 1
 
 /**
  * Handle background color when idle. Gray reads as "interactive but
@@ -691,4 +731,35 @@ function WindowCloseButton({ onClose }: { onClose?: () => void }): React.ReactNo
       </Text>
     </Box>
   )
+}
+
+/**
+ * Internal bridge that wires the Window's `onInput` prop to `useInput`.
+ *
+ * The bridge has to be a SEPARATE component (rendered inside Window's
+ * children, not inline in Window itself) because React context flows
+ * down — a `useInput` call sitting in the Window function-body would
+ * be ABOVE Window's `WindowFocusContext.Provider` and
+ * `CursorOverWindowContext.Provider` in the tree, and would fall back
+ * to the back-compat "always fire" path. Mounting this bridge as a
+ * child of those Providers puts the `useInput` call site INSIDE the
+ * per-Window context, so the existing auto-routing in `use-input.ts`
+ * applies without any new wiring there.
+ *
+ * Returns `null` — it's a side-effect-only component.
+ *
+ * The `handler` prop is expected to be a stable reference (Window
+ * stashes the consumer's `onInput` in a ref and passes a stable
+ * useCallback wrapper). That's enough to keep useInput's listener
+ * slot stable across renders — see use-input.ts's `useEventCallback`
+ * pattern for why stability matters for the EventEmitter listener
+ * ordering with stopImmediatePropagation.
+ */
+function WindowInputBridge({
+  handler,
+}: {
+  handler: (input: string, key: Key, event: InputEvent) => void
+}): React.ReactNode {
+  useInput(handler)
+  return null
 }

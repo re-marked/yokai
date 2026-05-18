@@ -4,8 +4,8 @@
  *   - Titlebar drag + edge/corner resize, both mutating one rect
  *   - Raise-on-press (click any window to bring it forward)
  *   - Focused/blurred chrome (border color flips per focus)
- *   - Auto-routed keyboard (each window's useInput fires only when
- *     that window is focused — no `isMyWindow` boilerplate)
+ *   - Auto-routed input via `<Window onInput>` — keyboard fires when
+ *     focused, wheel fires when hovered, all without boilerplate
  *   - Modal dialog with backdrop scrim that blocks peers
  *   - 'q' / Ctrl-C to exit; 'm' to open the modal
  *
@@ -30,10 +30,11 @@ const WIN_W = 28
 const WIN_H = 10
 
 /**
- * A window whose only state is an integer counter. up/down arrows
- * adjust it, but only when this window is focused — the framework
- * derives `isActive` from `WindowFocusContext` so the handler reads
- * "naive" (no `if (focused) ...` gate). That's the A18 promise.
+ * A window whose only state is an integer counter. The `onInput` prop
+ * gets keyboard events ONLY when this window is focused, and wheel
+ * events ONLY when the cursor is over this window — that routing is
+ * baked into `<Window>` via its internal context providers. No
+ * isMyWindow boilerplate, no extract-a-body-component required.
  */
 function CounterWindow({
   title,
@@ -47,17 +48,6 @@ function CounterWindow({
   borderColor?: Color
 }): React.ReactNode {
   const [count, setCount] = useState(0)
-  // No `isActive` check — useInput auto-gates by Window focus.
-  // Try arrow keys on each window: only the focused one responds.
-  useInput((_, key) => {
-    if (key.upArrow) setCount((c) => c + 1)
-    if (key.downArrow) setCount((c) => c - 1)
-    // Wheel events route by HOVER (cursor over this window), not focus
-    // — match the OS scroll convention. Try scrolling over each window:
-    // each one bumps its own counter.
-    if (key.wheelUp) setCount((c) => c + 1)
-    if (key.wheelDown) setCount((c) => c - 1)
-  })
   return (
     <Window
       title={title}
@@ -65,6 +55,17 @@ function CounterWindow({
       initialSize={{ width: WIN_W, height: WIN_H }}
       borderColor={borderColor ?? 'cyan'}
       showCloseButton={false}
+      onInput={(_, key) => {
+        // Keyboard branch: fires only while THIS window is focused.
+        if (key.upArrow) setCount((c) => c + 1)
+        if (key.downArrow) setCount((c) => c - 1)
+        // Wheel branch: fires only while the cursor is over THIS window
+        // (hover-scoped, matches the OS scroll convention). Hover any
+        // unfocused window and scroll — its counter changes; the
+        // focused one's doesn't.
+        if (key.wheelUp) setCount((c) => c + 1)
+        if (key.wheelDown) setCount((c) => c - 1)
+      }}
     >
       <Box flexDirection="column" paddingX={1} paddingY={1}>
         <Text dim>arrows / wheel · drag titlebar · resize ↘</Text>
@@ -78,8 +79,10 @@ function CounterWindow({
 }
 
 /**
- * Modal dialog. Mounts with `modal=true` → auto-claims focus,
- * renders a backdrop scrim, blocks peer windows. 'y' / 'n' close it.
+ * Modal dialog. Mounts with `modal=true` → auto-claims focus, renders
+ * a backdrop scrim, blocks peer windows. 'y' / 'n' close it via the
+ * same `onInput` prop (keyboard fires while modal is focused — which
+ * it always is while it's mounted, per the modal-barrier rule).
  */
 function ConfirmModal({ onClose }: { onClose: (answer: boolean) => void }): React.ReactNode {
   const size = useContext(TerminalSizeContext)
@@ -89,10 +92,6 @@ function ConfirmModal({ onClose }: { onClose: (answer: boolean) => void }): Reac
   const MH = 7
   const left = Math.max(0, Math.floor((cols - MW) / 2))
   const top = Math.max(0, Math.floor((rows - MH) / 2))
-  useInput((input) => {
-    if (input === 'y') onClose(true)
-    if (input === 'n') onClose(false)
-  })
   return (
     <Window
       title="confirm"
@@ -103,6 +102,10 @@ function ConfirmModal({ onClose }: { onClose: (answer: boolean) => void }): Reac
       backdropColor="black"
       resizable={false}
       draggable={false}
+      onInput={(input) => {
+        if (input === 'y') onClose(true)
+        if (input === 'n') onClose(false)
+      }}
     >
       <Box flexDirection="column" paddingX={2} paddingY={1}>
         <Text>Close all the panels?</Text>
@@ -130,11 +133,9 @@ function App(): React.ReactNode {
   })
   const [modalOpen, setModalOpen] = useState(false)
 
-  // Global (outside-Window) input handler — fires regardless of which
-  // window is focused. Exit + open modal live here. Note that pressing
-  // 'm' while the modal is OPEN would route as keyboard event, which
-  // — since modal is focused — would also fire in the modal's useInput;
-  // we suppress here by ignoring 'm' when modalOpen=true.
+  // Outside-any-Window useInput — fires unconditionally (back-compat
+  // with pre-Window apps). Exit + open modal live here so they fire
+  // regardless of which window has focus.
   useInput((input, key) => {
     if (input === 'q' || (key.ctrl && input === 'c')) exit()
     if (input === 'm' && !modalOpen) setModalOpen(true)
