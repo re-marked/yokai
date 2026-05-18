@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
+import type { Color } from '../../styles.js'
 import Box from '../Box.js'
 import { type DragBounds, type DragInfo, type DragPos, handleDragPress } from '../Draggable.js'
+import {
+  type ResizeHandleDirection,
+  type ResizeInfo,
+  type ResizeSize,
+  handleResizePress,
+} from '../Resizable.js'
 import Surface from '../Surface/Surface.js'
 import Text from '../Text.js'
 import { WindowFocusContext } from './context.js'
@@ -57,14 +64,11 @@ export default function Window({
   showCloseButton,
   onClose,
   draggable = true,
-  // resizable, handles, minSize, maxSize — wired in follow-up commits.
-  // Destructured here so the shell accepts the full prop surface from
-  // day one (no public API churn between intermediate commits).
-  resizable: _resizable = true,
-  handles: _handles = ['s', 'e', 'se'],
+  resizable = true,
+  handles = ['s', 'e', 'se'],
   bounds,
-  minSize: _minSize,
-  maxSize: _maxSize,
+  minSize = DEFAULT_MIN_SIZE,
+  maxSize,
   modal = false,
   claimsFocus = true,
   onWindowFocus,
@@ -88,10 +92,10 @@ export default function Window({
   onKeyDown,
   children,
 }: WindowProps): React.ReactNode {
-  // Single rect state — drag mutates {top,left} via setDragPos below,
-  // resize will mutate {width,height} via the same setRect setter
-  // in a follow-up commit. This is the A4 unification: one state, one
-  // lifecycle, no rect-cache desync.
+  // Single rect state — drag mutates {top,left} via setDragPos,
+  // resize mutates {width,height} via setResizeSize; both go through
+  // the SAME setRect setter. This is the A4 unification: one state,
+  // one lifecycle, no rect-cache desync.
   const [rect, setRect] = useState<WindowRect>({
     top: initialPos.top,
     left: initialPos.left,
@@ -266,6 +270,100 @@ export default function Window({
     [setDragPos, noopBoolSetter, noopNumSetter],
   )
 
+  // ── resize handle wiring ────────────────────────────────────────
+  //
+  // Reuses `handleResizePress` (Resizable's pure helper) so resize math
+  // is byte-identical to <Resizable>. Each handle's onMouseDown calls
+  // it with the handle's direction; setResizeSize threads the new size
+  // through the SAME setRect that drag uses, so {width, height} updates
+  // are coherent with {top, left} — A4's single-rect lifecycle.
+  //
+  // Bounds: when `bounds` is set, the effective max size is reduced so
+  // the window's right/bottom edge stays inside the parent's content
+  // box. Combined with the consumer-supplied `maxSize`, the tighter
+  // of the two wins. Recomputed every render (cheap math, reads through
+  // an updated ref so live changes apply during a resize).
+  const minSizeRef = useRef<ResizeSize>(minSize)
+  minSizeRef.current = minSize
+  const effectiveMaxSize = useMemo<ResizeSize | undefined>(() => {
+    const fromBounds: ResizeSize | undefined = bounds
+      ? {
+          width: Math.max(1, bounds.width - rect.left),
+          height: Math.max(1, bounds.height - rect.top),
+        }
+      : undefined
+    if (!fromBounds) return maxSize
+    if (!maxSize) return fromBounds
+    return {
+      width: Math.min(maxSize.width, fromBounds.width),
+      height: Math.min(maxSize.height, fromBounds.height),
+    }
+  }, [bounds, maxSize, rect.left, rect.top])
+  const effectiveMaxSizeRef = useRef<ResizeSize | undefined>(effectiveMaxSize)
+  effectiveMaxSizeRef.current = effectiveMaxSize
+  // latestSizeRef mirrors latestPosRef's role for resize — the gesture
+  // handler reads it on release to get the final committed size.
+  const latestSizeRef = useRef<ResizeSize>({ width: rect.width, height: rect.height })
+
+  const setResizeSize = useCallback((s: ResizeSize) => {
+    latestSizeRef.current = s
+    setRect((r) => ({ ...r, width: s.width, height: s.height }))
+  }, [])
+
+  // Per-handle press dispatcher. Wrapped so each handle's onMouseDown
+  // can pass its direction without re-binding identity per render.
+  // stopImmediatePropagation halts bubble to the outer Surface — the
+  // handle's captureGesture must win unambiguously, matching the
+  // Resizable component's pattern for nested handles.
+  const noopResizeCallbackRef = useRef<((info: ResizeInfo) => void) | undefined>(undefined)
+  const startResize = useCallback(
+    (e: MouseDownEvent, dir: ResizeHandleDirection) => {
+      e.stopImmediatePropagation()
+      handleResizePress(e, dir, {
+        startSize: { width: rectRef.current.width, height: rectRef.current.height },
+        minSizeRef,
+        maxSizeRef: effectiveMaxSizeRef,
+        latestSizeRef,
+        setSize: setResizeSize,
+        onResizeStartRef: noopResizeCallbackRef,
+        onResizeRef: noopResizeCallbackRef,
+        onResizeEndRef: noopResizeCallbackRef,
+      })
+    },
+    [setResizeSize],
+  )
+  const onHandleS = useCallback((e: MouseDownEvent) => startResize(e, 's'), [startResize])
+  const onHandleE = useCallback((e: MouseDownEvent) => startResize(e, 'e'), [startResize])
+  const onHandleSe = useCallback((e: MouseDownEvent) => startResize(e, 'se'), [startResize])
+
+  // Hover state for handle chrome. One handle hovered at a time; the
+  // direction-keyed leave handler only clears if the leaving handle is
+  // the currently-hovered one (handles can be swapped between without
+  // a transient null-hover frame).
+  const [hoveredHandle, setHoveredHandle] = useState<ResizeHandleDirection | null>(null)
+  const enterHandle = useCallback((dir: ResizeHandleDirection) => () => setHoveredHandle(dir), [])
+  const leaveHandle = useCallback(
+    (dir: ResizeHandleDirection) => () => setHoveredHandle((cur) => (cur === dir ? null : cur)),
+    [],
+  )
+  const handleColorFor = (dir: ResizeHandleDirection): Color =>
+    hoveredHandle === dir ? HANDLE_HOVER_COLOR : HANDLE_IDLE_COLOR
+
+  // Border inset for handle positioning. yoga places absolute children
+  // relative to the parent's PADDING box (CSS §10.1) — which excludes
+  // the border. With Window's default `borderStyle="single"`, that
+  // shrinks the placement-coord space by 1 cell on each side. When the
+  // consumer sets `borderStyle={undefined}`, no border, no shrink.
+  // We don't expose per-side border control on Window, so the inset
+  // is uniform on all four sides.
+  const borderInset = borderStyle === undefined ? 0 : 1
+  const contentWidth = Math.max(1, rect.width - 2 * borderInset)
+  const contentHeight = Math.max(1, rect.height - 2 * borderInset)
+  const showHandles = resizable
+  const showHandleS = showHandles && handles.includes('s')
+  const showHandleE = showHandles && handles.includes('e')
+  const showHandleSe = showHandles && handles.includes('se')
+
   return (
     <WindowFocusContext.Provider value={focusContextValue}>
       <Surface
@@ -322,17 +420,94 @@ export default function Window({
         <Box flexDirection="column" flexGrow={1}>
           {children}
         </Box>
+        {/* Resize handles — absolute children of the Surface, positioned
+            inside the border (yoga absolute coords are relative to the
+            padding box). Painted on top of content so they're grabbable
+            even when content fills the area. zIndex layers SE above
+            E/S so the corner cell wins paint when all three are
+            enabled, matching Resizable's pattern. */}
+        {showHandleE && (
+          <Box
+            position="absolute"
+            top={0}
+            left={contentWidth - 1}
+            width={1}
+            height={contentHeight}
+            backgroundColor={handleColorFor('e')}
+            onMouseDown={onHandleE}
+            onMouseEnter={enterHandle('e')}
+            onMouseLeave={leaveHandle('e')}
+            zIndex={1}
+          />
+        )}
+        {showHandleS && (
+          <Box
+            position="absolute"
+            top={contentHeight - 1}
+            left={0}
+            width={contentWidth}
+            height={1}
+            backgroundColor={handleColorFor('s')}
+            onMouseDown={onHandleS}
+            onMouseEnter={enterHandle('s')}
+            onMouseLeave={leaveHandle('s')}
+            zIndex={1}
+          />
+        )}
+        {showHandleSe && (
+          <Box
+            position="absolute"
+            top={contentHeight - 1}
+            left={contentWidth - 1}
+            width={1}
+            height={1}
+            backgroundColor={handleColorFor('se')}
+            onMouseDown={onHandleSe}
+            onMouseEnter={enterHandle('se')}
+            onMouseLeave={leaveHandle('se')}
+            zIndex={2}
+          >
+            <Text>◢</Text>
+          </Box>
+        )}
       </Surface>
     </WindowFocusContext.Provider>
   )
 }
 
+// ── module-scope constants ───────────────────────────────────────────
+
+/**
+ * Default minimum resize size. Wide enough for a 4-char title +
+ * close button (≈ 8 cells), tall enough for the titlebar row + a
+ * single content row + two border rows (≈ 4 cells, with 1 to spare).
+ * Smaller and the window is visually broken; this floor prevents
+ * accidental resize-into-invisibility.
+ */
+const DEFAULT_MIN_SIZE: ResizeSize = { width: 8, height: 4 }
+
+/**
+ * Handle background color when idle. Gray reads as "interactive but
+ * not active" against most terminal themes. Mirrors Resizable's
+ * default to keep the visual vocabulary consistent across primitives.
+ */
+const HANDLE_IDLE_COLOR: Color = 'gray'
+
+/**
+ * Handle background color when the cursor is over the handle. Bright
+ * enough to read as "grab me" against the idle gray.
+ */
+const HANDLE_HOVER_COLOR: Color = 'white'
+
 /**
  * Internal close button. Same pattern as the interim
- * `docs/patterns/window.md` CloseButton — `captureGesture({ onUp })` so
- * a press-and-release without motion fires `onClose` even though the
- * surrounding titlebar will (in a follow-up commit) own drag press
- * handling. captureGesture is first-call-wins; the leaf wins.
+ * `docs/patterns/window.md` CloseButton — `captureGesture({ onUp })`
+ * so a press-and-release without motion fires `onClose` even though
+ * the surrounding titlebar owns drag press handling. captureGesture
+ * is first-call-wins; the leaf wins. `stopImmediatePropagation` then
+ * halts the bubble before it reaches the titlebar's drag handler OR
+ * the outer Surface's raise-on-press handler (closing a window
+ * doesn't need to focus it first).
  *
  * Kept private to this file because Window owns the chrome; consumers
  * who want custom close styling should leave `showCloseButton` off and
