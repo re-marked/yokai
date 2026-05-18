@@ -32,6 +32,19 @@ export type {
   SurfaceLayer,
   SurfaceElevation,
 } from './components/Surface/index.js'
+export { default as Window } from './components/Window/Window.js'
+export type {
+  WindowProps,
+  WindowRect,
+  WindowFocusValue,
+  CursorOverWindowValue,
+  WindowFocusInfo,
+  WindowId,
+} from './components/Window/types.js'
+export {
+  WindowFocusContext,
+  CursorOverWindowContext,
+} from './components/Window/context.js'
 export { default as TextInput } from './components/TextInput/TextInput'
 export type { TextInputProps } from './components/TextInput/TextInput'
 export type { WordBoundaryMode, WrapHint } from './components/TextInput/wrap-math'
