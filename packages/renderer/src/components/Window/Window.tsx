@@ -175,17 +175,45 @@ export default function Window({
     [isFocused, windowId, modal],
   )
 
+  // Paint-z state, with a starting value reserved from the module-scope
+  // counter so each freshly-mounted Window paints above its already-
+  // mounted peers. Bumped on press by handleMouseDown below — same idea
+  // as Draggable's persistedZ, but isolated from Draggable's counter so
+  // window stacking and raw-Draggable stacking don't interleave. The
+  // WindowManager's internal z (focus stack order) is intentionally
+  // separate too: the modal-barrier rule needs to bump focus z on
+  // press-under-modal without also bumping paint z above the modal.
+  //
+  // initial value lazily computed so React StrictMode dev double-invoke
+  // doesn't consume two counter values per mount (useState's lazy
+  // initializer runs once per instance).
+  const [persistedZ, setPersistedZ] = useState<number>(() => takeNextWindowZ())
+  // Drag-time z boost: while a drag is in progress the window paints
+  // ~1000 above its persisted z, so it stays on top of every peer
+  // regardless of their press counters.
+  const [isDragging, setIsDragging] = useState<boolean>(false)
+
   // Raise-on-press: pressing anywhere on the Window promotes it to
-  // focused — but only when `claimsFocus` is true. Panel windows
-  // (`claimsFocus={false}`) never auto-claim, even on press, matching
-  // the documented contract. Reads `claimsFocus` and the consumer
-  // handler through refs so handleMouseDown's identity stays stable
-  // across consumer-callback-identity churn (inline arrow handlers).
+  // focused AND bumps its paint z — but only when `claimsFocus` is
+  // true. Panel windows (`claimsFocus={false}`) never auto-claim and
+  // never auto-raise, matching the documented contract. Reads
+  // `claimsFocus` and the consumer handler through refs so
+  // handleMouseDown's identity stays stable across consumer-callback-
+  // identity churn (inline arrow handlers).
+  //
+  // Known limitation: `claimsFocus={false}` panels mount with whatever
+  // z they got from takeNextWindowZ() at mount time. Subsequently-
+  // mounted/pressed windows will paint over them. A future `layer`
+  // prop (Surface's named-band system: 'overlay', 'docked', etc.)
+  // will let panels live in their own band above ordinary windows.
   const claimsFocusRef = useRef(claimsFocus)
   claimsFocusRef.current = claimsFocus
   const handleMouseDown = useCallback(
     (e: MouseDownEvent) => {
-      if (claimsFocusRef.current) claimWindowFocus(windowId)
+      if (claimsFocusRef.current) {
+        claimWindowFocus(windowId)
+        setPersistedZ(takeNextWindowZ())
+      }
       userOnMouseDownRef.current?.(e)
     },
     [windowId],
@@ -232,12 +260,12 @@ export default function Window({
     setRect((r) => ({ ...r, top: p.top, left: p.left }))
   }, [])
 
-  // Noop setters for Draggable's per-gesture state hooks that Window
-  // doesn't track yet. setIsDragging / setPersistedZ are required by
-  // DragPressDeps; the raise-on-press paint-z math + drag-time z boost
-  // arrive in a follow-up commit on this branch, at which point these
-  // become real setState calls.
-  const noopBoolSetter = useCallback((_: boolean) => {}, [])
+  // Window suppresses Draggable's internal z bump: setPersistedZ here
+  // is a noop because Window owns its own counter (takeNextWindowZ).
+  // If we forwarded Draggable's setPersistedZ to ours, Window's z would
+  // come from Draggable's counter — leaking Draggable presses into
+  // Window stacking and vice versa. Keeping the counters separate is
+  // the whole point of having a Window-specific takeNextWindowZ.
   const noopNumSetter = useCallback((_: number) => {}, [])
 
   // Empty-ref objects for the drag callbacks Window doesn't yet expose
@@ -247,8 +275,9 @@ export default function Window({
   const noopDragDataRef = useRef<unknown>(undefined)
 
   // Titlebar press handler: claims gesture tentatively, drags on motion,
-  // commits on release. Identity stable because every dynamic value
-  // reaches the handler through refs, not closure-captured values.
+  // commits on release. setIsDragging is wired so the Surface zIndex
+  // gets the drag-time boost during motion. Identity stable because
+  // every dynamic value reaches the handler through refs.
   const handleTitlebarMouseDown = useCallback(
     (e: MouseDownEvent) => {
       handleDragPress(e, {
@@ -259,7 +288,7 @@ export default function Window({
         heightRef,
         latestPosRef,
         setPos: setDragPos,
-        setIsDragging: noopBoolSetter,
+        setIsDragging,
         setPersistedZ: noopNumSetter,
         onDragStartRef: noopDragCallbackRef,
         onDragRef: noopDragCallbackRef,
@@ -267,7 +296,7 @@ export default function Window({
         dragDataRef: noopDragDataRef,
       })
     },
-    [setDragPos, noopBoolSetter, noopNumSetter],
+    [setDragPos, noopNumSetter],
   )
 
   // ── resize handle wiring ────────────────────────────────────────
@@ -312,13 +341,20 @@ export default function Window({
 
   // Per-handle press dispatcher. Wrapped so each handle's onMouseDown
   // can pass its direction without re-binding identity per render.
-  // stopImmediatePropagation halts bubble to the outer Surface — the
-  // handle's captureGesture must win unambiguously, matching the
-  // Resizable component's pattern for nested handles.
+  //
+  // NB: we deliberately DO NOT call stopImmediatePropagation here, even
+  // though Resizable does. Resizable halts the bubble to prevent a
+  // wrapping <Draggable> from also capturing the gesture (Draggable's
+  // press handler calls captureGesture itself). Window has no such
+  // ancestor — the outer Surface's onMouseDown only claims focus and
+  // bumps paint z; it never captures the gesture. So letting the bubble
+  // continue means a press on a resize handle ALSO raises the window
+  // (raise-on-press), which is the desktop convention. The handle's
+  // own captureGesture inside handleResizePress still wins for the
+  // gesture itself (first-call-wins, leaf wins).
   const noopResizeCallbackRef = useRef<((info: ResizeInfo) => void) | undefined>(undefined)
   const startResize = useCallback(
     (e: MouseDownEvent, dir: ResizeHandleDirection) => {
-      e.stopImmediatePropagation()
       handleResizePress(e, dir, {
         startSize: { width: rectRef.current.width, height: rectRef.current.height },
         minSizeRef,
@@ -373,6 +409,7 @@ export default function Window({
         left={rect.left}
         width={rect.width}
         height={rect.height}
+        zIndex={isDragging ? persistedZ + WINDOW_DRAG_Z_BOOST : persistedZ}
         borderStyle={borderStyle}
         borderColor={isFocused ? borderColor : blurredBorderColor}
         backgroundColor={backgroundColor}
@@ -498,6 +535,45 @@ const HANDLE_IDLE_COLOR: Color = 'gray'
  * enough to read as "grab me" against the idle gray.
  */
 const HANDLE_HOVER_COLOR: Color = 'white'
+
+// ── module-scope window paint-z counter ──────────────────────────────
+
+/**
+ * Base z-index for a freshly-mounted window. Picked above 1 so a
+ * Window paints over a typical container with `zIndex={1}` (mirrors
+ * Draggable's BASE_Z but isolated — Window stacking and Draggable
+ * stacking don't share a counter so they don't interleave). Modal
+ * backdrops in a follow-up commit will compute relative to this base
+ * via the same takeNextWindowZ counter so the scrim lands directly
+ * below its modal.
+ */
+const WINDOW_BASE_Z = 10
+
+/**
+ * How much higher to paint a Window WHILE its drag is in progress.
+ * Large enough that even after many peers have bumped their persisted
+ * z via raise-on-press, the actively-dragged window still wins paint
+ * order. Mirrors Draggable's DRAG_Z_BOOST exactly.
+ */
+const WINDOW_DRAG_Z_BOOST = 1000
+
+let nextWindowZ = WINDOW_BASE_Z
+function takeNextWindowZ(): number {
+  nextWindowZ += 1
+  return nextWindowZ
+}
+
+/**
+ * Reset the window paint-z counter. Internal / tests only — not part
+ * of the public API. Useful for deterministic snapshot rendering; the
+ * demos and consumers never need this. Mirrors
+ * `_resetDraggableZForTesting` in Draggable.tsx.
+ *
+ * @internal
+ */
+export function _resetWindowZForTesting(): void {
+  nextWindowZ = WINDOW_BASE_Z
+}
 
 /**
  * Internal close button. Same pattern as the interim
