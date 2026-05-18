@@ -12,8 +12,14 @@ import {
 } from '../Resizable.js'
 import Surface from '../Surface/Surface.js'
 import Text from '../Text.js'
-import { WindowFocusContext } from './context.js'
-import type { WindowFocusValue, WindowId, WindowProps, WindowRect } from './types.js'
+import { CursorOverWindowContext, WindowFocusContext } from './context.js'
+import type {
+  CursorOverWindowValue,
+  WindowFocusValue,
+  WindowId,
+  WindowProps,
+  WindowRect,
+} from './types.js'
 import { claimWindowFocus, registerWindow, subscribeWindow } from './window-manager.js'
 
 /**
@@ -174,6 +180,34 @@ export default function Window({
     () => ({ isFocused, windowId, modal }),
     [isFocused, windowId, modal],
   )
+
+  // Hover state for the WHEEL routing rule (A18 — see types.ts and
+  // use-input.ts). Updated from the outer Surface's mouseEnter/Leave
+  // below. captureGesture suppresses Enter/Leave dispatch during an
+  // active gesture, so this stays whatever it was at gesture-start
+  // — wheel during drag is rare and the staleness is harmless.
+  const [isCursorOver, setIsCursorOver] = useState<boolean>(false)
+  const cursorOverContextValue = useMemo<CursorOverWindowValue>(
+    () => ({ isOver: isCursorOver }),
+    [isCursorOver],
+  )
+
+  // Consumer-supplied onMouseEnter / onMouseLeave handlers are stashed
+  // in refs and chained — Window's own enter/leave fire first to update
+  // the cursor-over state, then the consumer's handler runs. Same
+  // pattern as userOnMouseDownRef.
+  const userOnMouseEnterRef = useRef(onMouseEnter)
+  const userOnMouseLeaveRef = useRef(onMouseLeave)
+  userOnMouseEnterRef.current = onMouseEnter
+  userOnMouseLeaveRef.current = onMouseLeave
+  const handleMouseEnter = useCallback(() => {
+    setIsCursorOver(true)
+    userOnMouseEnterRef.current?.()
+  }, [])
+  const handleMouseLeave = useCallback(() => {
+    setIsCursorOver(false)
+    userOnMouseLeaveRef.current?.()
+  }, [])
 
   // Paint-z state, with a starting value reserved from the module-scope
   // counter so each freshly-mounted Window paints above its already-
@@ -410,52 +444,54 @@ export default function Window({
 
   return (
     <WindowFocusContext.Provider value={focusContextValue}>
-      {/* Modal backdrop — fills the parent, sits one z-step below the
-          modal, absorbs clicks via hitTestBoundary so peers underneath
-          can't receive them. Conditional on modal=true; non-modals
-          render no backdrop. */}
-      {modal && (
+      <CursorOverWindowContext.Provider value={cursorOverContextValue}>
+        {/* Modal backdrop — fills the parent, sits one z-step below
+            the modal, absorbs clicks via hitTestBoundary so peers
+            underneath can't receive them. Conditional on modal=true;
+            non-modals render no backdrop. */}
+        {modal && (
+          <Surface
+            position="absolute"
+            top={0}
+            left={0}
+            width="100%"
+            height="100%"
+            zIndex={renderedZ - 1}
+            backgroundColor={backdropColor}
+            hitTestBoundary
+          />
+        )}
         <Surface
+          ref={ref}
           position="absolute"
-          top={0}
-          left={0}
-          width="100%"
-          height="100%"
-          zIndex={renderedZ - 1}
-          backgroundColor={backdropColor}
-          hitTestBoundary
-        />
-      )}
-      <Surface
-        ref={ref}
-        position="absolute"
-        top={rect.top}
-        left={rect.left}
-        width={rect.width}
-        height={rect.height}
-        zIndex={renderedZ}
-        // hitTestBoundary on modal so any cell the modal covers absorbs
-        // events — redundant for cells where the modal already has a
-        // background (clicks land naturally), but matters if a consumer
-        // styles the modal with transparent regions. Non-modal Windows
-        // pass false; Surface omits the host attribute when not true.
-        hitTestBoundary={modal}
-        borderStyle={borderStyle}
-        borderColor={isFocused ? borderColor : blurredBorderColor}
-        backgroundColor={backgroundColor}
-        flexDirection="column"
-        tabIndex={tabIndex}
-        autoFocus={autoFocus}
-        claimFocusOnClick={claimFocusOnClick}
-        onClick={onClick}
-        onMouseDown={handleMouseDown}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        onKeyDown={onKeyDown}
-      >
-        {/* Titlebar — drag affordance. Press on this row starts a
+          top={rect.top}
+          left={rect.left}
+          width={rect.width}
+          height={rect.height}
+          zIndex={renderedZ}
+          // hitTestBoundary on modal so any cell the modal covers
+          // absorbs events — redundant for cells where the modal
+          // already has a background (clicks land naturally), but
+          // matters if a consumer styles the modal with transparent
+          // regions. Non-modal Windows pass false; Surface omits the
+          // host attribute when not true.
+          hitTestBoundary={modal}
+          borderStyle={borderStyle}
+          borderColor={isFocused ? borderColor : blurredBorderColor}
+          backgroundColor={backgroundColor}
+          flexDirection="column"
+          tabIndex={tabIndex}
+          autoFocus={autoFocus}
+          claimFocusOnClick={claimFocusOnClick}
+          onClick={onClick}
+          onMouseDown={handleMouseDown}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+        >
+          {/* Titlebar — drag affordance. Press on this row starts a
             drag via handleDragPress; the eventual onMove fires only if
             the cursor moves, so a press-and-release on the titlebar
             still reaches the outer Surface's onMouseDown as a click
@@ -467,77 +503,78 @@ export default function Window({
             The close button below uses `stopImmediatePropagation()` so
             its press never starts a titlebar drag, even if the cursor
             twitches between press and release. */}
-        <Box
-          flexDirection="row"
-          justifyContent="space-between"
-          paddingX={1}
-          height={1}
-          backgroundColor={titlebarColor}
-          onMouseDown={handleTitlebarMouseDown}
-        >
-          {/* bold and dim are mutually exclusive in Text — switch via
+          <Box
+            flexDirection="row"
+            justifyContent="space-between"
+            paddingX={1}
+            height={1}
+            backgroundColor={titlebarColor}
+            onMouseDown={handleTitlebarMouseDown}
+          >
+            {/* bold and dim are mutually exclusive in Text — switch via
               conditional spread so the right one applies for each focus
               state without colliding on the prop type. */}
-          <Text {...(isFocused ? { bold: true } : { dim: true })} wrap="truncate-end">
-            {title ?? ''}
-          </Text>
-          {showCloseButton && <WindowCloseButton onClose={onClose} />}
-        </Box>
-        {/* Content area — fills remaining vertical space. */}
-        <Box flexDirection="column" flexGrow={1}>
-          {children}
-        </Box>
-        {/* Resize handles — absolute children of the Surface, positioned
+            <Text {...(isFocused ? { bold: true } : { dim: true })} wrap="truncate-end">
+              {title ?? ''}
+            </Text>
+            {showCloseButton && <WindowCloseButton onClose={onClose} />}
+          </Box>
+          {/* Content area — fills remaining vertical space. */}
+          <Box flexDirection="column" flexGrow={1}>
+            {children}
+          </Box>
+          {/* Resize handles — absolute children of the Surface, positioned
             inside the border (yoga absolute coords are relative to the
             padding box). Painted on top of content so they're grabbable
             even when content fills the area. zIndex layers SE above
             E/S so the corner cell wins paint when all three are
             enabled, matching Resizable's pattern. */}
-        {showHandleE && (
-          <Box
-            position="absolute"
-            top={0}
-            left={contentWidth - 1}
-            width={1}
-            height={contentHeight}
-            backgroundColor={handleColorFor('e')}
-            onMouseDown={onHandleE}
-            onMouseEnter={enterHandle('e')}
-            onMouseLeave={leaveHandle('e')}
-            zIndex={1}
-          />
-        )}
-        {showHandleS && (
-          <Box
-            position="absolute"
-            top={contentHeight - 1}
-            left={0}
-            width={contentWidth}
-            height={1}
-            backgroundColor={handleColorFor('s')}
-            onMouseDown={onHandleS}
-            onMouseEnter={enterHandle('s')}
-            onMouseLeave={leaveHandle('s')}
-            zIndex={1}
-          />
-        )}
-        {showHandleSe && (
-          <Box
-            position="absolute"
-            top={contentHeight - 1}
-            left={contentWidth - 1}
-            width={1}
-            height={1}
-            backgroundColor={handleColorFor('se')}
-            onMouseDown={onHandleSe}
-            onMouseEnter={enterHandle('se')}
-            onMouseLeave={leaveHandle('se')}
-            zIndex={2}
-          >
-            <Text>◢</Text>
-          </Box>
-        )}
-      </Surface>
+          {showHandleE && (
+            <Box
+              position="absolute"
+              top={0}
+              left={contentWidth - 1}
+              width={1}
+              height={contentHeight}
+              backgroundColor={handleColorFor('e')}
+              onMouseDown={onHandleE}
+              onMouseEnter={enterHandle('e')}
+              onMouseLeave={leaveHandle('e')}
+              zIndex={1}
+            />
+          )}
+          {showHandleS && (
+            <Box
+              position="absolute"
+              top={contentHeight - 1}
+              left={0}
+              width={contentWidth}
+              height={1}
+              backgroundColor={handleColorFor('s')}
+              onMouseDown={onHandleS}
+              onMouseEnter={enterHandle('s')}
+              onMouseLeave={leaveHandle('s')}
+              zIndex={1}
+            />
+          )}
+          {showHandleSe && (
+            <Box
+              position="absolute"
+              top={contentHeight - 1}
+              left={contentWidth - 1}
+              width={1}
+              height={1}
+              backgroundColor={handleColorFor('se')}
+              onMouseDown={onHandleSe}
+              onMouseEnter={enterHandle('se')}
+              onMouseLeave={leaveHandle('se')}
+              zIndex={2}
+            >
+              <Text>◢</Text>
+            </Box>
+          )}
+        </Surface>
+      </CursorOverWindowContext.Provider>
     </WindowFocusContext.Provider>
   )
 }

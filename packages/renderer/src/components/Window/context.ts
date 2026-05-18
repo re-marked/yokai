@@ -34,13 +34,17 @@ import type { CursorOverWindowValue, WindowFocusValue } from './types.js'
 export const WindowFocusContext = createContext<WindowFocusValue | null>(null)
 
 /**
- * `null` when the cursor isn't over any Window (over a sidebar, over
- * the terminal background, or off-terminal). Wheel handlers in that
- * case fall through to global handlers — same back-compat shape as
- * WindowFocusContext.
+ * `null` when the consumer is rendered OUTSIDE any Window. Each
+ * `<Window>` provides this context with `{ isOver: bool }` reflecting
+ * whether the cursor is currently over the Window's outer rect. The
+ * value updates from the Window's outer Surface mouseEnter / Leave
+ * events.
  *
- * Populated by App's per-frame hit-test in `app.tsx`. Each Window
- * subscribes to "am I the cursor-over window?" via the value — same
- * pattern as WindowFocusContext.
+ * Read by `useInput` for wheel-event routing: wheel fires for the
+ * consumer's handler only when the cursor is over THIS enclosing
+ * Window. That matches real-OS behavior (the OS scrolls whatever is
+ * under the pointer, not what has keyboard focus) while staying
+ * decoupled from focus state. Non-wheel events continue to use
+ * `WindowFocusContext`'s focus-scoped routing.
  */
 export const CursorOverWindowContext = createContext<CursorOverWindowValue>(null)

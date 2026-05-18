@@ -95,19 +95,25 @@ export type WindowFocusValue = {
 }
 
 /**
- * Where the cursor currently is, in terms of which Window (if any) it's
- * hovering over. Populated by App per-frame from the existing hit-test
- * layer; consumed by `useInput` for the WHEEL routing rule (hover-scoped,
- * not focus-scoped — wheel scrolls whatever the cursor is over, matching
- * real OSes).
+ * Whether the cursor is currently over the enclosing `<Window>`.
+ * Provided per-Window (each Window's React shell tracks its own
+ * mouseEnter/Leave); consumed by `useInput` for the WHEEL routing rule
+ * (hover-scoped, not focus-scoped — wheel scrolls whatever the cursor
+ * is over, matching real OSes).
  *
- * `null` when the cursor is over no Window (e.g. over a sidebar that's
- * not wrapped in a Window, or off the terminal). Wheel handlers in that
- * case fall through to global handlers, same back-compat shape as the
- * focus context.
+ * `null` outside any Window — `useInput` treats null as "always
+ * deliver" so consumers built before the Window primitive existed
+ * keep getting wheel events unconditionally (back-compat).
+ *
+ * `isOver` flips as the cursor enters and leaves the Window's outer
+ * rect. During an active captured gesture, mouseEnter/Leave events are
+ * suppressed by the dispatch layer, so the value stays whatever it
+ * was at gesture-start. Wheel during drag is rare and the stale value
+ * is harmless (wheel just routes to wherever the cursor was last
+ * observed).
  */
 export type CursorOverWindowValue = {
-  windowId: WindowId
+  isOver: boolean
 } | null
 
 /**
