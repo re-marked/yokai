@@ -2,7 +2,7 @@
 
 A draggable, fixed-size floating panel with a titlebar, optional close button, and arbitrary content. Reach for this when building desktop-style UIs: floating editors, side panels, palettes, tool windows.
 
-> **Interim pattern.** A first-class `<Window>` primitive is on the roadmap (issue #56). Until it ships, this is the canonical way to build a window-shaped element on yokai. The shape below is what `examples/scratchpad/scratchpad.tsx` runs in production.
+> **Superseded — use the [`<Window>`](../components/window.md) primitive for new code.** The interim Draggable-based pattern below is preserved for reference, but the first-class primitive (A4 / #56) ships drag + resize composition, raise-on-press, modal mode, and **focus-/hover-scoped event routing** (A18) — it's strictly more capable than this pattern. The interim pattern is still valid for fixed-size, non-resizable cases where you want to avoid a dependency on the new primitive.
 
 ## Code
 
