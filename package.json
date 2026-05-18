@@ -24,7 +24,8 @@
     "demo:gesture-capture": "pnpm --filter @yokai-example/gesture-capture start",
     "demo:scrollbox-wheel": "pnpm --filter @yokai-example/scrollbox-wheel start",
     "demo:scratchpad": "pnpm --filter @yokai-example/scratchpad start",
-    "demo:surface": "pnpm --filter @yokai-example/surface start"
+    "demo:surface": "pnpm --filter @yokai-example/surface start",
+    "demo:window": "pnpm --filter @yokai-example/window start"
   },
   "engines": {
     "node": ">=22.0.0"
