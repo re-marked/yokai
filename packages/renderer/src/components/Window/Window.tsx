@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import type { MouseDownEvent } from '../../events/mouse-event.js'
 import Box from '../Box.js'
+import { type DragBounds, type DragInfo, type DragPos, handleDragPress } from '../Draggable.js'
 import Surface from '../Surface/Surface.js'
 import Text from '../Text.js'
 import { WindowFocusContext } from './context.js'
@@ -42,10 +43,12 @@ import { claimWindowFocus, registerWindow, subscribeWindow } from './window-mana
  *   `borderColor` and `blurredBorderColor` so a multi-window WM is
  *   legible at a glance.
  *
- * Implementation note: this commit lands the React shell + WindowManager
- * integration + focus chrome. Drag, resize, modal backdrop, and
- * hover-scoped wheel arrive in follow-up commits on the same branch —
- * each one a clean step the user can review independently.
+ * Implementation note: this branch is shipped as granular commits —
+ * shell → focus → drag → resize → z math → modal → hover-routing →
+ * tests → docs → demo. The current state of the file always reflects
+ * everything that has landed so far on the branch; this comment block
+ * documents the END SHAPE the component grows into so future readers
+ * (and follow-up commits) have a clear north star.
  */
 export default function Window({
   initialPos,
@@ -53,14 +56,13 @@ export default function Window({
   title,
   showCloseButton,
   onClose,
-  // draggable, resizable, handles, bounds, minSize, maxSize — wired in
-  // follow-up commits. Destructured here so the shell already accepts
-  // the full prop surface from day one (no public API churn between
-  // intermediate commits).
-  draggable: _draggable = true,
+  draggable = true,
+  // resizable, handles, minSize, maxSize — wired in follow-up commits.
+  // Destructured here so the shell accepts the full prop surface from
+  // day one (no public API churn between intermediate commits).
   resizable: _resizable = true,
   handles: _handles = ['s', 'e', 'se'],
-  bounds: _bounds,
+  bounds,
   minSize: _minSize,
   maxSize: _maxSize,
   modal = false,
@@ -86,12 +88,11 @@ export default function Window({
   onKeyDown,
   children,
 }: WindowProps): React.ReactNode {
-  // Single rect state — drag mutates {top,left}, resize mutates
-  // {width,height}, both via the same setRect setter. This is the A4
-  // unification: one state, one lifecycle, no desync. setRect is
-  // captured by the drag/resize handlers added in follow-up commits;
-  // the eager `_` rename quiets the lint until then.
-  const [rect, _setRect] = useState<WindowRect>({
+  // Single rect state — drag mutates {top,left} via setDragPos below,
+  // resize will mutate {width,height} via the same setRect setter
+  // in a follow-up commit. This is the A4 unification: one state, one
+  // lifecycle, no rect-cache desync.
+  const [rect, setRect] = useState<WindowRect>({
     top: initialPos.top,
     left: initialPos.left,
     width: initialSize.width,
@@ -186,6 +187,85 @@ export default function Window({
     [windowId],
   )
 
+  // ── titlebar drag wiring ────────────────────────────────────────
+  //
+  // Reuses `handleDragPress` (the pure helper Draggable exports) so the
+  // drag math is byte-identical to <Draggable>. The cross-component
+  // helper takes care of: tentative gesture capture (press without
+  // motion remains a click), onMove → setPos, onUp → callbacks, and
+  // bounds clamping when bounds are supplied. Window threads its own
+  // setter (setDragPos below) that goes through setRect — so drag and
+  // the upcoming resize gesture both mutate the same single rect state
+  // (A4 unification).
+  //
+  // Refs (not values) for everything mutable so the captured gesture
+  // callbacks read freshly-set values at motion time, not the values
+  // captured at press time. Mirrors Draggable's pattern in
+  // packages/renderer/src/components/Draggable.tsx exactly.
+  const rectRef = useRef(rect)
+  rectRef.current = rect
+  const boundsRef = useRef<DragBounds | undefined>(bounds)
+  boundsRef.current = bounds
+  const widthRef = useRef<number | undefined>(rect.width)
+  widthRef.current = rect.width
+  const heightRef = useRef<number | undefined>(rect.height)
+  heightRef.current = rect.height
+  const draggableRef = useRef(draggable)
+  draggableRef.current = draggable
+  // latestPosRef holds the in-flight pos so onUp can read the final
+  // landing spot synchronously (setRect batches; reading from React
+  // state inside the gesture callback would lag by one frame).
+  const latestPosRef = useRef<DragPos>({ top: rect.top, left: rect.left })
+
+  // setDragPos: setter the gesture handler calls on every motion event.
+  // Updates BOTH the rect state (drives Surface re-render) AND the
+  // latestPosRef (drives onUp's final-pos read). Empty deps because
+  // `setRect` from `useState` has stable identity across renders per
+  // the React contract, and latestPosRef is a ref (captured by
+  // reference, not by value).
+  const setDragPos = useCallback((p: DragPos) => {
+    latestPosRef.current = p
+    setRect((r) => ({ ...r, top: p.top, left: p.left }))
+  }, [])
+
+  // Noop setters for Draggable's per-gesture state hooks that Window
+  // doesn't track yet. setIsDragging / setPersistedZ are required by
+  // DragPressDeps; the raise-on-press paint-z math + drag-time z boost
+  // arrive in a follow-up commit on this branch, at which point these
+  // become real setState calls.
+  const noopBoolSetter = useCallback((_: boolean) => {}, [])
+  const noopNumSetter = useCallback((_: number) => {}, [])
+
+  // Empty-ref objects for the drag callbacks Window doesn't yet expose
+  // on its prop surface (no onWindowDragStart / onDrag / onDragEnd).
+  // Wrapped in useRef so identity is stable across renders.
+  const noopDragCallbackRef = useRef<((info: DragInfo) => void) | undefined>(undefined)
+  const noopDragDataRef = useRef<unknown>(undefined)
+
+  // Titlebar press handler: claims gesture tentatively, drags on motion,
+  // commits on release. Identity stable because every dynamic value
+  // reaches the handler through refs, not closure-captured values.
+  const handleTitlebarMouseDown = useCallback(
+    (e: MouseDownEvent) => {
+      handleDragPress(e, {
+        startPos: { top: rectRef.current.top, left: rectRef.current.left },
+        disabled: !draggableRef.current,
+        boundsRef,
+        widthRef,
+        heightRef,
+        latestPosRef,
+        setPos: setDragPos,
+        setIsDragging: noopBoolSetter,
+        setPersistedZ: noopNumSetter,
+        onDragStartRef: noopDragCallbackRef,
+        onDragRef: noopDragCallbackRef,
+        onDragEndRef: noopDragCallbackRef,
+        dragDataRef: noopDragDataRef,
+      })
+    },
+    [setDragPos, noopBoolSetter, noopNumSetter],
+  )
+
   return (
     <WindowFocusContext.Provider value={focusContextValue}>
       <Surface
@@ -210,16 +290,25 @@ export default function Window({
         onBlur={onBlur}
         onKeyDown={onKeyDown}
       >
-        {/* Titlebar — drag affordance in a follow-up commit. Pinned to
+        {/* Titlebar — drag affordance. Press on this row starts a
+            drag via handleDragPress; the eventual onMove fires only if
+            the cursor moves, so a press-and-release on the titlebar
+            still reaches the outer Surface's onMouseDown as a click
+            (raise-on-press, claim element focus, etc.). Pinned to
             height=1 so a long title can't wrap to a second row and eat
-            the content area; the title text uses `truncate-end` for the
-            visible chrome behavior consumers expect. */}
+            the content area; the title text uses `truncate-end` for
+            the visible chrome behavior consumers expect.
+
+            The close button below uses `stopImmediatePropagation()` so
+            its press never starts a titlebar drag, even if the cursor
+            twitches between press and release. */}
         <Box
           flexDirection="row"
           justifyContent="space-between"
           paddingX={1}
           height={1}
           backgroundColor={titlebarColor}
+          onMouseDown={handleTitlebarMouseDown}
         >
           {/* bold and dim are mutually exclusive in Text — switch via
               conditional spread so the right one applies for each focus
